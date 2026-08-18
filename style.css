@@ -1,0 +1,70 @@
+/* Color/typography tokens borrowed from market-dashboard's template.html
+   (:root custom properties) so this hub reads as visually related to the
+   dashboard it will eventually take dashboard.barnyard.site over from. */
+:root{
+  --bg:#0b0f14; --surface:#12181f; --surface-2:#161d25; --border:#1e2732;
+  --text:#c9d2db; --text-dim:#6b7885; --text-bright:#eef2f6;
+  --amber:#e8a33d; --amber-dim:#8a641f; --amber-bg:rgba(232,163,61,.10);
+  --blue:#5b9fe8; --blue-dim:#2f5c8a; --blue-bg:rgba(91,159,232,.12);
+  --up:#4cc38a; --down:#ff6b5e;
+  --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --sans:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+}
+
+*{box-sizing:border-box;}
+html{overflow-x:hidden;}
+body{
+  font-family:var(--sans);max-width:1040px;margin:0 auto;padding:16px;
+  line-height:1.5;background:var(--bg);color:var(--text);
+}
+
+a{color:var(--amber);}
+
+header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);margin-bottom:28px;}
+.wordmark{font-size:1.6rem;font-weight:800;letter-spacing:-.01em;color:var(--text-bright);text-transform:uppercase;margin:0 0 4px;}
+.tagline{color:var(--text-dim);font-size:.9rem;margin:0;}
+
+.widget-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+  gap:16px;margin-bottom:40px;
+}
+
+.tile{
+  position:relative;background:var(--surface);border:1px solid var(--border);
+  border-radius:6px;padding:18px 20px;min-height:150px;display:flex;flex-direction:column;
+  gap:8px;text-decoration:none;color:var(--text);transition:border-color .15s ease,transform .15s ease;
+}
+a.tile:hover{border-color:var(--amber-dim);}
+a.tile:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
+@media (prefers-reduced-motion: reduce){
+  .tile{transition:none;}
+}
+
+.tile-head{display:flex;align-items:center;gap:8px;}
+.tile-icon{font-size:1.3rem;line-height:1;}
+.tile-name{font-size:1rem;font-weight:800;letter-spacing:.02em;text-transform:uppercase;color:var(--text-bright);margin:0;}
+.tile-desc{color:var(--text-dim);font-size:.82rem;margin:0;flex:1;}
+
+/* Live stat line (Stocks tile) */
+.tile-stat{display:flex;align-items:baseline;gap:8px;font-family:var(--mono);margin-top:auto;}
+.tile-stat .live-price[data-live-field="price"]{font-size:1.15rem;font-weight:700;color:var(--text-bright);}
+.tile-stat .live-price[data-live-field="change"]{font-size:.85rem;font-weight:700;color:var(--text-dim);}
+.tile-stat .live-price[data-live-field="change"].up{color:var(--up);}
+.tile-stat .live-price[data-live-field="change"].down{color:var(--down);}
+
+.live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--text-dim);margin-left:auto;}
+.live-dot.live-ok{background:var(--up);animation:live-pulse 1.6s ease-in-out infinite;}
+@keyframes live-pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+@media (prefers-reduced-motion: reduce){.live-dot.live-ok{animation:none;}}
+
+/* Placeholder / "coming soon" tiles -- present but visually inactive.
+   Plain <div>, not a link, so there's nowhere to click. */
+.tile.tile-placeholder{opacity:.5;cursor:default;}
+.tile.tile-placeholder .tile-name{color:var(--text-dim);}
+.tile-badge{
+  align-self:flex-start;font-family:var(--sans);font-size:.62rem;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);
+  border:1px solid var(--border);border-radius:3px;padding:2px 7px;margin-top:auto;
+}
+
+footer.hub-footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);color:var(--text-dim);font-size:.8rem;}
