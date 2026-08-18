@@ -7,10 +7,15 @@
 // whatever static fallback text was already there. Nothing here can break
 // the page. Same pattern as market-dashboard's live-prices.js.
 //
-var LIVE_PRICE_API = "https://barnyard-live-prices.nathanbarnard29.workers.dev";
-
 (function () {
+  var LIVE_PRICE_API = "https://barnyard-live-prices.nathanbarnard29.workers.dev";
   var POLL_INTERVAL_MS = 15000;
+  // A few consecutive failed/incomplete polls shouldn't immediately flip a
+  // tile to "stale" (could just be one blip) -- only do so once this much
+  // time has passed since the last successful update.
+  var STALE_THRESHOLD_MS = POLL_INTERVAL_MS * 2.5;
+  // key ("MARKET:SYMBOL") -> timestamp (ms) of last successful, fully-valid update.
+  var lastSuccessAt = {};
 
   function fmtIndexLevel(n) {
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -55,9 +60,37 @@ var LIVE_PRICE_API = "https://barnyard-live-prices.nathanbarnard29.workers.dev";
       } else if (field === "change_abs") {
         el.textContent = "(" + fmtDollarSigned(quote.change) + ")";
       } else if (field === "dot") {
+        el.classList.remove("live-stale");
         el.classList.add("live-ok");
         el.title = "Live \u2014 updated " + new Date().toLocaleTimeString();
       }
+    });
+  }
+
+  // A "complete" quote has finite numbers (not just typeof "number" --
+  // NaN/Infinity are typeof "number" too, and would otherwise render as
+  // literal "NaN"/"Infinity") for every field the UI applies.
+  function isCompleteQuote(data) {
+    return (
+      !!data &&
+      Number.isFinite(data.price) &&
+      Number.isFinite(data.change) &&
+      Number.isFinite(data.changePercent)
+    );
+  }
+
+  function markStaleIfDue(symbol, market) {
+    var key = market + ":" + symbol;
+    var last = lastSuccessAt[key];
+    var elapsed = last ? Date.now() - last : Infinity;
+    if (elapsed <= STALE_THRESHOLD_MS) return; // recent-enough success, or just one blip -- leave as-is
+
+    var selector =
+      '[data-live-symbol="' + cssAttrEscape(symbol) + '"][data-live-market="' + cssAttrEscape(market) + '"][data-live-field="dot"]';
+    document.querySelectorAll(selector).forEach(function (el) {
+      el.classList.remove("live-ok");
+      el.classList.add("live-stale");
+      el.title = "Stale \u2014 last updated " + (last ? new Date(last).toLocaleTimeString() : "never");
     });
   }
 
@@ -77,10 +110,20 @@ var LIVE_PRICE_API = "https://barnyard-live-prices.nathanbarnard29.workers.dev";
           return r.json();
         })
         .then(function (data) {
-          if (data && typeof data.price === "number") applyQuote(symbol, market, data);
+          if (isCompleteQuote(data)) {
+            lastSuccessAt[key] = Date.now();
+            applyQuote(symbol, market, data);
+          } else {
+            // Incomplete quote -- don't partially apply it. Treated the same
+            // as a fetch failure below.
+            markStaleIfDue(symbol, market);
+          }
         })
         .catch(function () {
-          // Silent no-op by design -- see file header.
+          // Best-effort by design -- see file header. A single failure just
+          // leaves the last good value on screen; markStaleIfDue only flips
+          // the dot once we've gone long enough without a successful update.
+          markStaleIfDue(symbol, market);
         });
     });
   }

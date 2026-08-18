@@ -47,6 +47,7 @@ a.tile:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 
 /* Live stat line (Stocks tile) */
 .tile-stat{display:flex;align-items:baseline;gap:8px;font-family:var(--mono);margin-top:auto;}
+.tile-stat .stat-label{font-size:.85rem;font-weight:700;color:var(--text-dim);letter-spacing:.02em;}
 .tile-stat .live-price[data-live-field="price"]{font-size:1.15rem;font-weight:700;color:var(--text-bright);}
 .tile-stat .live-price[data-live-field="change"]{font-size:.85rem;font-weight:700;color:var(--text-dim);}
 .tile-stat .live-price[data-live-field="change"].up{color:var(--up);}
@@ -54,6 +55,7 @@ a.tile:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 
 .live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--text-dim);margin-left:auto;}
 .live-dot.live-ok{background:var(--up);animation:live-pulse 1.6s ease-in-out infinite;}
+.live-dot.live-stale{background:var(--text-dim);animation:none;}
 @keyframes live-pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
 @media (prefers-reduced-motion: reduce){.live-dot.live-ok{animation:none;}}
 
