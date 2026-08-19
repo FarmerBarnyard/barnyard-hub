@@ -47,11 +47,17 @@ a.tile:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 
 /* Live stat line (Stocks tile) */
 .tile-stat{display:flex;align-items:baseline;gap:8px;font-family:var(--mono);margin-top:auto;}
-.tile-stat .stat-label{font-size:.85rem;font-weight:700;color:var(--text-dim);letter-spacing:.02em;}
+.tile-stat .stat-label{font-size:.85rem;font-weight:700;color:var(--text);letter-spacing:.02em;}
 .tile-stat .live-price[data-live-field="price"]{font-size:1.15rem;font-weight:700;color:var(--text-bright);}
 .tile-stat .live-price[data-live-field="change"]{font-size:.85rem;font-weight:700;color:var(--text-dim);}
 .tile-stat .live-price[data-live-field="change"].up{color:var(--up);}
 .tile-stat .live-price[data-live-field="change"].down{color:var(--down);}
+/* Stale data keeps its last-known text but loses the confident live
+   styling -- desaturate price + change (overriding .up/.down) so staleness
+   is visible without relying on the 6px dot or a tooltip alone. */
+.tile-stat .live-price.stale{color:var(--text-dim);}
+.tile-stat .live-price[data-live-field="change"].stale.up,
+.tile-stat .live-price[data-live-field="change"].stale.down{color:var(--text-dim);}
 
 .live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--text-dim);margin-left:auto;}
 .live-dot.live-ok{background:var(--up);animation:live-pulse 1.6s ease-in-out infinite;}

@@ -14,6 +14,10 @@
   // tile to "stale" (could just be one blip) -- only do so once this much
   // time has passed since the last successful update.
   var STALE_THRESHOLD_MS = POLL_INTERVAL_MS * 2.5;
+  // A hung/blackholed request never resolves or rejects on its own -- cap
+  // how long we'll wait before aborting it so it eventually lands in the
+  // .catch below instead of accumulating forever.
+  var FETCH_TIMEOUT_MS = 10000;
   // key ("MARKET:SYMBOL") -> timestamp (ms) of last successful, fully-valid update.
   var lastSuccessAt = {};
 
@@ -64,6 +68,12 @@
         el.classList.add("live-ok");
         el.title = "Live \u2014 updated " + new Date().toLocaleTimeString();
       }
+      // A successful, complete update always clears any stale marker left
+      // on this element by markStaleIfDue, regardless of field type.
+      if (field !== "dot") {
+        el.classList.remove("stale");
+        el.removeAttribute("aria-label");
+      }
     });
   }
 
@@ -85,12 +95,22 @@
     var elapsed = last ? Date.now() - last : Infinity;
     if (elapsed <= STALE_THRESHOLD_MS) return; // recent-enough success, or just one blip -- leave as-is
 
+    var lastLabel = last ? new Date(last).toLocaleTimeString() : "never";
     var selector =
-      '[data-live-symbol="' + cssAttrEscape(symbol) + '"][data-live-market="' + cssAttrEscape(market) + '"][data-live-field="dot"]';
+      '[data-live-symbol="' + cssAttrEscape(symbol) + '"][data-live-market="' + cssAttrEscape(market) + '"]';
     document.querySelectorAll(selector).forEach(function (el) {
-      el.classList.remove("live-ok");
-      el.classList.add("live-stale");
-      el.title = "Stale \u2014 last updated " + (last ? new Date(last).toLocaleTimeString() : "never");
+      var field = el.getAttribute("data-live-field");
+      if (field === "dot") {
+        el.classList.remove("live-ok");
+        el.classList.add("live-stale");
+        el.title = "Stale \u2014 last updated " + lastLabel;
+      } else {
+        // Price/change text keeps its confident live styling otherwise --
+        // mark it too, not just the tiny dot, so staleness is actually
+        // noticeable and isn't communicated by color/a 6px target alone.
+        el.classList.add("stale");
+        el.setAttribute("aria-label", "Stale price \u2014 last updated " + lastLabel);
+      }
     });
   }
 
@@ -103,8 +123,20 @@
       if (seen[key]) return;
       seen[key] = true;
 
+      // Clock-driven staleness check: evaluate this on every poll tick,
+      // before the fetch below is even issued, rather than only from
+      // inside .then/.catch. A hung request (dead/blackholed connection,
+      // not a clean rejection) never resolves or rejects, so relying
+      // solely on fetch settling would let a stale tile sit showing "live"
+      // indefinitely. Safe for a healthy tile -- the threshold only trips
+      // after no success for 2.5x the poll interval -- and honest on first
+      // load, where it briefly shows the "never loaded" state.
+      markStaleIfDue(symbol, market);
+
       var url = LIVE_PRICE_API + "/price?symbol=" + encodeURIComponent(symbol) + "&market=" + encodeURIComponent(market);
-      fetch(url)
+      var controller = new AbortController();
+      var timeoutId = setTimeout(function () { controller.abort(); }, FETCH_TIMEOUT_MS);
+      fetch(url, { signal: controller.signal })
         .then(function (r) {
           if (!r.ok) throw new Error("bad response");
           return r.json();
@@ -123,7 +155,12 @@
           // Best-effort by design -- see file header. A single failure just
           // leaves the last good value on screen; markStaleIfDue only flips
           // the dot once we've gone long enough without a successful update.
+          // Covers both a clean rejection and (via the abort above) a
+          // request that would otherwise have hung forever.
           markStaleIfDue(symbol, market);
+        })
+        .finally(function () {
+          clearTimeout(timeoutId);
         });
     });
   }
