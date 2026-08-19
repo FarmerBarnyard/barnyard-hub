@@ -42,6 +42,9 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
   font-size:.85rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
   color:var(--text-dim);margin:0;
 }
+/* Secondary context next to a widget-name, e.g. the calendar's month/year
+   label -- present but not shouting, same as the tagline treatment. */
+.widget-sub{color:var(--text-dim);font-size:.78rem;font-weight:600;}
 
 /* Weather widget */
 .weather-status{color:var(--text-dim);font-size:.85rem;margin:0;}
@@ -49,7 +52,17 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 .weather-icon{font-size:1.6rem;line-height:1;}
 .weather-temp{font-family:var(--mono);font-size:1.4rem;font-weight:700;color:var(--text-bright);}
 .weather-cond{color:var(--text);font-size:.9rem;}
-.weather-place{color:var(--text-dim);font-size:.78rem;margin:0;}
+.weather-asof{color:var(--text-dim);font-size:.72rem;margin:0;}
+/* Matches the visual language of .tile (surface-2 fill, border, amber
+   hover/focus) so the opt-in prompt reads as part of the same design
+   system rather than a generic browser button. */
+.weather-locate-btn{
+  align-self:flex-start;font-family:var(--sans);font-size:.8rem;font-weight:700;
+  color:var(--text-bright);background:var(--surface-2);border:1px solid var(--border);
+  border-radius:4px;padding:7px 12px;cursor:pointer;transition:border-color .15s ease;
+}
+.weather-locate-btn:hover{border-color:var(--amber-dim);}
+.weather-locate-btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 
 /* Week calendar widget -- Monday-first row of days, today picked out with
    the site's existing amber accent (same tokens used elsewhere, no new

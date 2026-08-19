@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.open-meteo.com https://barnyard-live-prices.nathanbarnard29.workers.dev; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
 <title>Barnyard</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -19,16 +20,25 @@
     <div class="widget-head">
       <h2 class="widget-name">Weather</h2>
     </div>
-    <div class="weather-body" id="weather-body" data-weather-state="loading">
-      <p class="weather-status">Checking location&hellip;</p>
+    <div class="weather-body" id="weather-body">
+      <button type="button" class="weather-locate-btn" id="weather-locate-btn">Show weather near me</button>
     </div>
   </div>
 
   <div class="widget widget-calendar">
     <div class="widget-head">
       <h2 class="widget-name">This week</h2>
+      <span class="widget-sub" id="week-range"></span>
     </div>
-    <ol class="week-days" id="week-days"></ol>
+    <ol class="week-days" id="week-days" role="list">
+      <li class="week-day"><span class="week-day-name">Mon</span><span class="week-day-num">&mdash;</span></li>
+      <li class="week-day"><span class="week-day-name">Tue</span><span class="week-day-num">&mdash;</span></li>
+      <li class="week-day"><span class="week-day-name">Wed</span><span class="week-day-num">&mdash;</span></li>
+      <li class="week-day"><span class="week-day-name">Thu</span><span class="week-day-num">&mdash;</span></li>
+      <li class="week-day"><span class="week-day-name">Fri</span><span class="week-day-num">&mdash;</span></li>
+      <li class="week-day"><span class="week-day-name">Sat</span><span class="week-day-num">&mdash;</span></li>
+      <li class="week-day"><span class="week-day-name">Sun</span><span class="week-day-num">&mdash;</span></li>
+    </ol>
   </div>
 
 </section>
@@ -77,7 +87,7 @@
 </div>
 
 <footer class="hub-footer">
-  Barnyard hub &mdash; static landing page, no accounts, no tracking.
+  Barnyard hub &mdash; static landing page, no accounts, no tracking. The weather widget only contacts Open-Meteo, and only if you ask it to.
 </footer>
 
 <script src="live-prices.js"></script>
