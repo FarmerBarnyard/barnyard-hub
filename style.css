@@ -24,6 +24,50 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 .wordmark{font-size:1.6rem;font-weight:800;letter-spacing:-.01em;color:var(--text-bright);text-transform:uppercase;margin:0 0 4px;}
 .tagline{color:var(--text-dim);font-size:.9rem;margin:0;}
 
+/* "At a glance" row -- weather + week calendar, between the header and the
+   project tiles. Wider min-width than .tile since each widget carries more
+   content (a short list / a multi-part reading), but shares the same
+   surface/border/radius language as .tile below. */
+.glance-row{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:16px;margin-bottom:32px;
+}
+
+.widget{
+  background:var(--surface);border:1px solid var(--border);border-radius:6px;
+  padding:18px 20px;display:flex;flex-direction:column;gap:10px;
+}
+.widget-head{display:flex;align-items:center;gap:8px;}
+.widget-name{
+  font-size:.85rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--text-dim);margin:0;
+}
+
+/* Weather widget */
+.weather-status{color:var(--text-dim);font-size:.85rem;margin:0;}
+.weather-main{display:flex;align-items:baseline;gap:10px;}
+.weather-icon{font-size:1.6rem;line-height:1;}
+.weather-temp{font-family:var(--mono);font-size:1.4rem;font-weight:700;color:var(--text-bright);}
+.weather-cond{color:var(--text);font-size:.9rem;}
+.weather-place{color:var(--text-dim);font-size:.78rem;margin:0;}
+
+/* Week calendar widget -- Monday-first row of days, today picked out with
+   the site's existing amber accent (same tokens used elsewhere, no new
+   colors introduced). */
+.week-days{list-style:none;display:flex;gap:6px;margin:0;padding:0;}
+.week-day{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:8px 4px;border-radius:4px;border:1px solid transparent;
+}
+.week-day-name{
+  font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--text-dim);
+}
+.week-day-num{font-family:var(--mono);font-size:.95rem;color:var(--text);}
+.week-day.is-today{background:var(--amber-bg);border-color:var(--amber-dim);}
+.week-day.is-today .week-day-name,
+.week-day.is-today .week-day-num{color:var(--amber);}
+
 .widget-grid{
   display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
   gap:16px;margin-bottom:40px;

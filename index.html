@@ -13,6 +13,26 @@
   <p class="tagline">A hub for the projects living on this account.</p>
 </header>
 
+<section class="glance-row" aria-label="Today at a glance">
+
+  <div class="widget widget-weather">
+    <div class="widget-head">
+      <h2 class="widget-name">Weather</h2>
+    </div>
+    <div class="weather-body" id="weather-body" data-weather-state="loading">
+      <p class="weather-status">Checking location&hellip;</p>
+    </div>
+  </div>
+
+  <div class="widget widget-calendar">
+    <div class="widget-head">
+      <h2 class="widget-name">This week</h2>
+    </div>
+    <ol class="week-days" id="week-days"></ol>
+  </div>
+
+</section>
+
 <div class="widget-grid">
 
   <a class="tile tile-live" href="https://stocks.barnyard.site/">
@@ -61,5 +81,6 @@
 </footer>
 
 <script src="live-prices.js"></script>
+<script src="glance-widgets.js"></script>
 </body>
 </html>
