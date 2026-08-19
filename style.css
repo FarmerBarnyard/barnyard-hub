@@ -59,6 +59,15 @@ a.tile:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 .tile-stat .live-price[data-live-field="change"].stale.up,
 .tile-stat .live-price[data-live-field="change"].stale.down{color:var(--text-dim);}
 
+/* Visually hidden but still in the accessibility tree (no display:none) --
+   standard clip pattern. Used for the single sr-only staleness
+   announcement inside .tile-stat so it reads as part of the tile link's
+   accessible name without visually duplicating the dot's title tooltip. */
+.sr-only{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0;
+}
+
 .live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--text-dim);margin-left:auto;}
 .live-dot.live-ok{background:var(--up);animation:live-pulse 1.6s ease-in-out infinite;}
 .live-dot.live-stale{background:var(--text-dim);animation:none;}

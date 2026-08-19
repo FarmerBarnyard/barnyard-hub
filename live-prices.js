@@ -67,12 +67,15 @@
         el.classList.remove("live-stale");
         el.classList.add("live-ok");
         el.title = "Live \u2014 updated " + new Date().toLocaleTimeString();
+      } else if (field === "status") {
+        // Clear the sr-only staleness announcement -- see applyStaleVisuals.
+        el.textContent = "";
       }
       // A successful, complete update always clears any stale marker left
-      // on this element by markStaleIfDue, regardless of field type.
+      // on this element by markStaleIfDue/applyStaleVisuals, regardless of
+      // field type.
       if (field !== "dot") {
         el.classList.remove("stale");
-        el.removeAttribute("aria-label");
       }
     });
   }
@@ -89,13 +92,20 @@
     );
   }
 
-  function markStaleIfDue(symbol, market) {
-    var key = market + ":" + symbol;
-    var last = lastSuccessAt[key];
-    var elapsed = last ? Date.now() - last : Infinity;
-    if (elapsed <= STALE_THRESHOLD_MS) return; // recent-enough success, or just one blip -- leave as-is
-
-    var lastLabel = last ? new Date(last).toLocaleTimeString() : "never";
+  // Shared by both staleness checks below -- applies the actual stale
+  // visuals/DOM changes to every element for this symbol+market once
+  // staleness has already been decided by the caller.
+  //
+  // Exactly one accessible announcement of staleness: the dot's title
+  // (not part of the tile's accessible name -- title isn't included in
+  // name computation the way aria-label is) plus a single sr-only
+  // ".tile-status" text node inside .tile-stat. Deliberately NOT an
+  // aria-label on the price/change spans -- an aria-label on a descendant
+  // of the tile <a> replaces that descendant's own text in the tile's
+  // computed accessible name, which silently deleted the actual price and
+  // change numbers from what a screen reader announces (regression fixed
+  // in this round). Visual "stale" styling on price/change stays.
+  function applyStaleVisuals(symbol, market, lastLabel) {
     var selector =
       '[data-live-symbol="' + cssAttrEscape(symbol) + '"][data-live-market="' + cssAttrEscape(market) + '"]';
     document.querySelectorAll(selector).forEach(function (el) {
@@ -104,14 +114,46 @@
         el.classList.remove("live-ok");
         el.classList.add("live-stale");
         el.title = "Stale \u2014 last updated " + lastLabel;
+      } else if (field === "status") {
+        el.textContent = "stale, last updated " + lastLabel;
       } else {
         // Price/change text keeps its confident live styling otherwise --
         // mark it too, not just the tiny dot, so staleness is actually
         // noticeable and isn't communicated by color/a 6px target alone.
+        // No aria-label here -- see comment above.
         el.classList.add("stale");
-        el.setAttribute("aria-label", "Stale price \u2014 last updated " + lastLabel);
       }
     });
+  }
+
+  // Network-level ("we haven't gotten ANY response in a while") check --
+  // clock-driven, evaluated from lastSuccessAt regardless of what any
+  // individual response contained. Catches hung/blackholed requests, which
+  // never resolve or reject and so have no response for the asOf-based
+  // check below to look at.
+  function markStaleIfDue(symbol, market) {
+    var key = market + ":" + symbol;
+    var last = lastSuccessAt[key];
+    var elapsed = last ? Date.now() - last : Infinity;
+    if (elapsed <= STALE_THRESHOLD_MS) return; // recent-enough success, or just one blip -- leave as-is
+
+    var lastLabel = last ? new Date(last).toLocaleTimeString() : "never";
+    applyStaleVisuals(symbol, market, lastLabel);
+  }
+
+  // Data-level ("the response arrived, but the price inside it is old")
+  // check -- reads the Worker's own asOf timestamp (when it actually
+  // queried Finnhub/Yahoo) instead of inferring freshness from our fetch
+  // succeeding. A successful HTTP round-trip only proves the Worker
+  // responded, not that what it served is current -- today the Worker
+  // fails closed (502) under rate limiting rather than ever serving stale
+  // data on a 200, but nothing here should depend on that staying true.
+  // Falls back to leaving the fetch-clock result (from markStaleIfDue) in
+  // place when asOf is missing or unparseable.
+  function parseAsOf(data) {
+    if (!data || typeof data.asOf !== "string") return null;
+    var t = Date.parse(data.asOf);
+    return Number.isFinite(t) ? t : null;
   }
 
   function pollAll() {
@@ -143,8 +185,19 @@
         })
         .then(function (data) {
           if (isCompleteQuote(data)) {
+            // A response arrived and parsed cleanly -- that satisfies the
+            // network-level ("got a response at all") check regardless of
+            // how old the data inside it turns out to be.
             lastSuccessAt[key] = Date.now();
-            applyQuote(symbol, market, data);
+            var asOfTime = parseAsOf(data);
+            if (asOfTime !== null && Date.now() - asOfTime > STALE_THRESHOLD_MS) {
+              // Response succeeded, but the Worker's own timestamp says the
+              // quote it served is already old (e.g. a cached/stale
+              // response) -- don't apply it as if it were live.
+              applyStaleVisuals(symbol, market, new Date(asOfTime).toLocaleTimeString());
+            } else {
+              applyQuote(symbol, market, data);
+            }
           } else {
             // Incomplete quote -- don't partially apply it. Treated the same
             // as a fetch failure below.
