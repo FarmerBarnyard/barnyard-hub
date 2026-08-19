@@ -119,39 +119,79 @@ test("isStaleSince: just past the threshold is stale", function () {
   assert.strictEqual(lp.isStaleSince(now - lp.STALE_THRESHOLD_MS - 1, now), true);
 });
 
-// ---- asOf-branch: response-succeeded-but-data-is-old --------------------
-// The data-level staleness path (pollAll: a 200 response arrives and
-// parses cleanly, but the Worker's own asOf timestamp inside it is already
-// old -- e.g. a cached/stale response) was previously verified by code
-// reading only, never against a constructed stale-but-responding payload.
-// This builds exactly that payload and confirms the decision logic pollAll
-// relies on (parseAsOf + isStaleSince together) would route it to
-// applyStaleVisuals rather than applyQuote.
+// ---- decideQuoteAction --------------------------------------------------
+// This is pollAll's actual apply-vs-stale-vs-incomplete routing decision,
+// extracted so it's directly testable rather than reachable only by
+// exercising isCompleteQuote/parseAsOf/isStaleSince in isolation and
+// *assuming* pollAll wires them together correctly. A swapped-argument bug
+// or backwards routing inside pollAll would previously have passed this
+// suite green; these tests exercise the exact function pollAll now calls,
+// so they'd fail if that wiring broke.
 
-test("asOf-branch: a complete quote with a too-old asOf is flagged stale", function () {
+test("decideQuoteAction: a complete quote with a too-old asOf routes to \"stale\" with that asOf as the timestamp", function () {
   var now = Date.now();
   var staleAsOf = new Date(now - lp.STALE_THRESHOLD_MS - 60000).toISOString();
   var quote = { price: 100, change: -1, changePercent: -0.5, asOf: staleAsOf };
 
-  assert.strictEqual(lp.isCompleteQuote(quote), true, "payload must look like a normal successful response");
-
-  var asOfTime = lp.parseAsOf(quote);
-  assert.notStrictEqual(asOfTime, null, "asOf must parse cleanly");
+  var decision = lp.decideQuoteAction(quote, now);
+  assert.strictEqual(decision.action, "stale", "an asOf this old must route to stale even though the HTTP round-trip succeeded");
   assert.strictEqual(
-    lp.isStaleSince(asOfTime, now),
-    true,
-    "an asOf this old must be flagged stale even though the HTTP round-trip succeeded"
+    decision.timestamp,
+    Date.parse(staleAsOf),
+    "the stale decision must carry the quote's own asOf, not \"now\" or some other timestamp"
   );
 });
 
-test("asOf-branch: a complete quote with a fresh asOf is NOT flagged stale", function () {
+test("decideQuoteAction: a complete quote with a fresh asOf routes to \"apply\"", function () {
   var now = Date.now();
   var freshAsOf = new Date(now - 2000).toISOString();
   var quote = { price: 100, change: 1, changePercent: 0.5, asOf: freshAsOf };
 
-  var asOfTime = lp.parseAsOf(quote);
-  assert.notStrictEqual(asOfTime, null);
-  assert.strictEqual(lp.isStaleSince(asOfTime, now), false);
+  assert.deepStrictEqual(lp.decideQuoteAction(quote, now), { action: "apply" });
+});
+
+test("decideQuoteAction: a complete quote with no asOf at all routes to \"apply\" (nothing to judge staleness against)", function () {
+  var now = Date.now();
+  var quote = { price: 100, change: 1, changePercent: 0.5 };
+
+  assert.deepStrictEqual(lp.decideQuoteAction(quote, now), { action: "apply" });
+});
+
+test("decideQuoteAction: an incomplete quote routes to \"incomplete\" regardless of asOf", function () {
+  var now = Date.now();
+  var freshAsOf = new Date(now - 2000).toISOString();
+
+  assert.deepStrictEqual(
+    lp.decideQuoteAction({ price: NaN, change: 1, changePercent: 1, asOf: freshAsOf }, now),
+    { action: "incomplete" }
+  );
+  assert.deepStrictEqual(lp.decideQuoteAction(null, now), { action: "incomplete" });
+});
+
+test("decideQuoteAction: exactly at the stale threshold still routes to \"apply\" (matches isStaleSince's strict >)", function () {
+  var now = Date.now();
+  var boundaryAsOf = new Date(now - lp.STALE_THRESHOLD_MS).toISOString();
+  var quote = { price: 100, change: 1, changePercent: 0.5, asOf: boundaryAsOf };
+
+  assert.deepStrictEqual(lp.decideQuoteAction(quote, now), { action: "apply" });
+});
+
+// ---- fmtAsOfLabel ---------------------------------------------------------
+// Pins the exact "as of HH:MM" string against a fixed timestamp and an
+// explicit "en-US" locale (matching the locale fmtAsOfLabel itself now
+// pins internally) so this test's expectation can't drift with whatever
+// locale happens to be the test runner's OS/Node default.
+
+test("fmtAsOfLabel: formats a fixed timestamp as \"as of HH:MM\" in en-US", function () {
+  var ms = Date.parse("2026-08-19T13:05:00.000Z");
+  var expected = "as of " + new Date(ms).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  assert.strictEqual(lp.fmtAsOfLabel(ms), expected);
+  // Also assert the literal shape (leading "as of ", no seconds) rather
+  // than only comparing against a re-derivation of the same call, so a
+  // regression to a different format (e.g. one that includes seconds,
+  // or drops the "as of " prefix) would still be caught even if it
+  // happened to equal itself.
+  assert.ok(/^as of \d{1,2}:\d{2}\s?(AM|PM)$/.test(lp.fmtAsOfLabel(ms)), "expected \"as of H:MM AM/PM\" shape, got: " + lp.fmtAsOfLabel(ms));
 });
 
 console.log(passed + " passed");

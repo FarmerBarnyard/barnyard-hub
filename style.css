@@ -132,7 +132,14 @@ a.tile:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
    drops it onto its own line under the label/price/change instead of
    competing with them for width on narrow tiles, which was forcing the
    change figure to wrap mid-value. */
-.tile-stat .live-asof{flex:0 0 100%;color:var(--text-dim);font-size:.72rem;font-weight:600;}
+/* Live state uses --text (not --text-dim, which only clears ~3.96:1 against
+   --surface and fails WCAG AA 4.5:1 for this non-large text) -- live is the
+   common state here, so the base rule is the one that actually needs to
+   pass AA on its own, not just the rare .stale variant. --text also keeps
+   the existing "live = more prominent, stale = muted" pattern used by
+   price/change above (--text-bright/vivid up-down vs --stale-text), so the
+   two states stay visually distinct rather than converging on one color. */
+.tile-stat .live-asof{flex:0 0 100%;color:var(--text);font-size:.72rem;font-weight:600;}
 .tile-stat .live-asof.stale{color:var(--stale-text);}
 
 /* Visually hidden but still in the accessibility tree (no display:none) --
