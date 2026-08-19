@@ -7,6 +7,14 @@
   --amber:#e8a33d; --amber-dim:#8a641f; --amber-bg:rgba(232,163,61,.10);
   --blue:#5b9fe8; --blue-dim:#2f5c8a; --blue-bg:rgba(91,159,232,.12);
   --up:#4cc38a; --down:#ff6b5e;
+  /* Stale-state tokens -- deliberately distinct from --text-dim (the
+     generic "inactive/de-emphasized" gray used for placeholder tiles etc.)
+     so a stale reading doesn't just look like ordinary dim UI chrome.
+     --stale-text is lightened off --text-dim specifically to clear WCAG AA
+     (4.5:1) against --surface at the .tile-stat text sizes used here --
+     --text-dim itself only manages ~3.96:1 there, which reads fine to most
+     people but falls short of AA for the non-"large text" change figure. */
+  --stale-text:#8c98a4; --stale-dot:var(--amber-dim);
   --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
   --sans:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
 }
@@ -103,7 +111,7 @@ a.tile:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 .tile-desc{color:var(--text-dim);font-size:.82rem;margin:0;flex:1;}
 
 /* Live stat line (Stocks tile) */
-.tile-stat{display:flex;align-items:baseline;gap:8px;font-family:var(--mono);margin-top:auto;}
+.tile-stat{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-family:var(--mono);margin-top:auto;}
 .tile-stat .stat-label{font-size:.85rem;font-weight:700;color:var(--text);letter-spacing:.02em;}
 .tile-stat .live-price[data-live-field="price"]{font-size:1.15rem;font-weight:700;color:var(--text-bright);}
 .tile-stat .live-price[data-live-field="change"]{font-size:.85rem;font-weight:700;color:var(--text-dim);}
@@ -111,10 +119,21 @@ a.tile:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 .tile-stat .live-price[data-live-field="change"].down{color:var(--down);}
 /* Stale data keeps its last-known text but loses the confident live
    styling -- desaturate price + change (overriding .up/.down) so staleness
-   is visible without relying on the 6px dot or a tooltip alone. */
-.tile-stat .live-price.stale{color:var(--text-dim);}
+   is visible without relying on the 6px dot or a tooltip alone. Uses
+   --stale-text rather than --text-dim -- see the :root comment -- so this
+   still clears WCAG AA against the tile's --surface background. */
+.tile-stat .live-price.stale{color:var(--stale-text);}
 .tile-stat .live-price[data-live-field="change"].stale.up,
-.tile-stat .live-price[data-live-field="change"].stale.down{color:var(--text-dim);}
+.tile-stat .live-price[data-live-field="change"].stale.down{color:var(--stale-text);}
+
+/* Freshness label ("as of HH:MM") driven by the live-prices.js "asof"
+   field -- same quiet, out-of-the-way treatment as .weather-asof in the
+   glance row above. flex-basis:100% (with .tile-stat's flex-wrap above)
+   drops it onto its own line under the label/price/change instead of
+   competing with them for width on narrow tiles, which was forcing the
+   change figure to wrap mid-value. */
+.tile-stat .live-asof{flex:0 0 100%;color:var(--text-dim);font-size:.72rem;font-weight:600;}
+.tile-stat .live-asof.stale{color:var(--stale-text);}
 
 /* Visually hidden but still in the accessibility tree (no display:none) --
    standard clip pattern. Used for the single sr-only staleness
@@ -127,7 +146,9 @@ a.tile:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 
 .live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--text-dim);margin-left:auto;}
 .live-dot.live-ok{background:var(--up);animation:live-pulse 1.6s ease-in-out infinite;}
-.live-dot.live-stale{background:var(--text-dim);animation:none;}
+/* --stale-dot (not --text-dim) so the dot itself reads as "stale" rather
+   than "just another inactive/dim thing" -- see the :root token comment. */
+.live-dot.live-stale{background:var(--stale-dot);animation:none;}
 @keyframes live-pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
 @media (prefers-reduced-motion: reduce){.live-dot.live-ok{animation:none;}}
 

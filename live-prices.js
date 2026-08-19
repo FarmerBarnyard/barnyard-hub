@@ -9,6 +9,11 @@
 //
 (function () {
   var LIVE_PRICE_API = "https://barnyard-live-prices.nathanbarnard29.workers.dev";
+  // Invariant: FETCH_TIMEOUT_MS must stay below POLL_INTERVAL_MS. Otherwise
+  // a slow-but-alive request could still be in flight when the next poll
+  // tick fires, and (worse) markStaleIfDue's clock-driven check -- which
+  // runs every tick regardless of any in-flight fetch -- would be racing
+  // against a timeout that hasn't even had a chance to fire yet.
   var POLL_INTERVAL_MS = 15000;
   // A few consecutive failed/incomplete polls shouldn't immediately flip a
   // tile to "stale" (could just be one blip) -- only do so once this much
@@ -16,7 +21,8 @@
   var STALE_THRESHOLD_MS = POLL_INTERVAL_MS * 2.5;
   // A hung/blackholed request never resolves or rejects on its own -- cap
   // how long we'll wait before aborting it so it eventually lands in the
-  // .catch below instead of accumulating forever.
+  // .catch below instead of accumulating forever. See the POLL_INTERVAL_MS
+  // comment above for the invariant this must respect.
   var FETCH_TIMEOUT_MS = 10000;
   // key ("MARKET:SYMBOL") -> timestamp (ms) of last successful, fully-valid update.
   var lastSuccessAt = {};
@@ -39,6 +45,12 @@
   }
   function fmtTickerChange(pct, change) {
     return fmtPctSigned(pct) + " (" + fmtDollarSigned(change) + ")";
+  }
+  // Short "as of HH:MM" freshness label for the tile's asof field -- no
+  // seconds, unlike the dot's title/lastLabel strings below, since this one
+  // is always-visible tile copy rather than a one-off tooltip/announcement.
+  function fmtAsOfLabel(ms) {
+    return "as of " + new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   }
 
   function cssAttrEscape(value) {
@@ -63,6 +75,14 @@
         el.textContent = fmtPctSigned(quote.changePercent);
       } else if (field === "change_abs") {
         el.textContent = "(" + fmtDollarSigned(quote.change) + ")";
+      } else if (field === "asof") {
+        // Prefer the Worker's own asOf timestamp (when it actually queried
+        // the upstream data source) over "now" (when we happened to receive
+        // the response) -- same reasoning as the data-level staleness check
+        // in pollAll below. Falls back to "now" only if asOf is missing or
+        // unparseable, so the label is never left blank on a good quote.
+        var asOfTime = parseAsOf(quote);
+        el.textContent = fmtAsOfLabel(asOfTime !== null ? asOfTime : Date.now());
       } else if (field === "dot") {
         el.classList.remove("live-stale");
         el.classList.add("live-ok");
@@ -92,9 +112,26 @@
     );
   }
 
+  // Pure decision function shared by both staleness checks below (the
+  // network-clock-driven markStaleIfDue, and the asOf-driven check in
+  // pollAll's .then) -- given how long it's been since some reference
+  // timestamp, decide whether that counts as stale. `last` may be
+  // null/undefined ("nothing has ever succeeded yet"), which correctly
+  // reads as infinitely stale rather than as "just happened". Kept free of
+  // any DOM access so it's directly unit-testable -- see
+  // test/live-prices.test.js.
+  function isStaleSince(last, now) {
+    var elapsed = last != null ? now - last : Infinity;
+    return elapsed > STALE_THRESHOLD_MS;
+  }
+
   // Shared by both staleness checks below -- applies the actual stale
   // visuals/DOM changes to every element for this symbol+market once
-  // staleness has already been decided by the caller.
+  // staleness has already been decided by the caller. `lastTimestamp` is
+  // the ms epoch time of the last known-good data point (last successful
+  // fetch for the network-level check, or the Worker's own asOf for the
+  // data-level check below) -- null/undefined means nothing has ever
+  // loaded successfully.
   //
   // Exactly one accessible announcement of staleness: the dot's title
   // (not part of the tile's accessible name -- title isn't included in
@@ -105,7 +142,8 @@
   // computed accessible name, which silently deleted the actual price and
   // change numbers from what a screen reader announces (regression fixed
   // in this round). Visual "stale" styling on price/change stays.
-  function applyStaleVisuals(symbol, market, lastLabel) {
+  function applyStaleVisuals(symbol, market, lastTimestamp) {
+    var lastLabel = lastTimestamp != null ? new Date(lastTimestamp).toLocaleTimeString() : "never";
     var selector =
       '[data-live-symbol="' + cssAttrEscape(symbol) + '"][data-live-market="' + cssAttrEscape(market) + '"]';
     document.querySelectorAll(selector).forEach(function (el) {
@@ -116,6 +154,13 @@
         el.title = "Stale \u2014 last updated " + lastLabel;
       } else if (field === "status") {
         el.textContent = "stale, last updated " + lastLabel;
+      } else if (field === "asof") {
+        // Same freshness slot applyQuote's "asof" field fills in when
+        // live -- keep it populated (rather than blanking it) so the
+        // "as of HH:MM" text itself becomes the visible staleness signal,
+        // matching how price/change keep their last-known text below.
+        el.textContent = lastTimestamp != null ? fmtAsOfLabel(lastTimestamp) : "as of \u2014";
+        el.classList.add("stale");
       } else {
         // Price/change text keeps its confident live styling otherwise --
         // mark it too, not just the tiny dot, so staleness is actually
@@ -134,11 +179,9 @@
   function markStaleIfDue(symbol, market) {
     var key = market + ":" + symbol;
     var last = lastSuccessAt[key];
-    var elapsed = last ? Date.now() - last : Infinity;
-    if (elapsed <= STALE_THRESHOLD_MS) return; // recent-enough success, or just one blip -- leave as-is
+    if (!isStaleSince(last, Date.now())) return; // recent-enough success, or just one blip -- leave as-is
 
-    var lastLabel = last ? new Date(last).toLocaleTimeString() : "never";
-    applyStaleVisuals(symbol, market, lastLabel);
+    applyStaleVisuals(symbol, market, last);
   }
 
   // Data-level ("the response arrived, but the price inside it is old")
@@ -190,11 +233,11 @@
             // how old the data inside it turns out to be.
             lastSuccessAt[key] = Date.now();
             var asOfTime = parseAsOf(data);
-            if (asOfTime !== null && Date.now() - asOfTime > STALE_THRESHOLD_MS) {
+            if (asOfTime !== null && isStaleSince(asOfTime, Date.now())) {
               // Response succeeded, but the Worker's own timestamp says the
               // quote it served is already old (e.g. a cached/stale
               // response) -- don't apply it as if it were live.
-              applyStaleVisuals(symbol, market, new Date(asOfTime).toLocaleTimeString());
+              applyStaleVisuals(symbol, market, asOfTime);
             } else {
               applyQuote(symbol, market, data);
             }
@@ -218,8 +261,28 @@
     });
   }
 
-  if (document.querySelector("[data-live-symbol]")) {
+  // Guarded on `document` existing (rather than assuming a browser) so this
+  // file can be `require()`d as-is by the Node-based test file below
+  // without needing a DOM/jsdom stand-in -- always true in the browser,
+  // never true under plain Node.
+  if (typeof document !== "undefined" && document.querySelector("[data-live-symbol]")) {
     pollAll();
     setInterval(pollAll, POLL_INTERVAL_MS);
+  }
+
+  // Expose pure, DOM-free helpers to the Node-based test file at
+  // test/live-prices.test.js -- this repo has no build step, so the test
+  // just requires this file directly rather than importing from a compiled
+  // module. A no-op in the browser: `module` is undefined there, so this
+  // branch never runs outside Node.
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = {
+      isCompleteQuote: isCompleteQuote,
+      parseAsOf: parseAsOf,
+      isStaleSince: isStaleSince,
+      POLL_INTERVAL_MS: POLL_INTERVAL_MS,
+      STALE_THRESHOLD_MS: STALE_THRESHOLD_MS,
+      FETCH_TIMEOUT_MS: FETCH_TIMEOUT_MS
+    };
   }
 })();
