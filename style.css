@@ -79,6 +79,11 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 .week-day{
   flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
   padding:8px 4px;border-radius:4px;border:1px solid transparent;
+  /* Flex items default to min-width:auto, which lets a long child (a long
+     event title below) grow this column past its equal 1/7 share instead of
+     truncating -- min-width:0 is the standard fix, letting
+     .week-day-event's own overflow/ellipsis rules actually take effect. */
+  min-width:0;
 }
 .week-day-name{
   font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
@@ -88,6 +93,44 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 .week-day.is-today{background:var(--amber-bg);border-color:var(--amber-dim);}
 .week-day.is-today .week-day-name,
 .week-day.is-today .week-day-num{color:var(--amber);}
+
+/* Per-day event titles from api.barnyard.site/calendar (see
+   glance-widgets.js's fetchCalendarEvents). Stacked, small, and centered so
+   they read as detail under the day number rather than competing with it --
+   the day column is narrow (flex:1 of a 7-wide row), so this favors a
+   compact list with a native title-attribute tooltip for anything the
+   ellipsis truncates over a fancier expand/collapse control. */
+.week-day-events{list-style:none;display:flex;flex-direction:column;gap:2px;margin:2px 0 0;padding:0;width:100%;}
+.week-day-event{
+  font-size:.62rem;line-height:1.25;color:var(--text-dim);text-align:center;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;
+}
+.week-day.is-today .week-day-event{color:var(--amber-dim);}
+
+/* Calendar fetch status line -- covers three states (see
+   renderCalendarStatus in glance-widgets.js): empty while unresolved (no
+   fetch attempted yet, so no empty gap shows in the widget); the
+   persistent "repeating events aren't shown" caveat on every successful
+   fetch (recurring events are never expanded server-side, so this keeps a
+   week that's actually full of unshown recurring events from reading as a
+   false "nothing's scheduled"); or the honest, cause-neutral "couldn't
+   load your events" state plus a retry button when the fetch itself
+   failed. Distinct visual treatment isn't needed for any of these -- same
+   quiet muted style as .weather-status throughout. */
+.week-status{color:var(--text-dim);font-size:.78rem;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.week-status:empty{display:none;}
+.week-status-text{color:var(--text-dim);}
+/* "Try again" for the calendar fetch's error state -- same visual language
+   as .weather-locate-btn (surface-2 fill, border, amber hover/focus), just
+   sized down to fit inline in the narrow status line rather than as a
+   standalone block button. */
+.week-retry-btn{
+  font-family:var(--sans);font-size:.72rem;font-weight:700;
+  color:var(--text-bright);background:var(--surface-2);border:1px solid var(--border);
+  border-radius:4px;padding:3px 8px;cursor:pointer;transition:border-color .15s ease;
+}
+.week-retry-btn:hover{border-color:var(--amber-dim);}
+.week-retry-btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 
 .widget-grid{
   display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));

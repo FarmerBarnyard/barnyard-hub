@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.open-meteo.com https://barnyard-live-prices.nathanbarnard29.workers.dev; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.open-meteo.com https://barnyard-live-prices.nathanbarnard29.workers.dev https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
 <title>Barnyard</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -39,6 +39,7 @@
       <li class="week-day"><span class="week-day-name">Sat</span><span class="week-day-num">&mdash;</span></li>
       <li class="week-day"><span class="week-day-name">Sun</span><span class="week-day-num">&mdash;</span></li>
     </ol>
+    <p class="week-status" id="week-status"></p>
   </div>
 
 </section>
@@ -88,7 +89,7 @@
 </div>
 
 <footer class="hub-footer">
-  Barnyard hub &mdash; static landing page, no accounts, no tracking. The weather widget only contacts Open-Meteo, and only if you ask it to.
+  Barnyard hub &mdash; static landing page, no account needed to browse, no third-party tracking. The weather widget only contacts Open-Meteo, and only if you ask it to. The calendar widget contacts api.barnyard.site (a same-account Cloudflare Worker, gated by Cloudflare Access) to show this week's events.
 </footer>
 
 <script src="live-prices.js"></script>
