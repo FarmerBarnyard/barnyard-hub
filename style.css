@@ -107,12 +107,16 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 }
 .week-day.is-today .week-day-event{color:var(--amber-dim);}
 
-/* Honest fetch-failed/not-authenticated state for the calendar fetch --
-   distinct treatment isn't needed (same quiet muted style as
-   .weather-status), it just needs to say something other than "no events"
-   when the real reason is "couldn't check". Empty text node when there's
-   nothing to report (loading, or a successful fetch already rendered into
-   the grid above), so no empty gap shows in the widget. */
+/* Calendar fetch status line -- covers three states (see
+   renderCalendarStatus in glance-widgets.js): empty while unresolved (no
+   fetch attempted yet, so no empty gap shows in the widget); the
+   persistent "repeating events aren't shown" caveat on every successful
+   fetch (recurring events are never expanded server-side, so this keeps a
+   week that's actually full of unshown recurring events from reading as a
+   false "nothing's scheduled"); or the honest, cause-neutral "couldn't
+   load your events" state plus a retry button when the fetch itself
+   failed. Distinct visual treatment isn't needed for any of these -- same
+   quiet muted style as .weather-status throughout. */
 .week-status{color:var(--text-dim);font-size:.78rem;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 .week-status:empty{display:none;}
 .week-status-text{color:var(--text-dim);}
