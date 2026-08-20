@@ -273,6 +273,98 @@
     "July", "August", "September", "October", "November", "December"
   ];
 
+  // ---- Calendar events (Worker-backed, Access-gated) -----------------------
+  //
+  // Enhances the local day grid above with real events fetched from
+  // api.barnyard.site/calendar (see cloudflare-worker/src/index.js in the
+  // ClaudeRepo checkout for the exact response shape -- roughly
+  // { title, allDay, date, start, end, recurring }[]). Unlike the weather
+  // widget, this route is same-account-only and gated by Cloudflare Access
+  // (a cookie-based login on the api.barnyard.site hostname) -- an
+  // unauthenticated visitor's request gets redirected to an Access login
+  // page (or otherwise fails/returns something that isn't our JSON), which
+  // is treated below as an honest "couldn't check" state, distinct from a
+  // successful-but-empty week. This widget never attempts to drive the
+  // visitor into that login flow itself -- see the file/task note, out of
+  // scope here -- it just degrades to a plain day grid plus a status line.
+
+  var CALENDAR_API = "https://api.barnyard.site/calendar";
+  var CALENDAR_FETCH_TIMEOUT_MS = 10000;
+
+  // null = not yet resolved (first fetch still in flight, or not attempted
+  // yet -- renders as a plain grid with no status line, same as before this
+  // feature existed). Array = successful, authenticated fetch; this week's
+  // events (an empty array is a normal, valid state -- "no events", not an
+  // error). "error" = the fetch failed, was redirected, or didn't return
+  // parseable JSON -- kept distinct from an empty array specifically so the
+  // grid never claims "no events" when the real state is "couldn't check".
+  var calendarEvents = null;
+
+  function pad2(n) {
+    return n < 10 ? "0" + n : String(n);
+  }
+
+  // Local "YYYY-MM-DD" for a given Date, matched against each event's own
+  // `date` field (the Worker's own dateStr for that event's start) to decide
+  // which day column it belongs in.
+  function localDateStr(d) {
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
+
+  function weekStatusEl() {
+    return document.getElementById("week-status");
+  }
+
+  function renderCalendarStatus() {
+    var el = weekStatusEl();
+    if (!el) return;
+    // Deliberately worded as "couldn't check" / "sign in", never "no
+    // events" -- see the section header comment above.
+    el.textContent = calendarEvents === "error" ? "Sign in to see your events" : "";
+  }
+
+  function fetchCalendarEvents() {
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function () {
+      controller.abort();
+    }, CALENDAR_FETCH_TIMEOUT_MS);
+    fetch(CALENDAR_API, {
+      credentials: "include",
+      signal: controller.signal,
+      referrerPolicy: "no-referrer"
+    })
+      .then(function (r) {
+        // An unauthenticated request to an Access-gated route typically
+        // lands here as a non-ok response (redirected to, or answered by,
+        // an Access login page) -- checked before ever trying to parse the
+        // body as JSON.
+        if (!r.ok) throw new Error("bad response");
+        var contentType = r.headers.get("content-type") || "";
+        if (contentType.indexOf("application/json") === -1) {
+          // Covers the case of a 200 response whose body is actually an
+          // Access login page (HTML), not our JSON -- content-type alone,
+          // checked before r.json() is ever called.
+          throw new Error("unexpected content-type");
+        }
+        return r.json();
+      })
+      .then(function (data) {
+        if (!Array.isArray(data)) throw new Error("unexpected response shape");
+        calendarEvents = data;
+      })
+      .catch(function () {
+        calendarEvents = "error";
+      })
+      .finally(function () {
+        clearTimeout(timeoutId);
+        // Re-render so the already-visible grid picks up whatever this
+        // fetch resolved to, whether that's events or the honest failure
+        // status -- both renderWeek (per-day event lists) and
+        // renderCalendarStatus (the status line) key off calendarEvents.
+        renderWeek();
+      });
+  }
+
   // Day-of-month numbers alone are ambiguous across a month boundary (e.g.
   // "29 30 31 1 2 3 4") -- this gives the widget head a "Month Year" (or
   // "Month–Month Year" / "Month Year–Month Year") label to disambiguate.
@@ -329,6 +421,36 @@
       li.appendChild(nameEl);
       li.appendChild(numEl);
 
+      // Only rendered once calendarEvents has actually resolved to a real
+      // array -- while it's still null (not yet fetched) or "error" (fetch
+      // failed/unauthenticated), the grid stays exactly the plain day list
+      // it always was; see renderCalendarStatus for the separate honest
+      // status line covering the "error" case.
+      if (Array.isArray(calendarEvents)) {
+        var dateStr = localDateStr(d);
+        var dayEvents = calendarEvents.filter(function (ev) {
+          return ev && ev.date === dateStr;
+        });
+        if (dayEvents.length) {
+          var eventsList = document.createElement("ul");
+          eventsList.className = "week-day-events";
+          dayEvents.forEach(function (ev) {
+            var itemEl = document.createElement("li");
+            itemEl.className = "week-day-event";
+            // Real external calendar data, rendered as-is via textContent --
+            // never innerHTML -- consistent with the rest of this file.
+            var title = ev && typeof ev.title === "string" && ev.title ? ev.title : "(untitled event)";
+            itemEl.textContent = title;
+            // Native tooltip so a title truncated by the narrow column's
+            // ellipsis (see .week-day-event in style.css) is still fully
+            // readable on hover/focus, without a custom expand control.
+            itemEl.title = title;
+            eventsList.appendChild(itemEl);
+          });
+          li.appendChild(eventsList);
+        }
+      }
+
       if (isToday) {
         var srEl = document.createElement("span");
         srEl.className = "sr-only";
@@ -338,6 +460,8 @@
 
       list.appendChild(li);
     }
+
+    renderCalendarStatus();
   }
 
   // Re-render on next local midnight so a long-open tab doesn't silently
@@ -358,11 +482,19 @@
     renderWeek();
     // Belt-and-braces alongside the midnight timer above: a tab that was
     // asleep/throttled in the background (timers can be deferred) still
-    // gets corrected the moment it's looked at again.
+    // gets corrected the moment it's looked at again. Also re-fetches
+    // calendar events on the same trigger -- no polling loop for a calendar
+    // (events don't change second-to-second), but a tab left open across
+    // days should still pick up the new day's events without a manual
+    // reload.
     document.addEventListener("visibilitychange", function () {
-      if (document.visibilityState === "visible") renderWeek();
+      if (document.visibilityState === "visible") {
+        renderWeek();
+        fetchCalendarEvents();
+      }
     });
     scheduleMidnightRefresh();
+    fetchCalendarEvents();
   }
 
   initWeather();

@@ -79,6 +79,11 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 .week-day{
   flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
   padding:8px 4px;border-radius:4px;border:1px solid transparent;
+  /* Flex items default to min-width:auto, which lets a long child (a long
+     event title below) grow this column past its equal 1/7 share instead of
+     truncating -- min-width:0 is the standard fix, letting
+     .week-day-event's own overflow/ellipsis rules actually take effect. */
+  min-width:0;
 }
 .week-day-name{
   font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
@@ -88,6 +93,28 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 .week-day.is-today{background:var(--amber-bg);border-color:var(--amber-dim);}
 .week-day.is-today .week-day-name,
 .week-day.is-today .week-day-num{color:var(--amber);}
+
+/* Per-day event titles from api.barnyard.site/calendar (see
+   glance-widgets.js's fetchCalendarEvents). Stacked, small, and centered so
+   they read as detail under the day number rather than competing with it --
+   the day column is narrow (flex:1 of a 7-wide row), so this favors a
+   compact list with a native title-attribute tooltip for anything the
+   ellipsis truncates over a fancier expand/collapse control. */
+.week-day-events{list-style:none;display:flex;flex-direction:column;gap:2px;margin:2px 0 0;padding:0;width:100%;}
+.week-day-event{
+  font-size:.62rem;line-height:1.25;color:var(--text-dim);text-align:center;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;
+}
+.week-day.is-today .week-day-event{color:var(--amber-dim);}
+
+/* Honest fetch-failed/not-authenticated state for the calendar fetch --
+   distinct treatment isn't needed (same quiet muted style as
+   .weather-status), it just needs to say something other than "no events"
+   when the real reason is "couldn't check". Empty text node when there's
+   nothing to report (loading, or a successful fetch already rendered into
+   the grid above), so no empty gap shows in the widget. */
+.week-status{color:var(--text-dim);font-size:.78rem;margin:0;}
+.week-status:empty{display:none;}
 
 .widget-grid{
   display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
