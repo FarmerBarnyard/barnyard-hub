@@ -113,8 +113,20 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
    when the real reason is "couldn't check". Empty text node when there's
    nothing to report (loading, or a successful fetch already rendered into
    the grid above), so no empty gap shows in the widget. */
-.week-status{color:var(--text-dim);font-size:.78rem;margin:0;}
+.week-status{color:var(--text-dim);font-size:.78rem;margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 .week-status:empty{display:none;}
+.week-status-text{color:var(--text-dim);}
+/* "Try again" for the calendar fetch's error state -- same visual language
+   as .weather-locate-btn (surface-2 fill, border, amber hover/focus), just
+   sized down to fit inline in the narrow status line rather than as a
+   standalone block button. */
+.week-retry-btn{
+  font-family:var(--sans);font-size:.72rem;font-weight:700;
+  color:var(--text-bright);background:var(--surface-2);border:1px solid var(--border);
+  border-radius:4px;padding:3px 8px;cursor:pointer;transition:border-color .15s ease;
+}
+.week-retry-btn:hover{border-color:var(--amber-dim);}
+.week-retry-btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 
 .widget-grid{
   display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));

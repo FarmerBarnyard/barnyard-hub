@@ -1,14 +1,20 @@
 // Two self-contained "at a glance" widgets shown between the header and the
 // project tiles: current weather (via the browser's Geolocation API plus
-// Open-Meteo's free, keyless forecast API) and a pure client-side week-view
-// calendar computed from the visitor's local clock.
+// Open-Meteo's free, keyless forecast API) and a week-view calendar built
+// from the visitor's local clock and enhanced with real events fetched from
+// api.barnyard.site/calendar (a same-account Cloudflare Worker gated by
+// Cloudflare Access -- see the "Calendar events" section below).
 //
-// Neither widget talks to any account or tracking service. The weather
-// widget only contacts Open-Meteo (over HTTPS, no API key/config), and only
-// once the visitor explicitly asks for it by clicking "Show weather near
-// me" -- nothing here calls the Geolocation API on page load. The calendar
-// widget doesn't touch a network at all. Keeps the footer's
-// "no accounts, no tracking" claim true.
+// Neither widget talks to any third-party tracking service, but the
+// calendar widget IS a network call, and -- unlike weather, which only
+// fires once the visitor explicitly clicks "Show weather near me" -- it
+// fires unconditionally on every page load and again on every tab focus.
+// That means the footer's "no accounts, no tracking" line is no longer
+// literally true for this widget; index.html's footer text has been
+// reworded to say so explicitly rather than leave a false claim standing.
+// (Whether this fetch should instead be gated behind an explicit user
+// action, like weather's click-to-share-location gate, is an open decision
+// -- see this branch's review notes -- not settled by this comment.)
 //
 // Both are best-effort: any failure (denied permission, network hiccup,
 // unexpected response shape) renders an honest status message in the tile
@@ -264,8 +270,10 @@
 
   // ---- Week calendar --------------------------------------------------------
   //
-  // Purely local: Monday-Sunday for the visitor's current local week, built
-  // from new Date() with no network call and no calendar-account connection.
+  // The Mon-Sun day grid itself is purely local (built from new Date(), no
+  // network call, no calendar-account connection). The per-day event data
+  // layered on top of that grid is NOT local -- see the "Calendar events"
+  // section immediately below, which fetches from api.barnyard.site.
 
   var DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   var MONTH_NAMES = [
@@ -279,14 +287,30 @@
   // api.barnyard.site/calendar (see cloudflare-worker/src/index.js in the
   // ClaudeRepo checkout for the exact response shape -- roughly
   // { title, allDay, date, start, end, recurring }[]). Unlike the weather
-  // widget, this route is same-account-only and gated by Cloudflare Access
-  // (a cookie-based login on the api.barnyard.site hostname) -- an
+  // widget's click-to-share-location gate, this fetch fires unconditionally
+  // on page load and on every tab focus -- see the file header comment.
+  // This route is same-account-only and gated by Cloudflare Access (a
+  // cookie-based login on the api.barnyard.site hostname) -- an
   // unauthenticated visitor's request gets redirected to an Access login
-  // page (or otherwise fails/returns something that isn't our JSON), which
-  // is treated below as an honest "couldn't check" state, distinct from a
-  // successful-but-empty week. This widget never attempts to drive the
-  // visitor into that login flow itself -- see the file/task note, out of
-  // scope here -- it just degrades to a plain day grid plus a status line.
+  // page (or otherwise fails/returns something that isn't our JSON).
+  //
+  // Many different failure modes (offline, DNS, a timeout, a CORS
+  // rejection, a 5xx, an unauthenticated redirect, an unexpected body
+  // shape) all collapse to the same "couldn't check" state below --
+  // deliberately worded cause-neutral ("Couldn't load your events") rather
+  // than asserting any one specific cause, with a "Try again" retry button
+  // (mirroring the weather widget's own retry pattern -- see
+  // makeLocateButton/renderWeatherStatus above) so it's never a dead end.
+  //
+  // The Worker deliberately does NOT expand recurring events (RRULE) into
+  // their individual occurrences -- a recurring event only ever appears on
+  // its literal original creation date, which is almost always outside the
+  // displayed week (see buildCalendarEvents' own comment in the Worker).
+  // renderCalendarStatus below always renders a "repeating events aren't
+  // shown" caveat on a successful fetch so a week that's actually full of
+  // (unshown) recurring events doesn't read as a false "nothing's
+  // scheduled" -- and any individual event the Worker flags `recurring:
+  // true` gets that noted in its tooltip text too.
 
   var CALENDAR_API = "https://api.barnyard.site/calendar";
   var CALENDAR_FETCH_TIMEOUT_MS = 10000;
@@ -304,26 +328,126 @@
     return n < 10 ? "0" + n : String(n);
   }
 
-  // Local "YYYY-MM-DD" for a given Date, matched against each event's own
-  // `date` field (the Worker's own dateStr for that event's start) to decide
-  // which day column it belongs in.
+  // Local "YYYY-MM-DD" for a given Date -- used both to build the day grid
+  // itself and, via eventLocalDate below, to place each event in the
+  // correct local day column.
   function localDateStr(d) {
     return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
+
+  // Derives an event's LOCAL calendar date -- the date it should appear
+  // under in the visitor's own day grid -- from the event's own `start`
+  // field, NOT the Worker's `date` field. `date` is the UTC date of a timed
+  // event's absolute instant, which only matches the visitor's local date
+  // for visitors in/near UTC -- for anyone else, matching against it
+  // silently shifts every timed event onto the wrong day (a morning meeting
+  // one day early for a positive-UTC-offset visitor, an evening one one day
+  // late for a negative-UTC-offset visitor). See this branch's review notes
+  // (finding 1) and test/glance-widgets.test.js for the exact scenarios.
+  //
+  //   - allDay events: `date` is a literal calendar date with no time
+  //     component to convert -- already correct as-is.
+  //   - timed events with a "Z"-suffixed `start` (an absolute instant --
+  //     either an originally-UTC DTSTART, or a TZID-qualified one the
+  //     Worker has already resolved to UTC): convert to the visitor's own
+  //     local date via `new Date(...)` + localDateStr, i.e. the browser's
+  //     own local-timezone getters.
+  //   - timed events with a floating (no "Z") `start` (an unrecognized
+  //     TZID the Worker couldn't resolve, per its own comment): the
+  //     wall-clock digits it emits are already local by construction --
+  //     take the date portion as-is.
+  function eventLocalDate(ev) {
+    if (!ev) return null;
+    if (ev.allDay) return ev.date;
+    if (typeof ev.start !== "string") return null;
+    if (ev.start.slice(-1) === "Z") {
+      var t = new Date(ev.start);
+      return isNaN(t.getTime()) ? null : localDateStr(t);
+    }
+    return ev.start.slice(0, 10);
   }
 
   function weekStatusEl() {
     return document.getElementById("week-status");
   }
 
+  // Same "never a dead end" pattern as the weather widget's
+  // makeLocateButton/renderWeatherStatus above -- a status message alone,
+  // with nothing to click, leaves a failed fetch with no way forward short
+  // of reloading the whole page.
+  function makeCalendarRetryButton(label, handler) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "week-retry-btn";
+    btn.textContent = label;
+    btn.addEventListener("click", function () {
+      handler();
+    });
+    return btn;
+  }
+
   function renderCalendarStatus() {
     var el = weekStatusEl();
     if (!el) return;
-    // Deliberately worded as "couldn't check" / "sign in", never "no
-    // events" -- see the section header comment above.
-    el.textContent = calendarEvents === "error" ? "Sign in to see your events" : "";
+    el.innerHTML = "";
+    if (calendarEvents === "error") {
+      // Cause-neutral wording -- this single state covers offline, DNS
+      // failure, a timeout, a CORS rejection, a 5xx, an unauthenticated
+      // Access redirect, and an unexpected response shape, so it must not
+      // assert any one of those specific causes. See the section header
+      // comment above.
+      var msg = document.createElement("span");
+      msg.className = "week-status-text";
+      msg.textContent = "Couldn't load your events. ";
+      el.appendChild(msg);
+      el.appendChild(
+        makeCalendarRetryButton("Try again", function () {
+          fetchCalendarEvents();
+        })
+      );
+    } else if (Array.isArray(calendarEvents)) {
+      // Persistent caveat on every successful fetch, not just an empty
+      // week -- the Worker never expands recurring events (see the section
+      // header comment), so without this, a week that's actually full of
+      // unshown recurring events is indistinguishable from a genuinely
+      // empty one.
+      el.textContent = "Repeating events aren't shown";
+    } else {
+      el.textContent = "";
+    }
   }
 
-  function fetchCalendarEvents() {
+  // How long a successful fetch is trusted before a background refresh
+  // (tab focus, midnight rollover) bothers refetching -- matches the
+  // Worker's own CALENDAR_CACHE_TTL_SECONDS (5 minutes): a refresh sooner
+  // than that can't possibly see anything new.
+  var CALENDAR_REFRESH_MS = 5 * 60 * 1000;
+  // In-flight guard: without this, rapid tab-switching (each
+  // visibilitychange fires a fetch) could start overlapping requests where
+  // a slow earlier one resolves after a faster later one and clobbers good
+  // data with a stale/error result.
+  var calendarFetchInFlight = false;
+  // Timestamp (ms) of the last successful array load -- null until the
+  // first one, so the staleness check below never blocks the initial
+  // fetch on page load.
+  var lastCalendarLoadAt = null;
+
+  // opts.silent: a background refresh (tab focus, midnight rollover) rather
+  // than a user-initiated one (initial page load, "Try again" click) --
+  // subject to the staleness threshold above; an explicit/foreground fetch
+  // always goes through.
+  function fetchCalendarEvents(opts) {
+    var silent = !!(opts && opts.silent);
+    if (calendarFetchInFlight) return;
+    if (
+      silent &&
+      lastCalendarLoadAt !== null &&
+      Date.now() - lastCalendarLoadAt < CALENDAR_REFRESH_MS
+    ) {
+      return;
+    }
+
+    calendarFetchInFlight = true;
     var controller = new AbortController();
     var timeoutId = setTimeout(function () {
       controller.abort();
@@ -351,12 +475,21 @@
       .then(function (data) {
         if (!Array.isArray(data)) throw new Error("unexpected response shape");
         calendarEvents = data;
+        lastCalendarLoadAt = Date.now();
       })
       .catch(function () {
-        calendarEvents = "error";
+        // Never let a failed refresh wipe already-successfully-loaded
+        // events still on screen -- only downgrade to the honest "error"
+        // state when there's no good array already held (first load, or a
+        // previous failure). A background refresh that fails after a good
+        // load just quietly leaves the existing events in place.
+        if (!Array.isArray(calendarEvents)) {
+          calendarEvents = "error";
+        }
       })
       .finally(function () {
         clearTimeout(timeoutId);
+        calendarFetchInFlight = false;
         // Re-render so the already-visible grid picks up whatever this
         // fetch resolved to, whether that's events or the honest failure
         // status -- both renderWeek (per-day event lists) and
@@ -428,8 +561,11 @@
       // status line covering the "error" case.
       if (Array.isArray(calendarEvents)) {
         var dateStr = localDateStr(d);
+        // Matched against each event's own LOCAL date (derived from its
+        // `start` field), not the Worker's UTC-dated `date` field -- see
+        // eventLocalDate's own comment (finding 1).
         var dayEvents = calendarEvents.filter(function (ev) {
-          return ev && ev.date === dateStr;
+          return ev && eventLocalDate(ev) === dateStr;
         });
         if (dayEvents.length) {
           var eventsList = document.createElement("ul");
@@ -443,8 +579,15 @@
             itemEl.textContent = title;
             // Native tooltip so a title truncated by the narrow column's
             // ellipsis (see .week-day-event in style.css) is still fully
-            // readable on hover/focus, without a custom expand control.
-            itemEl.title = title;
+            // readable on hover/focus, without a custom expand control. Also
+            // where a recurring event (per the Worker's own `recurring`
+            // flag) gets flagged -- see the section header comment above:
+            // the Worker only ever shows a recurring event's literal
+            // original occurrence, never its later ones, so this note keeps
+            // that limitation visible right on the event itself.
+            var tooltip = title;
+            if (ev && ev.recurring) tooltip += " (repeats)";
+            itemEl.title = tooltip;
             eventsList.appendChild(itemEl);
           });
           li.appendChild(eventsList);
@@ -466,13 +609,19 @@
 
   // Re-render on next local midnight so a long-open tab doesn't silently
   // keep highlighting yesterday as "today" (or show last week's dates).
-  // Reschedules itself each time so this keeps working indefinitely.
+  // Reschedules itself each time so this keeps working indefinitely. Also
+  // re-fetches calendar events (foreground/non-silent, so it isn't skipped
+  // by the staleness threshold) -- without this, the freshly-rendered
+  // Mon-Sun grid would still be matched against the OLD week's cached
+  // calendarEvents, silently showing every day empty even though the fetch
+  // itself never failed.
   function scheduleMidnightRefresh() {
     var now = new Date();
     var next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5, 0);
     var delay = next.getTime() - now.getTime();
     setTimeout(function () {
       renderWeek();
+      fetchCalendarEvents();
       scheduleMidnightRefresh();
     }, delay);
   }
@@ -483,20 +632,39 @@
     // Belt-and-braces alongside the midnight timer above: a tab that was
     // asleep/throttled in the background (timers can be deferred) still
     // gets corrected the moment it's looked at again. Also re-fetches
-    // calendar events on the same trigger -- no polling loop for a calendar
-    // (events don't change second-to-second), but a tab left open across
-    // days should still pick up the new day's events without a manual
-    // reload.
+    // calendar events on the same trigger (silent -- see fetchCalendarEvents
+    // -- a background refresh that's already recent enough is skipped, and
+    // a background failure never overwrites already-good events on screen).
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "visible") {
         renderWeek();
-        fetchCalendarEvents();
+        fetchCalendarEvents({ silent: true });
       }
     });
     scheduleMidnightRefresh();
     fetchCalendarEvents();
   }
 
-  initWeather();
-  initWeek();
+  // Guarded on `document` existing (rather than assuming a browser) so this
+  // file can be `require()`d as-is by the Node-based test file below
+  // without needing a DOM/jsdom stand-in -- always true in the browser,
+  // never true under plain Node. Mirrors live-prices.js's own guard.
+  if (typeof document !== "undefined") {
+    initWeather();
+    initWeek();
+  }
+
+  // Expose pure, DOM-free helpers to the Node-based test file at
+  // test/glance-widgets.test.js -- this repo has no build step, so the test
+  // just requires this file directly rather than importing from a compiled
+  // module. Same pattern as live-prices.js's own module.exports guard (see
+  // test/live-prices.test.js): a no-op in the browser, since `module` is
+  // undefined there.
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = {
+      pad2: pad2,
+      localDateStr: localDateStr,
+      eventLocalDate: eventLocalDate
+    };
+  }
 })();
