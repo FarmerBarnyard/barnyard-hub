@@ -26,11 +26,16 @@
   var FETCH_TIMEOUT_MS = 10000;
   // key ("MARKET:SYMBOL") -> timestamp (ms) of last successful, fully-valid update.
   var lastSuccessAt = {};
-  // key ("MARKET:SYMBOL") -> true once applyQuote has ever actually painted
-  // a quote for this key. Lets applyStaleVisuals tell "never loaded" apart
-  // from "loaded once, now stale" without needing a timestamp write of its
-  // own -- see the comment on the asof branch in applyStaleVisuals below.
-  var hasAppliedQuote = {};
+  // key ("MARKET:SYMBOL") -> the asOf timestamp (ms) of the quote applyQuote
+  // most recently actually painted for this key (the quote's own parsed
+  // asOf if present, else the "now" it was received) -- i.e. exactly the
+  // moment the visible "as of HH:MM" label describes. Doubles as the "has
+  // this key ever loaded" flag (null/absent == never loaded) and, crucially,
+  // is the single source applyStaleVisuals reads its sr-only status text and
+  // dot title from, so those non-visual channels can never describe a
+  // different, more recent moment than what's actually on screen -- see the
+  // comment on applyStaleVisuals below.
+  var lastAppliedAsOf = {};
 
   function fmtIndexLevel(n) {
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -56,8 +61,8 @@
   // is always-visible tile copy rather than a one-off tooltip/announcement.
   // Locale is pinned to "en-US" (rather than the runner's default) so this
   // format is deterministic both for users and for
-  // test/live-prices.test.js, which pins an exact expected string against
-  // it.
+  // test/live-prices.test.js, which pins the expected "as of H:MM AM/PM"
+  // shape (via regex, not a hardcoded literal string) against it.
   function fmtAsOfLabel(ms) {
     return "as of " + new Date(ms).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
   }
@@ -69,10 +74,15 @@
   function applyQuote(symbol, market, quote) {
     // applyQuote is the only function that ever writes the asof label's
     // text (see the field === "asof" branch below) -- it's the only place
-    // that knows which quote is actually on screen. Recording that here
-    // lets applyStaleVisuals distinguish "never loaded" from "loaded once,
-    // now stale" without duplicating that knowledge via its own timestamp.
-    hasAppliedQuote[market + ":" + symbol] = true;
+    // that knows which quote is actually on screen. Record that quote's own
+    // moment (its parsed asOf, falling back to "now" if missing/unparseable
+    // -- same fallback the asof field branch below uses) once, up front, so
+    // every field branch below -- and applyStaleVisuals, later, once this
+    // tile goes stale -- can read the exact same timestamp this quote is
+    // keyed to instead of each re-deriving or drifting from it.
+    var key = market + ":" + symbol;
+    var appliedAsOfTime = parseAsOf(quote);
+    lastAppliedAsOf[key] = appliedAsOfTime !== null ? appliedAsOfTime : Date.now();
     var selector =
       '[data-live-symbol="' + cssAttrEscape(symbol) + '"][data-live-market="' + cssAttrEscape(market) + '"]';
     document.querySelectorAll(selector).forEach(function (el) {
@@ -94,10 +104,10 @@
         // Prefer the Worker's own asOf timestamp (when it actually queried
         // the upstream data source) over "now" (when we happened to receive
         // the response) -- same reasoning as the data-level staleness check
-        // in pollAll below. Falls back to "now" only if asOf is missing or
-        // unparseable, so the label is never left blank on a good quote.
-        var asOfTime = parseAsOf(quote);
-        el.textContent = fmtAsOfLabel(asOfTime !== null ? asOfTime : Date.now());
+        // in pollAll below. appliedAsOfTime (computed above) already applies
+        // the "now" fallback, so the label is never left blank on a good
+        // quote.
+        el.textContent = fmtAsOfLabel(lastAppliedAsOf[key]);
       } else if (field === "dot") {
         el.classList.remove("live-stale");
         el.classList.add("live-ok");
@@ -142,11 +152,13 @@
 
   // Shared by both staleness checks below -- applies the actual stale
   // visuals/DOM changes to every element for this symbol+market once
-  // staleness has already been decided by the caller. `lastTimestamp` is
-  // the ms epoch time of the last known-good data point (last successful
-  // fetch for the network-level check, or the Worker's own asOf for the
-  // data-level check below) -- null/undefined means nothing has ever
-  // loaded successfully.
+  // staleness has already been decided by the caller (via isStaleSince in
+  // markStaleIfDue, or decideQuoteAction's "stale" branch in pollAll). This
+  // function only ever applies visuals for a decision already made
+  // elsewhere -- it doesn't take or use the timestamp that drove that
+  // decision, because the sr-only/title label text below is intentionally
+  // sourced from lastAppliedAsOf instead (see below), not from whichever
+  // clock (fetch-success vs. response asOf) happened to trip the check.
   //
   // Exactly one accessible announcement of staleness: the dot's title
   // (not part of the tile's accessible name -- title isn't included in
@@ -157,10 +169,19 @@
   // computed accessible name, which silently deleted the actual price and
   // change numbers from what a screen reader announces (regression fixed
   // in this round). Visual "stale" styling on price/change stays.
-  function applyStaleVisuals(symbol, market, lastTimestamp) {
+  function applyStaleVisuals(symbol, market) {
     var key = market + ":" + symbol;
-    var everLoaded = !!hasAppliedQuote[key];
-    var lastLabel = lastTimestamp != null ? new Date(lastTimestamp).toLocaleTimeString() : "never";
+    var everLoaded = lastAppliedAsOf[key] != null;
+    // Sourced from lastAppliedAsOf, not from whichever clock (last
+    // successful fetch, or a response's own asOf) triggered this particular
+    // staleness check -- that clock is often a different, more recent
+    // moment than the quote actually still frozen on screen (e.g. a
+    // stale-but-parsed poll can advance lastSuccessAt without ever reaching
+    // applyQuote). Using lastAppliedAsOf here keeps this sr-only text and
+    // the dot's title describing the exact same quote as the visible "as of
+    // HH:MM" label below, so the three channels can never contradict each
+    // other.
+    var lastLabel = everLoaded ? new Date(lastAppliedAsOf[key]).toLocaleTimeString() : "never";
     var selector =
       '[data-live-symbol="' + cssAttrEscape(symbol) + '"][data-live-market="' + cssAttrEscape(market) + '"]';
     document.querySelectorAll(selector).forEach(function (el) {
@@ -170,25 +191,29 @@
         el.classList.add("live-stale");
         el.title = "Stale \u2014 last updated " + lastLabel;
       } else if (field === "status") {
-        // Doesn't just restate the visible "as of HH:MM" label's own
-        // moment in a second, differently-formatted way -- lastTimestamp
-        // here is whichever clock this particular staleness check is
-        // driven by (last successful response for the network-level check,
-        // or the response's own asOf for the data-level check), which is
-        // often genuinely different from whatever quote is still frozen on
-        // screen. See the asof branch below for why the visible label
-        // itself is never rewritten here.
+        // Restates the same moment the visible "as of HH:MM" label
+        // describes (just in a different format, with seconds) -- both are
+        // now sourced from lastAppliedAsOf, i.e. the quote applyQuote last
+        // actually painted, rather than from whichever clock (last
+        // successful response, or the response's own asOf) drove this
+        // particular staleness check. Those two clocks can genuinely differ
+        // from lastAppliedAsOf (e.g. a stale-but-parsed poll advances
+        // lastSuccessAt without ever reaching applyQuote), so a
+        // screen-reader user must hear the same freshness the sighted
+        // "as of" label shows, not the more-recent-sounding poll/response
+        // clock.
         el.textContent = "stale \u2014 no update since " + lastLabel;
       } else if (field === "asof") {
         // Deliberately does NOT rewrite this label's text on the common
         // path. applyQuote is the only function that knows which quote is
         // actually on screen (see its own comment), so it's the only
-        // function allowed to write this text -- if we wrote lastTimestamp
-        // here instead, a stale-but-parsed poll followed by a fully dead
-        // connection could advance this label to a timestamp newer than
-        // the price/change actually displayed, claiming freshness the
-        // frozen data doesn't have. Leaving it untouched means it keeps
-        // describing whatever quote applyQuote last actually painted,
+        // function allowed to write this text -- if we advanced it to
+        // whatever clock triggered this particular staleness check instead,
+        // a stale-but-parsed poll followed by a fully dead connection could
+        // advance this label to a timestamp newer than the price/change
+        // actually displayed, claiming freshness the frozen data doesn't
+        // have. Leaving it untouched means it keeps describing whatever
+        // quote applyQuote last actually painted (== lastAppliedAsOf[key]),
         // which is exactly correct. The one exception: a tile that has
         // never once received a real quote has no prior text for us to
         // leave alone, so it still needs an explicit placeholder.
@@ -216,7 +241,7 @@
     var last = lastSuccessAt[key];
     if (!isStaleSince(last, Date.now())) return; // recent-enough success, or just one blip -- leave as-is
 
-    applyStaleVisuals(symbol, market, last);
+    applyStaleVisuals(symbol, market);
   }
 
   // Data-level ("the response arrived, but the price inside it is old")
@@ -296,8 +321,12 @@
           if (decision.action === "stale") {
             // Response succeeded, but the Worker's own timestamp says the
             // quote it served is already old (e.g. a cached/stale
-            // response) -- don't apply it as if it were live.
-            applyStaleVisuals(symbol, market, decision.timestamp);
+            // response) -- don't apply it as if it were live. Note this
+            // doesn't advance lastAppliedAsOf -- only applyQuote does that
+            // -- so the labels applyStaleVisuals writes still describe
+            // whatever quote is actually still on screen, not this
+            // rejected one.
+            applyStaleVisuals(symbol, market);
           } else {
             applyQuote(symbol, market, data);
           }
