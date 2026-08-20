@@ -24,7 +24,17 @@
 // This is the standard technique for exercising local-timezone-dependent
 // logic under plain Node without a heavier timezone-mocking dependency; it
 // works because each `new Date()`/local getter call re-reads the current
-// zone rather than caching it at process start.
+// zone rather than caching it at process start -- on platforms where V8
+// actually honors `process.env.TZ` for IANA zone names. It does NOT
+// reliably work on Windows (this repo's own dev platform): V8 on Windows
+// reads the OS's configured timezone rather than honoring arbitrary IANA
+// `TZ` values the way POSIX libc-backed builds do, so setting
+// `process.env.TZ = "Australia/Sydney"` on a Windows box whose OS timezone
+// is something else quietly has no effect at all. The probe right below
+// this comment block detects that at runtime and skips just the
+// TZ-dependent assertions (via `zoneTest`) rather than letting them fail
+// with a confusing off-by-some-hours mismatch that has nothing to do with
+// the actual eventLocalDate logic under test.
 
 var assert = require("assert");
 var path = require("path");
@@ -37,6 +47,35 @@ function test(name, fn) {
   fn();
   passed++;
   console.log("ok - " + name);
+}
+
+// First `process.env.TZ` assignment in the file -- immediately followed by
+// a runtime check of whether it actually took effect (see the comment block
+// above). 2026-08-20T00:00:00.000Z is 2026-08-20T10:00:00+10:00 in Sydney
+// (AEST, UTC+10, no daylight saving in the southern winter) -- if the pin
+// took effect, a plain `Date`'s local `getHours()` for that instant must
+// read 10. If it doesn't (the Windows case described above, or any other
+// platform/config that doesn't honor IANA TZ names), `tzPinningWorks` below
+// is false and the TZ-dependent tests are skipped instead of run.
+process.env.TZ = "Australia/Sydney";
+var tzPinningWorks = new Date("2026-08-20T00:00:00.000Z").getHours() === 10;
+if (!tzPinningWorks) {
+  console.log(
+    "SKIP: process.env.TZ pinning unsupported on this platform -- " +
+    "skipping timezone-dependent eventLocalDate assertions"
+  );
+}
+
+// Like `test`, but for assertions that depend on process.env.TZ pinning
+// actually working (see `tzPinningWorks` above) -- silently skipped (with a
+// per-test SKIP line, not a failure) rather than run and produce a
+// confusing platform-specific mismatch unrelated to the logic under test.
+function zoneTest(name, fn) {
+  if (!tzPinningWorks) {
+    console.log("skip - " + name + " (TZ pinning unsupported on this platform)");
+    return;
+  }
+  test(name, fn);
 }
 
 // ---- pad2 -------------------------------------------------------------
@@ -66,7 +105,7 @@ test("localDateStr: formats as zero-padded YYYY-MM-DD", function () {
 // morning event, a negative-offset evening event) before this test existed
 // to check it automatically.
 
-test("eventLocalDate: a UTC+10 visitor's 9am local meeting lands on the correct (later) local day, not the earlier UTC day", function () {
+zoneTest("eventLocalDate: a UTC+10 visitor's 9am local meeting lands on the correct (later) local day, not the earlier UTC day", function () {
   process.env.TZ = "Australia/Sydney"; // UTC+10 (AEST -- winter/southern in August, still standard time)
   // 2026-08-19T23:00:00Z is 2026-08-20T09:00:00+10:00 in Sydney -- a 9am
   // local meeting. The Worker's own `date` field for this event reads
@@ -81,7 +120,7 @@ test("eventLocalDate: a UTC+10 visitor's 9am local meeting lands on the correct 
   assert.strictEqual(gw.eventLocalDate(ev), "2026-08-20");
 });
 
-test("eventLocalDate: a UTC-4 visitor's 8pm local meeting lands on the correct (earlier) local day, not the later UTC day", function () {
+zoneTest("eventLocalDate: a UTC-4 visitor's 8pm local meeting lands on the correct (earlier) local day, not the later UTC day", function () {
   process.env.TZ = "America/New_York"; // UTC-4 (EDT -- daylight saving, in effect in August)
   // 2026-08-21T00:00:00Z is 2026-08-20T20:00:00-04:00 in New York -- an 8pm
   // local meeting. The Worker's own `date` field for this event reads
@@ -95,6 +134,12 @@ test("eventLocalDate: a UTC-4 visitor's 8pm local meeting lands on the correct (
   };
   assert.strictEqual(gw.eventLocalDate(ev), "2026-08-20");
 });
+
+// These next two don't actually depend on TZ conversion working (allDay
+// returns `date` as-is; a floating start returns its wall-clock date
+// as-is -- neither goes through a `new Date(...)` + local-getter round
+// trip), so they run as plain `test`s regardless of `tzPinningWorks`. The
+// TZ is still set for realism/documentation of the scenario being covered.
 
 test("eventLocalDate: an all-day event uses `date` as-is (no time component to convert)", function () {
   process.env.TZ = "Australia/Sydney";

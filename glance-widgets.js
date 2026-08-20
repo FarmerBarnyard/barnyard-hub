@@ -6,12 +6,15 @@
 // Cloudflare Access -- see the "Calendar events" section below).
 //
 // Neither widget talks to any third-party tracking service, but the
-// calendar widget IS a network call, and -- unlike weather, which only
-// fires once the visitor explicitly clicks "Show weather near me" -- it
-// fires unconditionally on every page load and again on every tab focus.
-// That means the footer's "no accounts, no tracking" line is no longer
-// literally true for this widget; index.html's footer text has been
-// reworded to say so explicitly rather than leave a false claim standing.
+// calendar widget IS a network call, gated by a same-account Cloudflare
+// Access login (see the "Calendar events" section below) -- and, unlike
+// weather, which only fires once the visitor explicitly clicks "Show
+// weather near me", it fires unconditionally on every page load and again
+// on every tab focus. That means a flat "no accounts" claim in the footer
+// would no longer be literally true; index.html's footer text now reads
+// "no account needed to browse" instead, which stays accurate: browsing
+// the page itself needs no account, even though the calendar widget's data
+// is gated behind the account owner's own Cloudflare Access login.
 // (Whether this fetch should instead be gated behind an explicit user
 // action, like weather's click-to-share-location gate, is an open decision
 // -- see this branch's review notes -- not settled by this comment.)
@@ -301,16 +304,33 @@
   // than asserting any one specific cause, with a "Try again" retry button
   // (mirroring the weather widget's own retry pattern -- see
   // makeLocateButton/renderWeatherStatus above) so it's never a dead end.
+  // A foreground fetch (initial load or a "Try again" click) also renders
+  // an immediate "Checking…" status before the fetch itself starts, same
+  // as requestWeather's synchronous "Checking location…" -- otherwise a
+  // click gives no feedback until the fetch resolves (up to
+  // CALENDAR_FETCH_TIMEOUT_MS later), and a retry that fails again would
+  // render byte-identical output to before the click.
+  //
+  // A *silent* background refresh that fails after a good array is already
+  // on screen does NOT downgrade to "error" (that would blow away good
+  // data over a blip) -- but it does set calendarRefreshFailed, so the
+  // events on screen are flagged as possibly stale rather than presented
+  // as a freshly-confirmed week. Without this, a session that quietly
+  // expires (e.g. the Cloudflare Access cookie lapsing overnight) would
+  // leave every later refresh failing forever with no visible sign of it,
+  // eventually rendering what looks like a genuinely empty, successfully-
+  // checked week once the retained events age out of the displayed range.
   //
   // The Worker deliberately does NOT expand recurring events (RRULE) into
   // their individual occurrences -- a recurring event only ever appears on
   // its literal original creation date, which is almost always outside the
   // displayed week (see buildCalendarEvents' own comment in the Worker).
-  // renderCalendarStatus below always renders a "repeating events aren't
-  // shown" caveat on a successful fetch so a week that's actually full of
-  // (unshown) recurring events doesn't read as a false "nothing's
-  // scheduled" -- and any individual event the Worker flags `recurring:
-  // true` gets that noted in its tooltip text too.
+  // renderCalendarStatus below always renders a "repeating events only
+  // show on their first date" caveat on a successful fetch so a week
+  // that's actually full of (unshown-here) recurring events doesn't read
+  // as a false "nothing's scheduled" -- and any individual event the
+  // Worker flags `recurring: true` gets that noted in its tooltip text
+  // too.
 
   var CALENDAR_API = "https://api.barnyard.site/calendar";
   var CALENDAR_FETCH_TIMEOUT_MS = 10000;
@@ -323,6 +343,17 @@
   // parseable JSON -- kept distinct from an empty array specifically so the
   // grid never claims "no events" when the real state is "couldn't check".
   var calendarEvents = null;
+
+  // True when calendarEvents holds a good array, but the most recent fetch
+  // attempt against it actually failed (a silent background refresh that
+  // preserved the existing data rather than clobbering it -- see the
+  // fetch's own catch handler below). Cleared back to false on any
+  // successful load. Lets renderCalendarStatus tell "confirmed fresh as of
+  // this fetch" apart from "possibly stale, last confirmed earlier" --
+  // without this flag the two are indistinguishable once the failing
+  // refreshes start (see F1 review note / the section header comment
+  // above).
+  var calendarRefreshFailed = false;
 
   function pad2(n) {
     return n < 10 ? "0" + n : String(n);
@@ -386,6 +417,19 @@
     return btn;
   }
 
+  // Rendered synchronously the moment a foreground fetch (initial load or
+  // a "Try again" click) actually starts, before the fetch call itself --
+  // see fetchCalendarEvents. Deliberately renders no button: while this is
+  // on screen a fetch is genuinely in flight, so there's nothing useful a
+  // second click could do, and the absence of a button is itself the
+  // "your click registered, please wait" signal (see F2 review note).
+  function renderCalendarPending() {
+    var el = weekStatusEl();
+    if (!el) return;
+    el.innerHTML = "";
+    el.textContent = "Checking…";
+  }
+
   function renderCalendarStatus() {
     var el = weekStatusEl();
     if (!el) return;
@@ -406,12 +450,33 @@
         })
       );
     } else if (Array.isArray(calendarEvents)) {
-      // Persistent caveat on every successful fetch, not just an empty
-      // week -- the Worker never expands recurring events (see the section
-      // header comment), so without this, a week that's actually full of
-      // unshown recurring events is indistinguishable from a genuinely
-      // empty one.
-      el.textContent = "Repeating events aren't shown";
+      if (calendarRefreshFailed) {
+        // A background refresh against this already-loaded array has since
+        // failed (e.g. an expired Cloudflare Access session) -- say so
+        // explicitly, with the time of the last successful load, rather
+        // than silently presenting a possibly-stale week as freshly
+        // confirmed. Offers the same retry affordance as the pure-error
+        // state above (see F1 review note / the section header comment).
+        var staleMsg = document.createElement("span");
+        staleMsg.className = "week-status-text";
+        var asOf = lastCalendarLoadAt !== null ? formatAsOf(new Date(lastCalendarLoadAt)) : null;
+        staleMsg.textContent =
+          "Repeating events only show on their first date · couldn't refresh" +
+          (asOf ? " (as of " + asOf + ")" : "") + ". ";
+        el.appendChild(staleMsg);
+        el.appendChild(
+          makeCalendarRetryButton("Try again", function () {
+            fetchCalendarEvents();
+          })
+        );
+      } else {
+        // Persistent caveat on every successful fetch, not just an empty
+        // week -- the Worker never expands recurring events (see the
+        // section header comment), so without this, a week that's
+        // actually full of unshown-here recurring events is
+        // indistinguishable from a genuinely empty one.
+        el.textContent = "Repeating events only show on their first date";
+      }
     } else {
       el.textContent = "";
     }
@@ -447,6 +512,17 @@
       return;
     }
 
+    // Foreground fetches (initial load, or a user-initiated "Try again"
+    // click) get an immediate synchronous acknowledgment before the fetch
+    // itself has even started -- mirrors requestWeather's "Checking
+    // location…" pattern. Without this, a click produces no visible change
+    // until .finally fires (up to CALENDAR_FETCH_TIMEOUT_MS later), and a
+    // retry that fails again would render byte-identical output to before
+    // the click (see F2 review note). Silent background refreshes skip
+    // this -- they should stay invisible unless/until they actually change
+    // something.
+    if (!silent) renderCalendarPending();
+
     calendarFetchInFlight = true;
     var controller = new AbortController();
     var timeoutId = setTimeout(function () {
@@ -476,14 +552,22 @@
         if (!Array.isArray(data)) throw new Error("unexpected response shape");
         calendarEvents = data;
         lastCalendarLoadAt = Date.now();
+        calendarRefreshFailed = false;
       })
       .catch(function () {
         // Never let a failed refresh wipe already-successfully-loaded
         // events still on screen -- only downgrade to the honest "error"
         // state when there's no good array already held (first load, or a
         // previous failure). A background refresh that fails after a good
-        // load just quietly leaves the existing events in place.
-        if (!Array.isArray(calendarEvents)) {
+        // load just quietly leaves the existing events in place -- but
+        // flags calendarRefreshFailed so renderCalendarStatus can say so,
+        // rather than letting a session that's silently stopped refreshing
+        // (e.g. an expired Cloudflare Access cookie) eventually render a
+        // fully-stale week as if it were a freshly-confirmed empty one
+        // (see F1 review note / the section header comment above).
+        if (Array.isArray(calendarEvents)) {
+          calendarRefreshFailed = true;
+        } else {
           calendarEvents = "error";
         }
       })
