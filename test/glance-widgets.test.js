@@ -164,6 +164,134 @@ test("eventLocalDate: an unparseable Z-suffixed start returns null rather than t
   assert.strictEqual(gw.eventLocalDate(ev), null);
 });
 
+// ---- parseDailyForecast -------------------------------------------------
+// Covers the weather widget's forecast-strip parsing/validation logic: a
+// well-formed 7-day response, "Today" being date-based rather than
+// positional (a review-round fix -- a tab left open past midnight must never
+// keep calling a now-stale first entry "Today"), truncating at the first bad
+// day rather than discarding the whole response, and the structural
+// malformed-input cases (mismatched array lengths, a missing/non-object
+// `daily`, an empty `time` array).
+//
+// `parseDailyForecast` compares its first entry's date against the actual
+// current date (`new Date()` inside the function), so these fixtures are
+// built from today's REAL date rather than a hardcoded string -- a
+// hardcoded date would make "Today" only assert correctly on the one day it
+// was written on. `dayAbbrevFor` is a small independent reimplementation of
+// the same Mon-first Date#getDay() conversion the module uses, so it's
+// cross-checking the production logic rather than just mirroring it.
+
+var DAY_NAMES_MON_FIRST = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function dayAbbrevFor(date) {
+  return DAY_NAMES_MON_FIRST[(date.getDay() + 6) % 7];
+}
+
+function addDays(date, n) {
+  var d = new Date(date.getTime());
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+function makeWellFormedDaily(startDate) {
+  var dates = [];
+  for (var i = 0; i < 7; i++) dates.push(gw.localDateStr(addDays(startDate, i)));
+  return {
+    time: dates,
+    weather_code: [0, 1, 2, 3, 61, 71, 95],
+    temperature_2m_max: [18, 19, 17, 16, 15, 5, 20],
+    temperature_2m_min: [9, 10, 8, 7, 6, -2, 12]
+  };
+}
+
+test("parseDailyForecast: a well-formed 7-day response starting today parses to 7 day objects, today first", function () {
+  var today = new Date();
+  var days = gw.parseDailyForecast(makeWellFormedDaily(today));
+  assert.strictEqual(days.length, 7);
+  assert.strictEqual(days[0].date, gw.localDateStr(today));
+  assert.strictEqual(days[0].dayLabel, "Today");
+  assert.strictEqual(days[0].tempMax, 18);
+  assert.strictEqual(days[0].tempMin, 9);
+  assert.strictEqual(days[0].code, 0);
+  // Later days fall back to their weekday abbreviation -- checked against
+  // dayAbbrevFor's independent reimplementation, not a hardcoded literal,
+  // since which weekday "tomorrow" is depends on when this test runs.
+  assert.strictEqual(days[1].dayLabel, dayAbbrevFor(addDays(today, 1)));
+  assert.strictEqual(days[6].dayLabel, dayAbbrevFor(addDays(today, 6)));
+  assert.strictEqual(days[6].date, gw.localDateStr(addDays(today, 6)));
+});
+
+test("parseDailyForecast: \"Today\" is based on the entry's own date, not array position", function () {
+  // Day 0 is YESTERDAY here (as if the tab fetched this a day ago and never
+  // refreshed) -- this is exactly the bug the date-comparison fix targets:
+  // without it, index 0 would always be labelled "Today" regardless of
+  // whether it actually still is.
+  var yesterday = addDays(new Date(), -1);
+  var days = gw.parseDailyForecast(makeWellFormedDaily(yesterday));
+  assert.strictEqual(days[0].dayLabel, dayAbbrevFor(yesterday));
+  assert.notStrictEqual(days[0].dayLabel, "Today");
+  // None of the other six entries should claim to be "Today" either.
+  for (var i = 1; i < days.length; i++) {
+    assert.notStrictEqual(days[i].dayLabel, "Today");
+  }
+});
+
+test("parseDailyForecast: mismatched array lengths return null rather than a partial/corrupt result", function () {
+  var daily = makeWellFormedDaily(new Date());
+  daily.temperature_2m_min = [9, 10, 8]; // shorter than the other three arrays
+  assert.strictEqual(gw.parseDailyForecast(daily), null);
+});
+
+test("parseDailyForecast: a missing or non-object `daily` returns null rather than throwing", function () {
+  assert.strictEqual(gw.parseDailyForecast(undefined), null);
+  assert.strictEqual(gw.parseDailyForecast(null), null);
+  assert.strictEqual(gw.parseDailyForecast("nope"), null);
+  assert.strictEqual(gw.parseDailyForecast(42), null);
+  assert.strictEqual(gw.parseDailyForecast([1, 2, 3]), null);
+});
+
+test("parseDailyForecast: a non-finite value buried mid-array truncates the strip there rather than discarding every day", function () {
+  var daily = makeWellFormedDaily(new Date());
+  daily.temperature_2m_max[3] = NaN; // index 3 is bad -- days 0,1,2 are still good
+  var days = gw.parseDailyForecast(daily);
+  assert.strictEqual(days.length, 3);
+  assert.strictEqual(days[0].dayLabel, "Today");
+
+  var daily2 = makeWellFormedDaily(new Date());
+  daily2.weather_code[5] = null;
+  assert.strictEqual(gw.parseDailyForecast(daily2).length, 5);
+});
+
+test("parseDailyForecast: a bad value at index 0 leaves nothing to salvage, so the whole result is null", function () {
+  var daily = makeWellFormedDaily(new Date());
+  daily.temperature_2m_max[0] = NaN;
+  assert.strictEqual(gw.parseDailyForecast(daily), null);
+});
+
+test("parseDailyForecast: an out-of-range date (e.g. Feb 30) truncates rather than silently rolling into the next month", function () {
+  var daily = makeWellFormedDaily(new Date());
+  daily.time[2] = "2026-02-30"; // JS `Date` would otherwise roll this into March 2
+  var days = gw.parseDailyForecast(daily);
+  assert.strictEqual(days.length, 2);
+});
+
+test("parseDailyForecast: an empty `time` array returns null rather than an empty (falsy-looking but valid) result", function () {
+  var daily = { time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [] };
+  assert.strictEqual(gw.parseDailyForecast(daily), null);
+});
+
+test("parseDailyForecast: more than 7 days in the response is capped at 7, matching the CSS's fixed cell-count layout", function () {
+  var today = new Date();
+  var daily = makeWellFormedDaily(today);
+  var extraDate = gw.localDateStr(addDays(today, 7));
+  daily.time.push(extraDate);
+  daily.weather_code.push(0);
+  daily.temperature_2m_max.push(20);
+  daily.temperature_2m_min.push(10);
+  var days = gw.parseDailyForecast(daily);
+  assert.strictEqual(days.length, 7);
+});
+
 // Restore whatever TZ the process actually started with, so this file
 // doesn't leak a changed timezone into any test run after it.
 process.env.TZ = originalTZ;
