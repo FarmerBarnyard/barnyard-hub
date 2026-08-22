@@ -16,6 +16,20 @@
 
 <section class="glance-row" aria-label="Today at a glance">
 
+  <div class="widget widget-quicklinks">
+    <div class="widget-head">
+      <h2 class="widget-name">Quick links</h2>
+    </div>
+    <ul class="quicklinks-list" role="list">
+      <li><a class="quicklink" href="https://mail.google.com/" target="_blank" rel="noopener noreferrer"><span class="quicklink-icon" aria-hidden="true">&#128231;</span><span class="quicklink-label">Gmail</span></a></li>
+      <li><a class="quicklink" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer"><span class="quicklink-icon" aria-hidden="true">&#9654;&#65039;</span><span class="quicklink-label">YouTube</span></a></li>
+      <li><a class="quicklink" href="https://www.nabtrade.com.au/" target="_blank" rel="noopener noreferrer"><span class="quicklink-icon" aria-hidden="true">&#128200;</span><span class="quicklink-label">Nabtrade</span></a></li>
+      <li><a class="quicklink" href="https://github.com/" target="_blank" rel="noopener noreferrer"><span class="quicklink-icon" aria-hidden="true">&#128187;</span><span class="quicklink-label">GitHub</span></a></li>
+      <li><a class="quicklink" href="https://dash.cloudflare.com/" target="_blank" rel="noopener noreferrer"><span class="quicklink-icon" aria-hidden="true">&#9729;&#65039;</span><span class="quicklink-label">Cloudflare</span></a></li>
+      <li><a class="quicklink" href="https://claude.ai/" target="_blank" rel="noopener noreferrer"><span class="quicklink-icon" aria-hidden="true">&#10024;</span><span class="quicklink-label">Claude</span></a></li>
+    </ul>
+  </div>
+
   <div class="widget widget-weather">
     <div class="widget-head">
       <h2 class="widget-name">Weather</h2>
@@ -40,6 +54,19 @@
       <li class="week-day"><span class="week-day-name">Sun</span><span class="week-day-num">&mdash;</span></li>
     </ol>
     <p class="week-status" id="week-status"></p>
+  </div>
+
+  <div class="widget widget-todo">
+    <div class="widget-head">
+      <h2 class="widget-name">To-do</h2>
+    </div>
+    <form class="todo-form" id="todo-form">
+      <input type="text" class="todo-input" id="todo-input" placeholder="Add a task&hellip;" maxlength="200" autocomplete="off" aria-label="New to-do item">
+      <button type="submit" class="todo-add-btn">Add</button>
+    </form>
+    <ul class="todo-list" id="todo-list" role="list"></ul>
+    <p class="todo-empty" id="todo-empty"></p>
+    <p class="todo-status" id="todo-status" role="status"></p>
   </div>
 
 </section>
@@ -89,10 +116,11 @@
 </div>
 
 <footer class="hub-footer">
-  Barnyard hub &mdash; static landing page, no account needed to browse, no third-party tracking. The weather widget only contacts Open-Meteo, and only if you ask it to. The calendar widget contacts api.barnyard.site (a same-account Cloudflare Worker, gated by Cloudflare Access) to show this week's events.
+  Barnyard hub &mdash; static landing page, no account needed to browse, no third-party tracking. The weather widget only contacts Open-Meteo, and only if you ask it to. The calendar widget contacts api.barnyard.site (a same-account Cloudflare Worker, gated by Cloudflare Access) to show this week's events. The to-do list is stored only in this browser's own local storage and never leaves your device.
 </footer>
 
 <script src="live-prices.js"></script>
 <script src="glance-widgets.js"></script>
+<script src="todo-widget.js"></script>
 </body>
 </html>
