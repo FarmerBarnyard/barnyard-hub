@@ -131,7 +131,7 @@
   function showSaveStatus() {
     var status = statusEl();
     if (!status) return;
-    status.textContent = "Not saved — this browser is blocking local storage, so tasks will disappear on reload.";
+    status.textContent = "Not saved — this browser wouldn't store your tasks, so they'll disappear on reload.";
   }
 
   // Clears the message above once a save actually succeeds again, so it
