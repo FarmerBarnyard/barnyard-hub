@@ -22,7 +22,7 @@
 *{box-sizing:border-box;}
 html{overflow-x:hidden;}
 body{
-  font-family:var(--sans);max-width:1040px;margin:0 auto;padding:16px;
+  font-family:var(--sans);max-width:1280px;margin:0 auto;padding:16px;
   line-height:1.5;background:var(--bg);color:var(--text);
 }
 
@@ -33,23 +33,10 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 .tagline{color:var(--text-dim);font-size:.9rem;margin:0;}
 
 /* "At a glance" row -- quick links, weather, week calendar, and a to-do
-   list, between the header and the project tiles.
+   list, between the header and the project tiles. Shares the same
+   surface/border/radius language as .tile below.
 
-   All four widgets squeezed onto one equal-width row (whether via plain
-   auto-fit or the earlier weighted-4-column attempt) always cost either the
-   calendar or the to-do widget its usability: the calendar's 7 day columns
-   need real width to show event titles at all, and the to-do widget needs
-   real width for its text input and task rows to stay readable -- there
-   isn't enough space on any real desktop viewport to give both what they
-   need in a single row. So instead this settles on a 2x2 layout at wider
-   viewports (raised straight from a measured-live regression: a single
-   340px+ floor is what stops the auto-fit case from ever forming the
-   3-narrow-column band that squeezed the calendar between roughly 920px
-   and 1040px). Below that floor this collapses further via the same
-   auto-fit approach used for .widget-grid, down to one column on
-   narrow/mobile viewports, matching how .tile below reflows. Shares the
-   same surface/border/radius language as .tile below. */
-/* Explicit column counts (1 then 2) rather than auto-fit: auto-fit picks
+   Explicit column counts (1 then 2) rather than auto-fit: auto-fit picks
    however many 340px+ tracks fit, which between roughly 700-1040px viewport
    width forms 3 columns -- Quick links+Weather+Calendar on one row, To-do
    stranded alone on the next with a full row's worth of blank space beside
