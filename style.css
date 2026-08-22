@@ -49,18 +49,21 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
    auto-fit approach used for .widget-grid, down to one column on
    narrow/mobile viewports, matching how .tile below reflows. Shares the
    same surface/border/radius language as .tile below. */
+/* Explicit column counts (1 then 2) rather than auto-fit: auto-fit picks
+   however many 340px+ tracks fit, which between roughly 700-1040px viewport
+   width forms 3 columns -- Quick links+Weather+Calendar on one row, To-do
+   stranded alone on the next with a full row's worth of blank space beside
+   it. Forcing exactly 1 or 2 columns means the pairing is always Quick
+   links+Weather / Calendar+To-do (matching index.html's markup order),
+   never a 3-then-1 split, at any viewport width. */
 .glance-row{
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));
+  display:grid;grid-template-columns:1fr;
   gap:16px;margin-bottom:32px;
 }
-/* At >=1040px -- body's own max-width, so the grid container's content
-   width is pinned at exactly 1040-32(body padding)-16(1 gap)=992px for
-   *any* viewport at or beyond this point -- force an explicit 2x2 layout
-   (Quick links+Weather on the first row, Calendar+To-do on the second,
-   matching index.html's .glance-row markup order) so the calendar and the
-   to-do widget each get a full ~488px row-half instead of competing for a
-   quarter of a single row. */
-@media (min-width:1040px){
+/* 700px is enough room for two >=340px-ish widgets plus the gap without
+   either feeling cramped; below it a single column reads better than two
+   overly-narrow ones. */
+@media (min-width:700px){
   .glance-row{
     grid-template-columns:repeat(2,1fr);
   }
