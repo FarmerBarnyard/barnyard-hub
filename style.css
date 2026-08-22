@@ -33,16 +33,46 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 .tagline{color:var(--text-dim);font-size:.9rem;margin:0;}
 
 /* "At a glance" row -- quick links, weather, week calendar, and a to-do
-   list, between the header and the project tiles. minmax's lower bound is
-   sized so all four widgets fit on one row at the page's own max-width
-   (1040px body, minus padding and gaps -- see :root/body above) while still
-   collapsing to fewer columns (down to one on narrow/mobile viewports,
-   matching how .tile below reflows) via the same auto-fit approach already
-   used for .widget-grid. Shares the same surface/border/radius language as
-   .tile below. */
+   list, between the header and the project tiles.
+
+   Below the breakpoint (i.e. whenever the body itself isn't yet pinned to
+   its own 1040px max-width -- see body above), this falls back to the same
+   auto-fit approach used for .widget-grid, collapsing to fewer columns
+   (down to one on narrow/mobile viewports, matching how .tile below
+   reflows). 280px matches this row's original pre-to-do-widget floor: with
+   the explicit 4-column override below now handling the >=1040px case,
+   auto-fit no longer needs a lower floor to force 4-across, and at 280px
+   it can never fit more than 3 within the <=960px this row ever actually
+   has to work with (see the breakpoint comment below) -- so this range
+   wraps to fewer, wider columns instead of squeezing four onto one row.
+   Shares the same surface/border/radius language as .tile below. */
 .glance-row{
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
   gap:16px;margin-bottom:32px;
+}
+/* At >=1040px -- body's own max-width, so the grid container's content
+   width is pinned at exactly 1040-32(body padding)-48(3 gaps)=960px for
+   *any* viewport at or beyond this point, never more -- switch to an
+   explicit 4-column layout weighted heavily toward the calendar instead of
+   four equal auto-fit columns. Four equal columns each land around 204px,
+   which squeezes the calendar's 7 day columns down to a few px and
+   truncates even short event titles (e.g. "PixelExpo") to nothing legible
+   -- a regression to the calendar-events feature. The widths below were
+   sized (and checked against real rendered text-width measurements, not
+   just eyeballed) so that a short realistic title comfortably fits one
+   .week-day-event line unclipped, while a long one (e.g. "Round 17 vs
+   Sharks") still truncates via the existing ellipsis rule -- that's
+   expected and fine, only short titles being unreadable was the bug.
+   Column order matches the widget order in index.html's .glance-row (Quick
+   links, Weather, Calendar, To-do) -- if that markup order ever changes,
+   update this list to match. The four minmax floors sum to exactly 960px
+   (this breakpoint's fixed available width), so there's no leftover free
+   space for the 1fr/2.4fr flex parts to distribute -- they're kept mostly
+   for readability/intent rather than doing meaningful sizing work. */
+@media (min-width:1040px){
+  .glance-row{
+    grid-template-columns:minmax(150px,1fr) minmax(190px,1fr) minmax(480px,2.4fr) minmax(140px,1fr);
+  }
 }
 
 .widget{
@@ -172,20 +202,35 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 .todo-add-btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 
 .todo-list{list-style:none;display:flex;flex-direction:column;gap:2px;margin:0;padding:0;}
+/* Without this, an empty <ul> still consumes the .widget flex gap, doubling
+   the visual space before "No tasks yet" renders in #todo-empty below. */
+.todo-list:empty{display:none;}
 .todo-item{display:flex;align-items:center;gap:8px;padding:4px 0;}
-.todo-checkbox{flex:0 0 auto;width:15px;height:15px;accent-color:var(--amber);cursor:pointer;}
-.todo-text{flex:1;min-width:0;font-size:.85rem;color:var(--text);word-break:break-word;}
+/* Visible glyph stays 15px (accent-color checkbox) -- box-sizing:content-box
+   overrides the global border-box rule above so the 4.5px padding adds to,
+   rather than eats into, the 15px glyph, bringing the actual clickable area
+   up to the 24x24px WCAG tap-target minimum without shrinking the glyph. */
+.todo-checkbox{
+  flex:0 0 auto;box-sizing:content-box;width:15px;height:15px;padding:4.5px;
+  accent-color:var(--amber);cursor:pointer;
+}
+.todo-text{flex:1;min-width:0;font-size:.85rem;color:var(--text);word-break:break-word;cursor:pointer;}
 .todo-text.is-done{color:var(--text-dim);text-decoration:line-through;}
 .todo-remove-btn{
   flex:0 0 auto;font-family:var(--sans);font-size:.85rem;line-height:1;font-weight:700;
   color:var(--text-dim);background:transparent;border:1px solid transparent;border-radius:4px;
-  width:20px;height:20px;display:flex;align-items:center;justify-content:center;
+  width:24px;height:24px;display:flex;align-items:center;justify-content:center;
   cursor:pointer;transition:color .15s ease,border-color .15s ease;
 }
 .todo-remove-btn:hover{color:var(--down);border-color:var(--border);}
 .todo-remove-btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 .todo-empty{color:var(--text-dim);font-size:.82rem;margin:0;}
 .todo-empty:empty{display:none;}
+/* Persistent "storage is blocking saves" notice (see saveTodos/todo-widget.js)
+   -- same quiet, cause-neutral treatment as .todo-empty, but never auto-
+   dismissed since the underlying condition doesn't resolve on its own. */
+.todo-status{color:var(--text-dim);font-size:.82rem;margin:0;}
+.todo-status:empty{display:none;}
 
 .widget-grid{
   display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));

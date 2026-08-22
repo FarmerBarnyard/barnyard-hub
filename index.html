@@ -66,6 +66,7 @@
     </form>
     <ul class="todo-list" id="todo-list" role="list"></ul>
     <p class="todo-empty" id="todo-empty"></p>
+    <p class="todo-status" id="todo-status" role="status"></p>
   </div>
 
 </section>
@@ -115,7 +116,7 @@
 </div>
 
 <footer class="hub-footer">
-  Barnyard hub &mdash; static landing page, no account needed to browse, no third-party tracking. The weather widget only contacts Open-Meteo, and only if you ask it to. The calendar widget contacts api.barnyard.site (a same-account Cloudflare Worker, gated by Cloudflare Access) to show this week's events.
+  Barnyard hub &mdash; static landing page, no account needed to browse, no third-party tracking. The weather widget only contacts Open-Meteo, and only if you ask it to. The calendar widget contacts api.barnyard.site (a same-account Cloudflare Worker, gated by Cloudflare Access) to show this week's events. The to-do list is stored only in this browser's own local storage and never leaves your device.
 </footer>
 
 <script src="live-prices.js"></script>
