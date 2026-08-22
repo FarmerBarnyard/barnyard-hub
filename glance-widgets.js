@@ -26,6 +26,14 @@
 (function () {
   "use strict";
 
+  // Mon-first day abbreviations. Originally only used by the week calendar
+  // widget below (built from the visitor's own Mon-Sun grid), but the
+  // weather widget's forecast strip now reuses the exact same array and the
+  // exact same Date#getDay() -> Mon-first index conversion (see
+  // parseDailyForecast) for consistency between the two widgets rather than
+  // reinventing a slightly different day-name lookup.
+  var DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
   // ---- Weather ------------------------------------------------------------
 
   var WEATHER_API = "https://api.open-meteo.com/v1/forecast";
@@ -70,6 +78,80 @@
 
   function describeWeatherCode(code) {
     return WEATHER_CODES[code] || ["Unknown conditions", "🌡️"];
+  }
+
+  // Turns Open-Meteo's `daily` block (four parallel arrays: time,
+  // weather_code, temperature_2m_max, temperature_2m_min -- index 0 =
+  // today, per timezone=auto in the request URL) into a clean array of
+  // { date, dayLabel, tempMax, tempMin, code } objects, or null if the
+  // block is missing or malformed in any way.
+  //
+  // Deliberately paranoid, mirroring loadWeather's own validation of
+  // `current`: a forecast response is never trusted blindly. Any single
+  // problem -- the block missing entirely, the four arrays not all being
+  // arrays, a length mismatch between them, an empty array, an unparseable
+  // date string, or a non-finite temperature/code anywhere in any of them
+  // -- fails the whole parse (returns null) rather than rendering a
+  // partial/corrupt strip. The caller (loadWeather) treats null as "no
+  // forecast" and still renders the current-conditions block on its own --
+  // a malformed daily block must never take down an otherwise-good current
+  // reading.
+  //
+  // Each date string ("YYYY-MM-DD") is parsed into its year/month/day parts
+  // and fed to `new Date(y, m - 1, d)` -- a LOCAL-components constructor --
+  // rather than `new Date("YYYY-MM-DD")`, which JS parses as UTC midnight
+  // and can land on the wrong weekday once converted to a negative-UTC-
+  // offset visitor's local getDay(). Since timezone=auto already makes
+  // Open-Meteo bucket these dates by the requested lat/lon's own local
+  // timezone, treating the string's y/m/d as local wall-clock components
+  // (rather than round-tripping through UTC) is what keeps the weekday
+  // label correct.
+  function parseDailyForecast(daily) {
+    if (!daily) return null;
+    var time = daily.time;
+    var code = daily.weather_code;
+    var max = daily.temperature_2m_max;
+    var min = daily.temperature_2m_min;
+    if (!Array.isArray(time) || !Array.isArray(code) || !Array.isArray(max) || !Array.isArray(min)) {
+      return null;
+    }
+    var len = time.length;
+    if (len === 0 || code.length !== len || max.length !== len || min.length !== len) {
+      return null;
+    }
+
+    var days = [];
+    for (var i = 0; i < len; i++) {
+      var dateStr = time[i];
+      if (typeof dateStr !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+      var parts = dateStr.split("-");
+      var y = Number(parts[0]);
+      var m = Number(parts[1]);
+      var d = Number(parts[2]);
+      if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+      if (!Number.isFinite(code[i]) || !Number.isFinite(max[i]) || !Number.isFinite(min[i])) return null;
+
+      // Date#getDay(): 0=Sun..6=Sat -- same Mon-first shift renderWeek uses
+      // to index into DAY_NAMES, reused as-is for consistency.
+      var dateObj = new Date(y, m - 1, d);
+      var dayIndex = (dateObj.getDay() + 6) % 7;
+      // "Today" for the first entry rather than its weekday abbreviation --
+      // matches how a visitor actually reads a forecast strip (the calendar
+      // widget's own "This week" grid keeps the plain weekday abbreviation
+      // for today, picking it out with color/a sr-only suffix instead; the
+      // forecast strip's very first cell is unambiguous enough that a literal
+      // "Today" label reads better here).
+      var dayLabel = i === 0 ? "Today" : DAY_NAMES[dayIndex];
+
+      days.push({
+        date: dateStr,
+        dayLabel: dayLabel,
+        tempMax: max[i],
+        tempMin: min[i],
+        code: code[i]
+      });
+    }
+    return days;
   }
 
   // Resolves with the already-parsed JSON body. The timeout is only cleared
@@ -144,7 +226,82 @@
     }
   }
 
-  function renderWeather(tempC, code, asOfDate) {
+  // `days` is either the array parseDailyForecast returned, or null/
+  // undefined -- rendered only when it's a real, non-empty array (see
+  // renderWeather), so a malformed/missing daily block just leaves the
+  // widget at the current-conditions block alone, no empty strip below it.
+  function renderForecast(days) {
+    var body = weatherBody();
+    if (!body || !Array.isArray(days) || !days.length) return;
+
+    var strip = document.createElement("ul");
+    strip.className = "weather-forecast";
+    strip.setAttribute("role", "list");
+
+    days.forEach(function (day) {
+      var info = describeWeatherCode(day.code);
+      var condLabel = info[0];
+      var icon = info[1];
+      var tempMaxR = Math.round(day.tempMax);
+      var tempMinR = Math.round(day.tempMin);
+
+      var li = document.createElement("li");
+      li.className = "weather-forecast-day";
+      // The visible cell is three separate aria-hidden fragments (day
+      // label, icon, high/low) -- on their own, the two temperature figures
+      // don't say which is the high and which is the low (that's only
+      // conveyed visually, by order/position), so a single well-formed
+      // aria-label on the cell itself carries the full, unambiguous summary
+      // to assistive tech instead of three fragments read out of context.
+      li.setAttribute(
+        "aria-label",
+        day.dayLabel + ", " + condLabel + ", high " + tempMaxR + "°, low " + tempMinR + "°"
+      );
+
+      var nameEl = document.createElement("span");
+      nameEl.className = "weather-forecast-day-name";
+      nameEl.setAttribute("aria-hidden", "true");
+      nameEl.textContent = day.dayLabel;
+
+      var iconEl = document.createElement("span");
+      iconEl.className = "weather-forecast-icon";
+      iconEl.setAttribute("aria-hidden", "true");
+      iconEl.textContent = icon;
+
+      // High/low stacked as two short lines ("18°" over "9°") rather than
+      // one "18° / 9°" line -- a single-line pair doesn't actually fit the
+      // ~38px cell width the strip is left with at narrow mobile viewports
+      // (7 cells in a widget that's no longer 616px wide there), where
+      // nowrap would just overflow the cell instead of wrapping cleanly.
+      // Stacking also gives high/low a distinct color/weight treatment
+      // (bright+bold vs dim), reinforcing which figure is which beyond
+      // position alone -- the same ambiguity the cell's aria-label exists
+      // to resolve for assistive tech.
+      var tempsEl = document.createElement("span");
+      tempsEl.className = "weather-forecast-temps";
+      tempsEl.setAttribute("aria-hidden", "true");
+
+      var highEl = document.createElement("span");
+      highEl.className = "weather-forecast-high";
+      highEl.textContent = tempMaxR + "°";
+
+      var lowEl = document.createElement("span");
+      lowEl.className = "weather-forecast-low";
+      lowEl.textContent = tempMinR + "°";
+
+      tempsEl.appendChild(highEl);
+      tempsEl.appendChild(lowEl);
+
+      li.appendChild(nameEl);
+      li.appendChild(iconEl);
+      li.appendChild(tempsEl);
+      strip.appendChild(li);
+    });
+
+    body.appendChild(strip);
+  }
+
+  function renderWeather(tempC, code, asOfDate, forecastDays) {
     var body = weatherBody();
     if (!body) return;
     var info = describeWeatherCode(code);
@@ -179,6 +336,11 @@
     asOfEl.className = "weather-asof";
     asOfEl.textContent = "as of " + formatAsOf(asOfDate);
     body.appendChild(asOfEl);
+
+    // Best-effort: a missing/malformed daily block (see parseDailyForecast)
+    // just means no forecast strip renders -- the current-conditions block
+    // above is still good and stands on its own.
+    renderForecast(forecastDays);
   }
 
   // Timestamp (ms) of the last successful load, so a returning visit
@@ -198,7 +360,8 @@
       WEATHER_API +
       "?latitude=" + encodeURIComponent(roundedLat) +
       "&longitude=" + encodeURIComponent(roundedLon) +
-      "&current=temperature_2m,weather_code&temperature_unit=celsius";
+      "&current=temperature_2m,weather_code&temperature_unit=celsius" +
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=7";
     fetchJsonWithTimeout(url)
       .then(function (data) {
         var current = data && data.current;
@@ -209,9 +372,14 @@
         ) {
           throw new Error("incomplete weather data");
         }
+        // A malformed/missing daily block degrades gracefully -- parsed to
+        // null, which renderWeather/renderForecast treat as "no forecast
+        // strip", NOT as a reason to fail the whole current-conditions
+        // render (see parseDailyForecast's own comment).
+        var forecastDays = parseDailyForecast(data && data.daily);
         var now = new Date();
         lastWeatherLoadAt = now.getTime();
-        renderWeather(current.temperature_2m, current.weather_code, now);
+        renderWeather(current.temperature_2m, current.weather_code, now, forecastDays);
       })
       .catch(function () {
         // A silent background refresh failing shouldn't blow away an
@@ -277,8 +445,11 @@
   // network call, no calendar-account connection). The per-day event data
   // layered on top of that grid is NOT local -- see the "Calendar events"
   // section immediately below, which fetches from api.barnyard.site.
+  //
+  // (DAY_NAMES itself is declared up in the Weather section above -- it's
+  // shared between both widgets now that the weather forecast strip uses it
+  // too.)
 
-  var DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   var MONTH_NAMES = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
@@ -748,7 +919,8 @@
     module.exports = {
       pad2: pad2,
       localDateStr: localDateStr,
-      eventLocalDate: eventLocalDate
+      eventLocalDate: eventLocalDate,
+      parseDailyForecast: parseDailyForecast
     };
   }
 })();

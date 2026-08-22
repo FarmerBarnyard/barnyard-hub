@@ -164,6 +164,67 @@ test("eventLocalDate: an unparseable Z-suffixed start returns null rather than t
   assert.strictEqual(gw.eventLocalDate(ev), null);
 });
 
+// ---- parseDailyForecast -------------------------------------------------
+// Covers the weather widget's forecast-strip parsing/validation logic
+// (added alongside the forecast-strip feature): a well-formed 7-day
+// response, and the malformed-input cases parseDailyForecast is specifically
+// meant to catch (mismatched array lengths, a missing `daily` key entirely,
+// and a non-finite value buried mid-array) rather than rendering a
+// partial/corrupt strip or throwing.
+
+function makeWellFormedDaily() {
+  return {
+    time: [
+      "2026-08-22", "2026-08-23", "2026-08-24", "2026-08-25",
+      "2026-08-26", "2026-08-27", "2026-08-28"
+    ],
+    weather_code: [0, 1, 2, 3, 61, 71, 95],
+    temperature_2m_max: [18, 19, 17, 16, 15, 5, 20],
+    temperature_2m_min: [9, 10, 8, 7, 6, -2, 12]
+  };
+}
+
+test("parseDailyForecast: a well-formed 7-day response parses to 7 day objects, today first", function () {
+  var days = gw.parseDailyForecast(makeWellFormedDaily());
+  assert.strictEqual(days.length, 7);
+  assert.strictEqual(days[0].date, "2026-08-22");
+  assert.strictEqual(days[0].dayLabel, "Today");
+  assert.strictEqual(days[0].tempMax, 18);
+  assert.strictEqual(days[0].tempMin, 9);
+  assert.strictEqual(days[0].code, 0);
+  // Later days fall back to their weekday abbreviation, taken from the same
+  // Mon-first DAY_NAMES array/index conversion renderWeek itself uses.
+  // 2026-08-23 is a Sunday.
+  assert.strictEqual(days[1].dayLabel, "Sun");
+  assert.strictEqual(days[6].date, "2026-08-28");
+});
+
+test("parseDailyForecast: mismatched array lengths return null rather than a partial/corrupt result", function () {
+  var daily = makeWellFormedDaily();
+  daily.temperature_2m_min = [9, 10, 8]; // shorter than the other three arrays
+  assert.strictEqual(gw.parseDailyForecast(daily), null);
+});
+
+test("parseDailyForecast: a missing `daily` key entirely returns null rather than throwing", function () {
+  assert.strictEqual(gw.parseDailyForecast(undefined), null);
+  assert.strictEqual(gw.parseDailyForecast(null), null);
+});
+
+test("parseDailyForecast: a non-finite value buried mid-array returns null, not a partially-good array", function () {
+  var daily = makeWellFormedDaily();
+  daily.temperature_2m_max[3] = NaN;
+  assert.strictEqual(gw.parseDailyForecast(daily), null);
+
+  var daily2 = makeWellFormedDaily();
+  daily2.weather_code[5] = null;
+  assert.strictEqual(gw.parseDailyForecast(daily2), null);
+});
+
+test("parseDailyForecast: an empty `time` array returns null rather than an empty (falsy-looking but valid) result", function () {
+  var daily = { time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [] };
+  assert.strictEqual(gw.parseDailyForecast(daily), null);
+});
+
 // Restore whatever TZ the process actually started with, so this file
 // doesn't leak a changed timezone into any test run after it.
 process.env.TZ = originalTZ;

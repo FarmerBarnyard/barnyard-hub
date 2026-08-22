@@ -87,6 +87,56 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 .weather-locate-btn:hover{border-color:var(--amber-dim);}
 .weather-locate-btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 
+/* 7-day forecast strip -- fills the vertical space .widget-weather was
+   otherwise leaving empty below the current-conditions line, now that the
+   glance-row widgets are ~616px wide. Deliberately mirrors .week-days'
+   layout below (flex:1 columns, 6px gap, compact centered content, the same
+   --text-dim day-label treatment) rather than reusing its class names, so
+   the two per-widget day strips read as visual siblings without one's
+   future changes risking the other's unrelated markup.
+
+   Real px math, both at current desktop width and at mobile width (not
+   eyeballed -- same approach as .week-day's own arithmetic above):
+
+   - Desktop, widest the glance row gets: 1280px body max-width, 16px body
+     padding each side, 2 equal .glance-row columns with a 16px gap -> each
+     .widget is (1280 - 32 - 16) / 2 = 616px. Minus .widget's 20px
+     horizontal padding each side, that's 576px of content width. 7 cells
+     with 6px gaps between them (6 gaps = 36px, matching .week-days' own
+     gap) leaves (576 - 36) / 7 ≈ 77px per cell.
+
+   - Mobile, e.g. a 375px viewport: .glance-row collapses to 1 column below
+     700px (see the .glance-row rule above), so .widget is the full body
+     content width: 375 - 32 (body padding) = 343px, minus .widget's 40px
+     of horizontal padding = 303px of content width. Same 36px of gaps ->
+     (303 - 36) / 7 ≈ 38px per cell.
+
+   A 38px cell is too narrow for a single-line "18° / 9°" high/low pair
+   (roughly 50-55px in this monospace at .72rem) -- that's what pushed the
+   high/low temps to stack as two short lines ("18°" over "9°", each only
+   2-4 characters) instead of sitting side by side; see renderForecast's own
+   comment. A 3-4 char day label and one emoji glyph both comfortably clear
+   38px on their own, so only the temps needed restructuring. */
+.weather-forecast{
+  list-style:none;display:flex;flex-wrap:nowrap;gap:6px;margin:4px 0 0;padding:0;
+  width:100%;
+}
+.weather-forecast-day{
+  flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:6px 2px;border-radius:4px;
+}
+.weather-forecast-day-name{
+  font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--text-dim);
+}
+.weather-forecast-icon{font-size:1.15rem;line-height:1;}
+.weather-forecast-temps{
+  display:flex;flex-direction:column;align-items:center;
+  font-family:var(--mono);font-size:.72rem;white-space:nowrap;
+}
+.weather-forecast-high{color:var(--text-bright);font-weight:700;}
+.weather-forecast-low{color:var(--text-dim);}
+
 /* Week calendar widget -- Monday-first row of days, today picked out with
    the site's existing amber accent (same tokens used elsewhere, no new
    colors introduced). */
