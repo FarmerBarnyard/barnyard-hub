@@ -127,7 +127,16 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 }
 .weather-forecast-day-name{
   font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
-  color:var(--text-dim);
+  color:var(--text-dim);max-width:100%;overflow:hidden;text-overflow:clip;white-space:nowrap;
+}
+/* "Today" (5 glyphs) overflows a ~33px cell below roughly 360px viewport
+   width -- measured live (38px text in a 33px cell at 320px) -- where the
+   3-letter weekday abbreviations used for every other cell fit comfortably.
+   max-width+overflow:hidden above already stops it from visibly spilling
+   into the next cell; this shrinks the font enough that it usually doesn't
+   need to. */
+@media (max-width:360px){
+  .weather-forecast-day-name{font-size:.58rem;letter-spacing:0;}
 }
 .weather-forecast-icon{font-size:1.15rem;line-height:1;}
 .weather-forecast-temps{

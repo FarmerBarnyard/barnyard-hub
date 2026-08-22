@@ -1,6 +1,7 @@
 // Two self-contained "at a glance" widgets shown between the header and the
-// project tiles: current weather (via the browser's Geolocation API plus
-// Open-Meteo's free, keyless forecast API) and a week-view calendar built
+// project tiles: current weather plus a 7-day forecast (via the browser's
+// Geolocation API and Open-Meteo's free, keyless forecast API) and a
+// week-view calendar built
 // from the visitor's local clock and enhanced with real events fetched from
 // api.barnyard.site/calendar (a same-account Cloudflare Worker gated by
 // Cloudflare Access -- see the "Calendar events" section below).
@@ -107,7 +108,7 @@
   // (rather than round-tripping through UTC) is what keeps the weekday
   // label correct.
   function parseDailyForecast(daily) {
-    if (!daily) return null;
+    if (!daily || typeof daily !== "object") return null;
     var time = daily.time;
     var code = daily.weather_code;
     var max = daily.temperature_2m_max;
@@ -120,28 +121,47 @@
       return null;
     }
 
+    // Compared against each entry's own date below, not the array position
+    // -- see the dayLabel comment inside the loop.
+    var todayStr = localDateStr(new Date());
+
     var days = [];
-    for (var i = 0; i < len; i++) {
+    // Capped at 7 regardless of how many the API returns (forecast_days=7 is
+    // requested, but nothing stops a response from being longer) -- keeps
+    // this in agreement with the CSS's fixed 7-cell width math.
+    var limit = len < 7 ? len : 7;
+    for (var i = 0; i < limit; i++) {
       var dateStr = time[i];
-      if (typeof dateStr !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+      if (typeof dateStr !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) break;
       var parts = dateStr.split("-");
       var y = Number(parts[0]);
       var m = Number(parts[1]);
       var d = Number(parts[2]);
-      if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
-      if (!Number.isFinite(code[i]) || !Number.isFinite(max[i]) || !Number.isFinite(min[i])) return null;
-
       // Date#getDay(): 0=Sun..6=Sat -- same Mon-first shift renderWeek uses
       // to index into DAY_NAMES, reused as-is for consistency.
       var dateObj = new Date(y, m - 1, d);
+      // A round-trip check against y/m/d, not just NaN-checking Number() (the
+      // regex above already guarantees three all-digit groups) -- rejects an
+      // out-of-range date like "2026-02-30" that `new Date` would otherwise
+      // silently roll into March instead of surfacing as invalid.
+      if (
+        dateObj.getFullYear() !== y ||
+        dateObj.getMonth() !== m - 1 ||
+        dateObj.getDate() !== d
+      ) {
+        break;
+      }
+      if (!Number.isFinite(code[i]) || !Number.isFinite(max[i]) || !Number.isFinite(min[i])) break;
+
       var dayIndex = (dateObj.getDay() + 6) % 7;
-      // "Today" for the first entry rather than its weekday abbreviation --
-      // matches how a visitor actually reads a forecast strip (the calendar
-      // widget's own "This week" grid keeps the plain weekday abbreviation
-      // for today, picking it out with color/a sr-only suffix instead; the
-      // forecast strip's very first cell is unambiguous enough that a literal
-      // "Today" label reads better here).
-      var dayLabel = i === 0 ? "Today" : DAY_NAMES[dayIndex];
+      // "Today" when this entry's OWN date matches today's date, not simply
+      // "whichever entry came first in the array". This widget has no
+      // periodic refresh -- only an explicit click or a visibilitychange
+      // check -- so a tab left open continuously in the foreground overnight
+      // never re-fetches on its own; comparing dates (rather than trusting
+      // array position) means a stale strip stops claiming any day is
+      // "Today" instead of confidently mislabeling yesterday's entry.
+      var dayLabel = dateStr === todayStr ? "Today" : DAY_NAMES[dayIndex];
 
       days.push({
         date: dateStr,
@@ -151,7 +171,12 @@
         code: code[i]
       });
     }
-    return days;
+    // One bad day (mid-array null, an impossible date, etc.) truncates the
+    // strip rather than discarding every other, otherwise-valid day -- but
+    // if the very first day is unusable there's nothing left to salvage, so
+    // that still degrades to "no forecast strip" the same way a structurally
+    // malformed `daily` block does (see renderForecast/renderWeather).
+    return days.length ? days : null;
   }
 
   // Resolves with the already-parsed JSON body. The timeout is only cleared
@@ -237,6 +262,10 @@
     var strip = document.createElement("ul");
     strip.className = "weather-forecast";
     strip.setAttribute("role", "list");
+    // Without this the strip has no accessible name of its own -- a screen
+    // reader would announce "list, 7 items" right after the "as of HH:MM"
+    // line with nothing indicating what the list actually is.
+    strip.setAttribute("aria-label", "7-day forecast");
 
     days.forEach(function (day) {
       var info = describeWeatherCode(day.code);
@@ -247,16 +276,6 @@
 
       var li = document.createElement("li");
       li.className = "weather-forecast-day";
-      // The visible cell is three separate aria-hidden fragments (day
-      // label, icon, high/low) -- on their own, the two temperature figures
-      // don't say which is the high and which is the low (that's only
-      // conveyed visually, by order/position), so a single well-formed
-      // aria-label on the cell itself carries the full, unambiguous summary
-      // to assistive tech instead of three fragments read out of context.
-      li.setAttribute(
-        "aria-label",
-        day.dayLabel + ", " + condLabel + ", high " + tempMaxR + "°, low " + tempMinR + "°"
-      );
 
       var nameEl = document.createElement("span");
       nameEl.className = "weather-forecast-day-name";
@@ -292,9 +311,21 @@
       tempsEl.appendChild(highEl);
       tempsEl.appendChild(lowEl);
 
+      // The visible cell is three separate aria-hidden fragments (day
+      // label, icon, high/low) -- on their own, the two temperature figures
+      // don't say which is the high and which is the low (that's only
+      // conveyed visually, by order/position), so an appended sr-only span
+      // carries the full, unambiguous summary to assistive tech instead.
+      // Same idiom renderWeek already uses for its own "(today)" suffix,
+      // rather than an aria-label on the row itself.
+      var srEl = document.createElement("span");
+      srEl.className = "sr-only";
+      srEl.textContent = day.dayLabel + ", " + condLabel + ", high " + tempMaxR + "°, low " + tempMinR + "°";
+
       li.appendChild(nameEl);
       li.appendChild(iconEl);
       li.appendChild(tempsEl);
+      li.appendChild(srEl);
       strip.appendChild(li);
     });
 
@@ -424,6 +455,27 @@
     );
   }
 
+  // Re-fetch at next local midnight so a tab left open continuously in the
+  // foreground doesn't keep showing a forecast strip that quietly labels
+  // yesterday's entry "Today" (see parseDailyForecast) or whose remaining
+  // six days have all silently shifted a day stale. Only fires if the
+  // visitor has already opted in at least once (lastWeatherLoadAt !== null)
+  // -- this must never be the first thing that triggers a location request,
+  // same rule the visibilitychange refresh below already follows. Silent,
+  // same as that refresh: a failure here leaves whatever's already on
+  // screen alone rather than replacing it with an error state. Reschedules
+  // itself each time so this keeps working indefinitely, mirroring the
+  // calendar widget's own scheduleMidnightRefresh.
+  function scheduleWeatherMidnightRefresh() {
+    var now = new Date();
+    var next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5, 0);
+    var delay = next.getTime() - now.getTime();
+    setTimeout(function () {
+      if (lastWeatherLoadAt !== null) requestWeather({ silent: true });
+      scheduleWeatherMidnightRefresh();
+    }, delay);
+  }
+
   function initWeather() {
     if (!weatherBody()) return;
     renderLocatePrompt();
@@ -437,6 +489,7 @@
         requestWeather({ silent: true });
       }
     });
+    scheduleWeatherMidnightRefresh();
   }
 
   // ---- Week calendar --------------------------------------------------------
