@@ -32,12 +32,16 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 .wordmark{font-size:1.6rem;font-weight:800;letter-spacing:-.01em;color:var(--text-bright);text-transform:uppercase;margin:0 0 4px;}
 .tagline{color:var(--text-dim);font-size:.9rem;margin:0;}
 
-/* "At a glance" row -- weather + week calendar, between the header and the
-   project tiles. Wider min-width than .tile since each widget carries more
-   content (a short list / a multi-part reading), but shares the same
-   surface/border/radius language as .tile below. */
+/* "At a glance" row -- quick links, weather, week calendar, and a to-do
+   list, between the header and the project tiles. minmax's lower bound is
+   sized so all four widgets fit on one row at the page's own max-width
+   (1040px body, minus padding and gaps -- see :root/body above) while still
+   collapsing to fewer columns (down to one on narrow/mobile viewports,
+   matching how .tile below reflows) via the same auto-fit approach already
+   used for .widget-grid. Shares the same surface/border/radius language as
+   .tile below. */
 .glance-row{
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
   gap:16px;margin-bottom:32px;
 }
 
@@ -131,6 +135,57 @@ header.hub-header{padding:28px 4px 20px;border-bottom:1px solid var(--border);ma
 }
 .week-retry-btn:hover{border-color:var(--amber-dim);}
 .week-retry-btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
+
+/* Quick links widget -- compact vertical list of external links rather than
+   full .tile cards, since there are six of them in one narrow grid column.
+   Icon treatment matches .tile-icon (aria-hidden emoji, label carries the
+   accessible name via visible text) -- see .tile-icon above. */
+.quicklinks-list{list-style:none;display:flex;flex-direction:column;gap:2px;margin:0;padding:0;}
+.quicklink{
+  display:flex;align-items:center;gap:10px;padding:6px 8px;margin:0 -8px;
+  border-radius:4px;color:var(--text);text-decoration:none;font-size:.88rem;
+  transition:background-color .15s ease;
+}
+.quicklink:hover{background:var(--surface-2);}
+.quicklink:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
+.quicklink-icon{font-size:1.05rem;line-height:1;flex:0 0 auto;}
+.quicklink-label{color:var(--text);}
+
+/* To-do widget -- purely client-side, persisted to localStorage (see
+   todo-widget.js). Visual language matches .weather-locate-btn /
+   .week-retry-btn (surface-2 fill, border, amber hover/focus) for the Add
+   button, and the same list rhythm as .quicklinks-list for rows. */
+.todo-form{display:flex;gap:8px;}
+.todo-input{
+  flex:1;min-width:0;font-family:var(--sans);font-size:.85rem;color:var(--text-bright);
+  background:var(--surface-2);border:1px solid var(--border);border-radius:4px;
+  padding:7px 10px;
+}
+.todo-input::placeholder{color:var(--text-dim);}
+.todo-input:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
+.todo-add-btn{
+  font-family:var(--sans);font-size:.8rem;font-weight:700;color:var(--text-bright);
+  background:var(--surface-2);border:1px solid var(--border);border-radius:4px;
+  padding:7px 14px;cursor:pointer;transition:border-color .15s ease;
+}
+.todo-add-btn:hover{border-color:var(--amber-dim);}
+.todo-add-btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
+
+.todo-list{list-style:none;display:flex;flex-direction:column;gap:2px;margin:0;padding:0;}
+.todo-item{display:flex;align-items:center;gap:8px;padding:4px 0;}
+.todo-checkbox{flex:0 0 auto;width:15px;height:15px;accent-color:var(--amber);cursor:pointer;}
+.todo-text{flex:1;min-width:0;font-size:.85rem;color:var(--text);word-break:break-word;}
+.todo-text.is-done{color:var(--text-dim);text-decoration:line-through;}
+.todo-remove-btn{
+  flex:0 0 auto;font-family:var(--sans);font-size:.85rem;line-height:1;font-weight:700;
+  color:var(--text-dim);background:transparent;border:1px solid transparent;border-radius:4px;
+  width:20px;height:20px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:color .15s ease,border-color .15s ease;
+}
+.todo-remove-btn:hover{color:var(--down);border-color:var(--border);}
+.todo-remove-btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
+.todo-empty{color:var(--text-dim);font-size:.82rem;margin:0;}
+.todo-empty:empty{display:none;}
 
 .widget-grid{
   display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
