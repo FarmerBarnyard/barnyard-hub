@@ -26,6 +26,9 @@
   "use strict";
 
   var KIT_URL = "https://dashboard.barnyard.site/agent-kit/";
+  // Where the published fingerprints of the kit files live: the repository itself,
+  // a different route to the files than the site the helper was downloaded from.
+  var SUMS_URL = "https://raw.githubusercontent.com/FarmerBarnyard/barnyard-hub/main/agent-kit/SHA256SUMS";
   // The exact shape of a key. Checked before a key is ever put into a command
   // the person is asked to paste into a terminal.
   var TOKEN_SHAPE = /^ob_[0-9a-f]{32}_[A-Za-z0-9_-]{43}$/;
@@ -80,22 +83,65 @@
     if (os === "windows") {
       return [
         { label: "Save your key (a private file on your computer)", text: "New-Item -ItemType Directory -Force \"$HOME\\.claude\" | Out-Null\nSet-Content -Path \"$HOME\\.claude\\ops-board-token\" -Value '" + token + "' -NoNewline" },
-        { label: "Install the helper", text: "Invoke-WebRequest " + KIT_URL + "ops-board.ps1 -OutFile \"$HOME\\.claude\\ops-board.ps1\"" }
+        { label: "Install the helper", text: "Invoke-WebRequest " + KIT_URL + "ops-board.ps1 -OutFile \"$HOME\\.claude\\ops-board.ps1\"" },
+        { label: "Check the helper is the genuine one (compares it with the copy on GitHub)", text: "$want = ((Invoke-WebRequest " + SUMS_URL + " -UseBasicParsing).Content -split \"`n\" | Where-Object { $_ -like '*ops-board.ps1' }) -replace '\\s.*',''; $got = (Get-FileHash \"$HOME\\.claude\\ops-board.ps1\" -Algorithm SHA256).Hash.ToLower(); if ($want -eq $got) { 'Helper verified' } else { 'DOES NOT MATCH: delete the file and do not use it' }" }
       ];
     }
     return [
       { label: "Save your key (a private file on your computer)", text: "mkdir -p ~/.claude\nprintf '%s' '" + token + "' > ~/.claude/ops-board-token\nchmod 600 ~/.claude/ops-board-token" },
-      { label: "Install the helper", text: "curl -fsSL " + KIT_URL + "ops-board.sh -o ~/.claude/ops-board.sh && chmod +x ~/.claude/ops-board.sh" }
+      { label: "Install the helper", text: "curl -fsSL " + KIT_URL + "ops-board.sh -o ~/.claude/ops-board.sh && chmod +x ~/.claude/ops-board.sh" },
+      { label: "Check the helper is the genuine one (compares it with the copy on GitHub)", text: "want=$(curl -fsSL " + SUMS_URL + " | awk '/ops-board\\.sh$/ {print $1}'); got=$( (sha256sum ~/.claude/ops-board.sh 2>/dev/null || shasum -a 256 ~/.claude/ops-board.sh) | awk '{print $1}'); [ \"$want\" = \"$got\" ] && echo 'Helper verified' || echo 'DOES NOT MATCH: delete the file and do not use it'" }
     ];
+  }
+
+  var DAY_MS = 24 * 60 * 60 * 1000;
+
+  function expiryText(expiresAt, now) {
+    if (!expiresAt) return "";
+    var days = Math.ceil((expiresAt - now) / DAY_MS);
+    if (days <= 0) return "expired";
+    if (days === 1) return "expires tomorrow";
+    return "expires in " + days + " days";
   }
 
   function keyLine(tok, now) {
     var made = "made " + agoText(tok.createdAt, now);
-    return tok.lastUsedAt ? made + " · last used " + agoText(tok.lastUsedAt, now) : made + " · not used yet";
+    var line = tok.lastUsedAt ? made + " · last used " + agoText(tok.lastUsedAt, now) : made + " · not used yet";
+    if (tok.scope === "ro") line += " · read-only";
+    var exp = expiryText(tok.expiresAt, now);
+    return exp ? line + " · " + exp : line;
+  }
+
+  // The refusals every sensitive action can meet, worded for a person.
+  function actionError(err, fallback) {
+    var code = err && err.code;
+    if (code === "recent_sign_in_required") return "For safety this needs a recent sign-in. Sign in again, then try again.";
+    if (code === "session_revoked") return "You were signed out of this board. Log in again.";
+    if (code === "confirm_required") return "Type the confirmation exactly as shown.";
+    if (err && err.status === 401) return "Your session has expired. Log in again.";
+    return fallback;
+  }
+
+  // The audit trail, one line each.
+  var ACTION_TEXT = {
+    board_created: "Board created", key_created: "Agent key created", key_revoked: "Agent key revoked",
+    keys_revoked_all: "All agent keys revoked", export: "Board exported", signed_out_everywhere: "Signed out everywhere",
+    write_blocked: "A save was refused (it contained a password or key)", write_attempt: "A read-only key tried to change the board",
+    key_auth_failed: "A wrong agent key was tried", item_redacted: "An item was redacted", item_deleted: "An item was deleted",
+    board_disabled: "Board switched off by the hub owner", board_enabled: "Board switched on by the hub owner",
+    offboarded: "Board closed by the hub owner", restored: "Board restored to an earlier time"
+  };
+
+  function activityLine(entry) {
+    var text = ACTION_TEXT[entry.action] || String(entry.action || "").replace(/_/g, " ");
+    if (entry.result === "denied") text += " (refused)";
+    return { ts: entry.ts, text: text, denied: entry.result === "denied" };
   }
 
   function createError(err) {
     var code = err && err.code;
+    var common = actionError(err, null);
+    if (common) return common;
     if (code === "keys_full") return "You already have " + MAX_KEYS + " keys. Revoke one in Settings, Agent access, then try again.";
     if (code === "label_invalid") return "Use 1 to 40 letters, numbers, spaces or . _ ( ) ' - for the name.";
     if (code === "rate_limited") return "Too many changes just now. Wait a minute and try again.";
@@ -115,7 +161,8 @@
   var helpers = {
     agentState: agentState, lastSeenMs: lastSeenMs, agoText: agoText, statusLine: statusLine, defaultOs: defaultOs,
     installCommands: installCommands, keyLine: keyLine, createError: createError, onboardError: onboardError,
-    TOKEN_SHAPE: TOKEN_SHAPE, MAX_KEYS: MAX_KEYS, KIT_URL: KIT_URL
+    expiryText: expiryText, actionError: actionError, activityLine: activityLine,
+    TOKEN_SHAPE: TOKEN_SHAPE, MAX_KEYS: MAX_KEYS, KIT_URL: KIT_URL, SUMS_URL: SUMS_URL
   };
 
   if (typeof document === "undefined") {
@@ -259,14 +306,32 @@
     input.value = "My computer";
     input.autocomplete = "off";
     field.appendChild(input);
+    // How long the key lasts, and whether it may change the board. 90 days and
+    // read-write unless the person picks otherwise.
+    var lifeField = el("label", "ops-field");
+    lifeField.appendChild(el("span", "ops-field-label", "Lasts for"));
+    var life = el("select", "ops-input");
+    [[90, "90 days"], [30, "30 days"], [365, "1 year"]].forEach(function (o) {
+      var opt = el("option", null, o[1]);
+      opt.value = String(o[0]);
+      life.appendChild(opt);
+    });
+    lifeField.appendChild(life);
+    var roLabel = el("label", "ops-check");
+    var ro = el("input");
+    ro.type = "checkbox";
+    roLabel.appendChild(ro);
+    roLabel.appendChild(document.createTextNode(" Read-only (can look, can’t change)"));
     var go = el("button", "ops-btn ops-btn-primary", "Create agent key");
     go.type = "submit";
     form.appendChild(field);
+    form.appendChild(lifeField);
+    form.appendChild(roLabel);
     form.appendChild(go);
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       go.disabled = true;
-      ctx.request("POST", "/tokens", { label: input.value.trim() }).then(function (res) {
+      ctx.request("POST", "/tokens", { label: input.value.trim(), days: parseInt(life.value, 10), scope: ro.checked ? "ro" : "rw" }).then(function (res) {
         go.disabled = false;
         onMade(res);
       }, function (err) {
@@ -285,6 +350,13 @@
     card.appendChild(el("h2", null, "Create your board"));
     card.appendChild(el("p", null, "This is your own progress board: lanes for what is in progress, soaking, waiting on you and planned. Other people on this hub can’t see it."));
     card.appendChild(el("p", null, "Once it exists you can connect your own Claude, which then keeps the board up to date as it works on your projects."));
+    var privacy = el("p", "ops-dim");
+    privacy.appendChild(document.createTextNode("Keep it to work notes: no passwords, and no one else’s personal details. Your data is stored on Cloudflare, which may be outside Australia. "));
+    var plink = el("a", null, "How your data is kept");
+    plink.href = "privacy.html";
+    privacy.appendChild(plink);
+    privacy.appendChild(document.createTextNode("."));
+    card.appendChild(privacy);
     var go = el("button", "ops-btn ops-btn-primary", "Create my board");
     go.type = "button";
     var status = el("p", "ops-onboard-status");
@@ -435,7 +507,7 @@
       render: function (body) {
         var intro = el("fieldset");
         intro.appendChild(el("legend", null, "Your Claude’s keys"));
-        intro.appendChild(el("p", "hint", "A key lets your own Claude read and update this board, and nothing else. Keys don’t expire; revoke one the moment you lose track of it. Make one per computer, up to " + MAX_KEYS + "."));
+        intro.appendChild(el("p", "hint", "A key lets your own Claude read and update this board, and nothing else. A key stops working on its own after 30 days, 90 days (the usual) or a year, so make a new one when it runs out; revoke one the moment you lose track of it. Make one per computer, up to " + MAX_KEYS + "."));
         var list = el("div", "ops-keys");
         list.appendChild(el("p", "ops-empty", "Loading…"));
         intro.appendChild(list);
@@ -476,12 +548,31 @@
               ctx.request("DELETE", "/tokens/" + t.id).then(function () {
                 ctx.toast("Key revoked.");
                 load();
-              }, function () { revoke.disabled = false; ctx.toast("Couldn’t revoke it. Try again."); });
+              }, function (err) { revoke.disabled = false; ctx.toast(actionError(err, "Couldn’t revoke it. Try again.")); });
             });
             row.appendChild(text);
             row.appendChild(revoke);
             list.appendChild(row);
           });
+          if (tokens.length > 1) {
+            var all = el("button", "ops-btn ops-btn-sm", "Revoke all keys");
+            all.type = "button";
+            var allArmed = false;
+            all.addEventListener("click", function () {
+              if (!allArmed) {
+                allArmed = true;
+                all.textContent = "Click again to revoke all";
+                setTimeout(function () { allArmed = false; all.textContent = "Revoke all keys"; }, 4000);
+                return;
+              }
+              all.disabled = true;
+              ctx.request("POST", "/tokens/revoke-all").then(function () {
+                ctx.toast("All keys revoked.");
+                load();
+              }, function (err) { all.disabled = false; allArmed = false; all.textContent = "Revoke all keys"; ctx.toast(actionError(err, "Couldn’t revoke them. Try again.")); });
+            });
+            list.appendChild(all);
+          }
           clear(addArea);
           if (tokens.length >= MAX_KEYS) {
             addArea.appendChild(el("p", "ops-empty", "You have " + MAX_KEYS + " keys. Revoke one to make another."));
@@ -508,6 +599,158 @@
     });
   }
 
+  // ---- 5b. Settings, Your data ------------------------------------------------------
+  //
+  // What a person can do with the data on their own board: take a copy, see what has
+  // happened to it, sign out of every browser, or erase the whole board. The Worker
+  // asks for a recent sign-in for all but the activity list.
+
+  function signInAgain() {
+    var a = el("a", null, "Sign in again");
+    a.href = "https://api.barnyard.site/auth/login?return_to=" + encodeURIComponent(location.href);
+    return a;
+  }
+
+  function downloadJson(data, name) {
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = el("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  // A button that must be clicked twice within four seconds.
+  function twoClick(label, armedLabel, run) {
+    var b = el("button", "ops-btn ops-btn-sm", label);
+    b.type = "button";
+    var armed = false;
+    b.addEventListener("click", function () {
+      if (!armed) {
+        armed = true;
+        b.textContent = armedLabel;
+        setTimeout(function () { armed = false; b.textContent = label; }, 4000);
+        return;
+      }
+      armed = false;
+      b.textContent = label;
+      run(b);
+    });
+    return b;
+  }
+
+  function registerDataTab(ctx) {
+    if (!ctx.Shell || typeof ctx.Shell.registerTab !== "function") return;
+    ctx.Shell.registerTab({
+      id: "mydata", title: "Your data",
+      render: function (body) {
+        var fs = el("fieldset");
+        fs.appendChild(el("legend", null, "Your board’s data"));
+        var note = el("p", "hint", "Your board is private to you. Exporting, signing out everywhere and deleting need a sign-in from the last hour (or one that used a second factor). ");
+        note.appendChild(signInAgain());
+        note.appendChild(document.createTextNode(" · "));
+        var pl = el("a", null, "How your data is kept");
+        pl.href = "privacy.html";
+        note.appendChild(pl);
+        fs.appendChild(note);
+        var msg = el("p", "ops-form-msg");
+        msg.setAttribute("role", "status");
+        function say(text, withLink) { msg.textContent = text; if (withLink) { msg.appendChild(document.createTextNode(" ")); msg.appendChild(signInAgain()); } }
+        function failed(err, fallback) { say(actionError(err, fallback), err && err.code === "recent_sign_in_required"); }
+
+        function row(title, hint, control) {
+          var r = el("div", "ops-sec-row");
+          var t = el("div");
+          t.appendChild(el("b", null, title));
+          t.appendChild(el("span", "ops-dim", hint));
+          r.appendChild(t);
+          r.appendChild(control);
+          fs.appendChild(r);
+        }
+
+        var exp = el("button", "ops-btn ops-btn-sm", "Download");
+        exp.type = "button";
+        exp.addEventListener("click", function () {
+          exp.disabled = true;
+          say("Preparing…");
+          ctx.request("GET", "/export").then(function (data) {
+            exp.disabled = false;
+            downloadJson(data, "my-board-" + new Date().toISOString().slice(0, 10) + ".json");
+            say("Downloaded.");
+          }, function (err) { exp.disabled = false; failed(err, "Couldn’t export. Try again."); });
+        });
+        row("Export", "Every item and its history, as one file.", exp);
+
+        row("Sign out everywhere", "Ends every login you have on this hub, in every browser. Agent keys keep working (revoke them under Agent access).",
+          twoClick("Sign out everywhere", "Click again to confirm", function (b) {
+            b.disabled = true;
+            ctx.request("POST", "/signout-everywhere").then(function () {
+              say("Signed out everywhere. Log in again to continue.");
+            }, function (err) { b.disabled = false; failed(err, "Couldn’t do that. Try again."); });
+          }));
+
+        body.appendChild(fs);
+        body.appendChild(msg);
+
+        var act = el("fieldset");
+        act.appendChild(el("legend", null, "Recent activity"));
+        act.appendChild(el("p", "hint", "Sensitive things that happened on your board: keys, exports, sign-outs, refused saves. No board text is ever recorded here."));
+        var list = el("ul", "ops-activity");
+        list.appendChild(el("li", null, "Loading…"));
+        act.appendChild(list);
+        body.appendChild(act);
+        ctx.request("GET", "/audit?limit=20").then(function (res) {
+          clear(list);
+          var entries = (res && res.entries) || [];
+          if (!entries.length) list.appendChild(el("li", null, "Nothing yet."));
+          entries.forEach(function (e) {
+            var line = activityLine(e);
+            var li = el("li", line.denied ? "is-denied" : null);
+            var when = el("time", null, new Date(line.ts).toLocaleString());
+            li.appendChild(when);
+            li.appendChild(el("span", null, line.text));
+            list.appendChild(li);
+          });
+        }, function () { clear(list); list.appendChild(el("li", null, "Couldn’t load the activity list.")); });
+
+        var danger = el("fieldset");
+        danger.appendChild(el("legend", null, "Delete my board"));
+        danger.appendChild(el("p", "hint", "Erases every item, its history, your agent keys and this activity list, for good. Your own copy (Export) is the only way back. You can create a fresh board afterwards."));
+        var confirm = el("input", "ops-input");
+        confirm.type = "text";
+        confirm.autocomplete = "off";
+        confirm.placeholder = "delete my board";
+        confirm.setAttribute("aria-label", "Type delete my board to confirm");
+        var del = el("button", "ops-btn ops-btn-danger", "Delete my board");
+        del.type = "button";
+        var dmsg = el("p", "ops-form-msg");
+        dmsg.setAttribute("role", "status");
+        del.addEventListener("click", function () {
+          if (confirm.value.trim() !== "delete my board") { dmsg.textContent = "Type delete my board in the box to confirm."; confirm.focus(); return; }
+          del.disabled = true;
+          dmsg.textContent = "Deleting…";
+          ctx.request("POST", "/boards/me/delete", { confirm: "delete my board" }).then(function () {
+            ctx.toast("Your board was deleted.");
+            ctx.reload();
+          }, function (err) {
+            del.disabled = false;
+            dmsg.textContent = actionError(err, "Couldn’t delete it. Try again.");
+            if (err && err.code === "recent_sign_in_required") { dmsg.appendChild(document.createTextNode(" ")); dmsg.appendChild(signInAgain()); }
+          });
+        });
+        var wrap = el("div", "ops-remove-form");
+        wrap.appendChild(confirm);
+        wrap.appendChild(del);
+        danger.appendChild(wrap);
+        danger.appendChild(dmsg);
+        body.appendChild(danger);
+      }
+    });
+  }
+
   // ---- 6. wiring ---------------------------------------------------------------------
 
   // Called by ops.js once the board is on screen. Only a person with a board of
@@ -519,6 +762,7 @@
       root.insertBefore(host, root.firstChild);
       mountSetup(host, ctx, me);
       registerSettingsTab(ctx);
+      registerDataTab(ctx);
     }, function () { /* no panel is better than a broken one */ });
   }
 

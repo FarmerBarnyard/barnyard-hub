@@ -178,4 +178,37 @@ test("parseTargets trims, drops blanks and duplicates", function () {
   assert.deepStrictEqual(ops.parseTargets(undefined), []);
 });
 
+test("errorMessage: a refused secret names the field and kind, never the text", function () {
+  var msg = ops.errorMessage({ status: 422, code: "secret_detected", field: "details", kind: "github_token" });
+  assert.ok(/details/.test(msg) && /GitHub token/.test(msg) && /password manager/.test(msg));
+  assert.ok(/next step/.test(ops.errorMessage({ code: "secret_detected", field: "next", kind: "credential" })));
+  assert.ok(/password or key/.test(ops.errorMessage({ code: "secret_detected", field: "unknown", kind: "never-heard-of-it" })), "an unknown kind still reads sensibly");
+});
+
+test("errorMessage: the new refusals come before the generic 401/403 wording", function () {
+  assert.ok(/recent sign-in/.test(ops.errorMessage({ status: 403, code: "recent_sign_in_required" })));
+  assert.ok(/signed out/.test(ops.errorMessage({ status: 401, code: "session_revoked" })));
+  assert.ok(/expired/.test(ops.errorMessage({ status: 401, code: "key_expired" })));
+  assert.ok(/read-only/.test(ops.errorMessage({ status: 403, code: "read_only_key" })));
+  assert.ok(/exactly as shown/.test(ops.errorMessage({ status: 400, code: "confirm_required" })));
+  assert.ok(/not by an agent/.test(ops.errorMessage({ status: 403, code: "session_required" })));
+  // and the old wording is unchanged
+  assert.ok(/session has expired/.test(ops.errorMessage({ status: 401, code: null })));
+  assert.ok(/can’t change the board/.test(ops.errorMessage({ status: 403, code: "forbidden" })));
+  assert.ok(/Not saved \(title too long\)/.test(ops.errorMessage({ status: 400, code: "title_too_long" })));
+  assert.ok(/reach the server/.test(ops.errorMessage(new Error("network"))));
+});
+
+test("piiText names each kind of personal data", function () {
+  assert.strictEqual(ops.piiText(["email", "phone"]), "an email address, a phone number");
+  assert.strictEqual(ops.piiText(["tfn", "medicare", "card", "ssn"]), "a tax file number, a Medicare number, a card number, a social security number");
+  assert.strictEqual(ops.piiText(["mystery"]), "mystery");
+  assert.strictEqual(ops.piiText([]), "");
+});
+
+test("a redacted entry reads sensibly in the log and the live feed", function () {
+  var it = item({ title: "[redacted]" });
+  assert.strictEqual(ops.describeEvent({ actor: "you", kind: "redacted", changes: {} }, it), "You redacted “[redacted]”");
+});
+
 console.log("\n" + passed + " tests passed");

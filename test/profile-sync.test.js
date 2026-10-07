@@ -298,6 +298,40 @@ test("a rejected save (400/413) is not retried", async function () {
   f.done();
 });
 
+test("a used-up daily quota (429 daily_limit) is an error, not something to retry", async function () {
+  var f = fresh({ state: { rev: 3, owner: OWNER_A }, respond: function (m) { return m === "PUT" ? { status: 429, json: { error: "daily_limit" } } : ok(profile({ settings: {} })); } });
+  await f.Theme.sync.pull();
+  f.Theme.set({ theme: "navy" });
+  await f.Theme.sync.flush();
+  assert.strictEqual(f.Theme.sync.status(), "error");
+  assert.strictEqual(f.live().length, 0, "no retry timer");
+  assert.strictEqual(f.puts().length, 1);
+  assert.strictEqual(f.state().dirty, true, "the change is kept for tomorrow");
+  f.done();
+});
+
+test("any other 429 is still retried", async function () {
+  var f = fresh({ state: { rev: 3, owner: OWNER_A }, respond: function (m) { return m === "PUT" ? { status: 429, json: {} } : ok(profile({ settings: {} })); } });
+  await f.Theme.sync.pull();
+  f.Theme.set({ theme: "navy" });
+  await f.Theme.sync.flush();
+  assert.strictEqual(f.Theme.sync.status(), "retrying");
+  assert.strictEqual(f.live().length, 1);
+  f.done();
+});
+
+test("the Stocks site never calls the profile service (it is not a login origin)", async function () {
+  var f = fresh({ host: "stocks.barnyard.site", respond: function () { return ok(profile()); } });
+  f.Theme.sync.start();
+  await f.Theme.sync.pull();
+  await f.Theme.sync.flush();
+  f.Theme.set({ theme: "navy" });
+  await f.Theme.sync.flush();
+  assert.strictEqual(f.calls.length, 0, "no request to api.barnyard.site at all");
+  assert.strictEqual(f.Theme.sync.status(), "off");
+  f.done();
+});
+
 test("if the session ends mid-save the status becomes signed-out and the change stays unsent", async function () {
   var f = fresh({ state: { rev: 3, owner: OWNER_A }, respond: function (m) { return m === "PUT" ? { status: 401, json: {} } : ok(profile({ settings: {} })); } });
   await f.Theme.sync.pull();

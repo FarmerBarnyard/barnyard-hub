@@ -8,6 +8,7 @@ Files in this folder are public, static and contain no secrets. They are what th
 | `ops-board.sh` | Helper for macOS and Linux (bash and curl). Save as `~/.claude/ops-board.sh`. |
 | `agent-brief.md` | The instructions your Claude follows to keep the board up to date. Paste into your Claude Code's `CLAUDE.md` (or its memory). |
 | `populate-prompt.md` | A prompt to paste once, so your Claude fills the board from your own projects. |
+| `SHA256SUMS` | The SHA-256 of each file above. The board's setup panel gives a one-line check that your downloaded helper matches the copy published in the repository on GitHub. |
 
 ## Set up
 
@@ -19,7 +20,8 @@ Files in this folder are public, static and contain no secrets. They are what th
 
 ## Good to know
 
-- **The key** belongs to one board, stays valid until you revoke it (Settings, Agent access, Revoke), and acts as "Claude" on your board only. It cannot create keys or touch anyone else's board. Keep it out of repositories, chats and screenshots. If it leaks, revoke it and make a new one.
+- **The key** belongs to one board, works for the time you chose (30 days, 90 days or a year; make a new one when it runs out) or until you revoke it (Settings, Agent access, Revoke), and acts as "Claude" on your board only. A read-only key can look but not change anything. It cannot create keys or touch anyone else's board. Keep it out of repositories, chats and screenshots. If it leaks, revoke it and make a new one.
 - **Several computers:** make one key per computer (up to three) so you can revoke one without breaking the others.
 - **Settings you can change** without editing the scripts: set `OPS_BOARD_TOKEN_FILE` to keep the key somewhere else, or `OPS_BOARD_URL` to point the helper at a different address.
-- **Limits:** about 60 changes a minute per board, 1,000 items, and the change log stops growing at 20,000 entries. Nothing is ever deleted from the board.
+- **Limits:** about 60 changes a minute per board, 1,000 items, and the change log stops growing at 20,000 entries. Your Claude cannot delete anything; you can redact or delete an item, or your whole board, yourself (Settings, Your data).
+- **What the board accepts:** text that looks like a password or key is refused, and personal details (emails, phone numbers, card and ID numbers) are accepted but flagged for you to clean up. The helper only talks to `https://` addresses.

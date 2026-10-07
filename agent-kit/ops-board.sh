@@ -35,6 +35,16 @@ OPS_BOARD_URL="${OPS_BOARD_URL:-https://api.barnyard.site/ops}"
 OPS_BOARD_URL="${OPS_BOARD_URL%/}"
 OPS_BOARD_TOKEN_FILE="${OPS_BOARD_TOKEN_FILE:-$HOME/.claude/ops-board-token}"
 
+# The key goes in an Authorization header on every call, so never send it over plain
+# http. (localhost is allowed for testing a board running on your own computer.)
+case "$OPS_BOARD_URL" in
+  https://*|http://localhost|http://localhost[:/]*|http://127.0.0.1|http://127.0.0.1[:/]*) ;;
+  *)
+    echo "OPS_BOARD_URL must start with https:// (got '$OPS_BOARD_URL'). The helper will not send your key over an unencrypted connection." >&2
+    return 1 2>/dev/null || exit 1
+    ;;
+esac
+
 _ops_token() {
   if [ ! -r "$OPS_BOARD_TOKEN_FILE" ]; then
     echo "No key file at $OPS_BOARD_TOKEN_FILE. Make a key on the Ops board (Settings, Agent access) and save it there." >&2
