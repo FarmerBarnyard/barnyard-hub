@@ -486,10 +486,59 @@
     });
   }
 
+  // ---- account tab (one-time setup help) ----------------------------------------
+  //
+  // Per-person boards need the hub owner to be identified. The owner is recognised
+  // by account id (never email), which the Worker keeps in the secret OPS_OWNER_SUB.
+  // This tab shows the signed-in person their own id, with a Copy button, until
+  // that secret is set; after that it just says who they are.
+
+  function registerAccountTab() {
+    if (!window.BarnyardShell) return;
+    window.BarnyardShell.registerTab({
+      id: "account", title: "Account",
+      render: function (body) {
+        var fs = h("fieldset");
+        fs.appendChild(h("legend", null, "Account"));
+        var status = h("p", "hint", "Checking…");
+        fs.appendChild(status);
+        var holder = h("div");
+        fs.appendChild(holder);
+        body.appendChild(fs);
+        var s = window.BarnyardTheme.who && window.BarnyardTheme.who.get();
+        if (!s || !s.authenticated) { status.textContent = "Sign in to see your account."; return; }
+        if (s.owner === true) { status.textContent = "You are the hub owner. Per-person boards are on."; return; }
+        if (s.owner === false) { status.textContent = "You are signed in as a guest. You have your own board; the hub owner’s is separate."; return; }
+        status.textContent = "Per-person boards are not switched on yet. To switch them on, copy your account id below and save it in the Worker as the secret OPS_OWNER_SUB (Cloudflare dashboard, Workers, barnyard-live-prices, Settings, Variables and Secrets, type Secret). Until then everyone in the hub group shares one board, so don’t add anyone else to it yet.";
+        fetch("https://api.barnyard.site/auth/whoami", { credentials: "include", referrerPolicy: "no-referrer" }).then(function (r) {
+          return r.ok ? r.json() : null;
+        }).then(function (j) {
+          if (!j || typeof j.sub !== "string" || !j.sub) { status.textContent = "Couldn’t read your account id. Sign in again and reopen Settings."; return; }
+          var code = h("pre", "acct-id", j.sub);
+          // shell.css is shared byte-for-byte with the other sites, so this one element
+          // is styled here, through the CSSOM (the page's CSP forbids style attributes).
+          [["font-family", "var(--font-mono)"], ["font-size", "13px"], ["padding", "10px 12px"], ["margin", "10px 0"], ["border", "1px solid var(--line)"],
+            ["border-radius", "8px"], ["background", "var(--panel-2)"], ["color", "var(--fg-strong)"], ["white-space", "pre-wrap"], ["overflow-wrap", "anywhere"]
+          ].forEach(function (p) { code.style.setProperty(p[0], p[1]); });
+          var copy = h("button", "btn btn-sm", "Copy account id");
+          copy.type = "button";
+          copy.addEventListener("click", function () {
+            var done = function (ok) { copy.textContent = ok ? "Copied" : "Select and copy"; setTimeout(function () { copy.textContent = "Copy account id"; }, 2000); };
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(j.sub).then(function () { done(true); }, function () { done(false); });
+            else done(false);
+          });
+          holder.appendChild(code);
+          holder.appendChild(copy);
+        }, function () { status.textContent = "Couldn’t reach the server. Try again."; });
+      }
+    });
+  }
+
   // ---- boot -----------------------------------------------------------------
 
   function boot() {
     registerLayoutTab();
+    registerAccountTab();
     applyLayout();
     window.BarnyardTheme.onChange(applyLayout);
     // Once it is known who is signed in, hide the owner's own widgets from a guest.
