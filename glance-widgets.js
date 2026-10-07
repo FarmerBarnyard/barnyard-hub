@@ -725,9 +725,18 @@
   // than a user-initiated one (initial page load, "Try again" click) --
   // subject to the staleness threshold above; an explicit/foreground fetch
   // always goes through.
+  // The calendar is the hub owner's own (behind their Cloudflare Access login), so
+  // a different person who signs in has nothing to fetch: the widget is hidden for
+  // them (overview.js) and this call is skipped rather than made to fail.
+  function calendarIsForSomeoneElse() {
+    var T = typeof window !== "undefined" ? window.BarnyardTheme : null;
+    return !!(T && T.who && T.who.isGuest(T.who.get()));
+  }
+
   function fetchCalendarEvents(opts) {
     var silent = !!(opts && opts.silent);
     if (calendarFetchInFlight) return;
+    if (calendarIsForSomeoneElse()) return;
     if (
       silent &&
       lastCalendarLoadAt !== null &&
@@ -950,7 +959,17 @@
       }
     });
     scheduleMidnightRefresh();
-    fetchCalendarEvents();
+    // Wait until it is known who is signed in (a moment after load), so a guest's
+    // browser never calls the owner's calendar. Signed out is "known" too.
+    var T = typeof window !== "undefined" ? window.BarnyardTheme : null;
+    if (T && T.who && !T.who.get()) {
+      var first = true;
+      var go = function () { if (first) { first = false; fetchCalendarEvents(); } };
+      T.who.onChange(go);
+      setTimeout(go, 4000); // if the session check never answers, behave as before
+    } else {
+      fetchCalendarEvents();
+    }
   }
 
   // Guarded on `document` existing (rather than assuming a browser) so this
