@@ -46,7 +46,8 @@
   var OWNER_TITLE = { claude: "With Claude", you: "With You" };
   var EVENT_VERB = {
     created: "added this", proposed: "proposed this", updated: "changed this", moved: "moved this", note: "added a note",
-    done: "marked this done", reopened: "reopened this", approved: "approved this proposal", rejected: "rejected this proposal"
+    done: "marked this done", reopened: "reopened this", approved: "approved this proposal", rejected: "rejected this proposal",
+    redacted: "redacted this"
   };
   var FIELD_TITLE = {
     title: "Title", lane: "Lane", status: "Status", category: "Category", owner: "Owner", priority: "Priority",
@@ -210,7 +211,7 @@
   // announcement text for a pushed change.
   var EVENT_TOAST = {
     created: "added", proposed: "proposed", updated: "updated", moved: "moved", note: "added a note to",
-    done: "finished", reopened: "reopened", approved: "approved", rejected: "rejected"
+    done: "finished", reopened: "reopened", approved: "approved", rejected: "rejected", redacted: "redacted"
   };
 
   function describeEvent(event, item) {
@@ -270,7 +271,8 @@
     relativeTime: relativeTime, openItems: openItems, computeStats: computeStats, sortForLane: sortForLane,
     matchesFilters: matchesFilters, filterItems: filterItems, facet: facet, upcoming: upcoming,
     describeChanges: describeChanges, describeEvent: describeEvent, reduceMessage: reduceMessage,
-    newer: newer, changedFields: changedFields, parseTargets: parseTargets
+    newer: newer, changedFields: changedFields, parseTargets: parseTargets,
+    errorMessage: errorMessage, piiText: piiText
   };
 
   // ---- 2. transport ---------------------------------------------------------
@@ -279,6 +281,9 @@
     var err = new Error((data && data.error) || "request_failed");
     err.status = res.status;
     err.code = (data && data.error) || null;
+    // secret_detected says which field and what kind of secret (never the text).
+    err.field = (data && data.field) || null;
+    err.kind = (data && data.kind) || null;
     return err;
   }
 
@@ -358,6 +363,9 @@
       finish: function (id, note) { return request("POST", "/items/" + id + "/finish", note ? { note: note } : {}); },
       reopen: function (id, lane) { return request("POST", "/items/" + id + "/reopen", { lane: lane }); },
       decide: function (id, approve, note) { return request("POST", "/items/" + id + "/decide", note ? { approve: approve, note: note } : { approve: approve }); },
+      // Taking an item's data out; the item's own id is the typed confirmation.
+      redact: function (id) { return request("POST", "/items/" + id + "/redact", { confirm: id }); },
+      remove: function (id) { return request("POST", "/items/" + id + "/delete", { confirm: id }); },
       connect: openStream
     };
   }
@@ -375,11 +383,51 @@
 
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
+  var SECRET_KIND = {
+    private_key: "a private key", agent_key: "an agent key", bearer_token: "an access token", aws_key: "a cloud key",
+    github_token: "a GitHub token", slack_token: "a Slack token", google_key: "a Google key", stripe_key: "a payment key",
+    api_key: "an API key", jwt: "a login token", url_password: "a password in a web address", credential: "a password or key"
+  };
+  var FIELD_NAME = { title: "title", next: "next step", details: "details", targets: "targets", note: "note" };
+
+  // What to tell the person when the server refuses a write. Specific refusals come
+  // first (they share status codes with the generic ones below).
   function errorMessage(err) {
+    var code = err && err.code;
+    if (code === "secret_detected") {
+      return "Not saved: the " + (FIELD_NAME[err.field] || "text") + " looks like it contains " + (SECRET_KIND[err.kind] || "a password or key") +
+        ". Take it out and keep it in a password manager, then save again.";
+    }
+    if (code === "recent_sign_in_required") return "For safety this needs a recent sign-in. Sign in again, then try again.";
+    if (code === "session_revoked") return "You were signed out of this board. Log in again.";
+    if (code === "key_expired") return "That agent key has expired. Make a new one in Settings.";
+    if (code === "read_only_key") return "That agent key is read-only.";
+    if (code === "confirm_required") return "Type the confirmation exactly as shown.";
+    if (code === "session_required") return "This can only be done by you, signed in, not by an agent.";
     if (err && err.status === 401) return "Your session has expired. Log in again.";
     if (err && err.status === 403) return "Your account can’t change the board.";
     if (err && err.code) return "Not saved (" + err.code.replace(/_/g, " ") + ").";
     return "Couldn’t reach the server. Try again.";
+  }
+
+  var PII_TEXT = {
+    email: "an email address", phone: "a phone number", card: "a card number", tfn: "a tax file number",
+    medicare: "a Medicare number", ssn: "a social security number"
+  };
+
+  function piiText(kinds) {
+    var out = [];
+    for (var i = 0; i < kinds.length; i++) out.push(PII_TEXT[kinds[i]] || kinds[i]);
+    return out.join(", ");
+  }
+
+  // A link that starts a fresh login and returns here (the Worker checks return_to
+  // against its own list of allowed sites).
+  function signInAgainLink() {
+    var a = document.createElement("a");
+    a.href = "https://api.barnyard.site/auth/login?return_to=" + encodeURIComponent(location.href);
+    a.textContent = " Sign in again";
+    return a;
   }
 
   function mount(root, transport) {
@@ -675,6 +723,7 @@
       var meta = el("span", "ops-tile-meta");
       meta.appendChild(statusDot(it.status));
       if (it.priority === "high") meta.appendChild(chip("High priority", "ops-chip-high"));
+      if (it.pii && it.pii.length) meta.appendChild(chip("Personal data", "ops-chip-pii"));
       tile.appendChild(meta);
       if (it.next) tile.appendChild(el("span", "ops-tile-next", it.next));
       var foot = el("span", "ops-tile-foot");
@@ -954,6 +1003,11 @@
       noticeBox.hidden = true;
       drawer.appendChild(noticeBox);
 
+      if (item && item.pii && item.pii.length) {
+        drawer.appendChild(el("div", "ops-banner ops-banner-pii",
+          "This item contains personal data (" + piiText(item.pii) + "). Keep this board to work notes. Use “Remove data” at the bottom to redact it for good."));
+      }
+
       if (item && item.proposal) {
         var prop = el("div", "ops-banner", "This is a proposal. Approve it to add it to the backlog, or reject it.");
         var pa = el("div", "ops-banner-actions");
@@ -1086,10 +1140,65 @@
         logBox.appendChild(el("li", "ops-empty", "Loading…"));
         drawer.appendChild(logHead);
         drawer.appendChild(logBox);
+        drawer.appendChild(removeSection(item));
       } else {
         logBox = null;
       }
       setDrawerEditable(state.connection !== "offline");
+    }
+
+    // "Remove data": redact an item (clear it and wipe its whole history) or delete it.
+    // Both are permanent and need a recent sign-in; the item's id is typed to confirm.
+    function removeSection(item) {
+      var box = el("details", "ops-remove");
+      box.appendChild(el("summary", null, "Remove data"));
+      box.appendChild(el("p", "ops-remove-hint", "Redact clears this item’s text and wipes its whole change log, leaving an empty tile. Delete removes the item and its history. Neither can be undone, and both need a recent sign-in."));
+      var form = el("form", "ops-remove-form");
+      var typed = el("input", "ops-input");
+      typed.type = "text";
+      typed.autocomplete = "off";
+      typed.placeholder = item.id;
+      typed.setAttribute("aria-label", "Type " + item.id + " to confirm");
+      var redactBtn = el("button", "ops-btn", "Redact");
+      var deleteBtn = el("button", "ops-btn ops-btn-danger", "Delete");
+      redactBtn.type = deleteBtn.type = "button";
+      var msg = el("p", "ops-form-msg");
+      msg.setAttribute("role", "status");
+      function fail(err) {
+        redactBtn.disabled = deleteBtn.disabled = false;
+        msg.textContent = errorMessage(err);
+        if (err && err.code === "recent_sign_in_required") msg.appendChild(signInAgainLink());
+      }
+      function run(kind) {
+        if (typed.value.trim() !== item.id) { msg.textContent = "Type " + item.id + " in the box to confirm."; typed.focus(); return; }
+        redactBtn.disabled = deleteBtn.disabled = true;
+        msg.textContent = "Working…";
+        if (kind === "redact") {
+          transport.redact(item.id).then(function (res) {
+            applyReply(res);
+            drawerDirty = false;
+            buildDrawer();
+            loadLog(item.id);
+            toast("Redacted.");
+          }).catch(fail);
+        } else {
+          transport.remove(item.id).then(function () {
+            delete state.items[item.id];
+            closeDrawer();
+            render();
+            toast("Item deleted.");
+          }).catch(fail);
+        }
+      }
+      redactBtn.addEventListener("click", function () { run("redact"); });
+      deleteBtn.addEventListener("click", function () { run("delete"); });
+      form.addEventListener("submit", function (ev) { ev.preventDefault(); });
+      form.appendChild(typed);
+      form.appendChild(redactBtn);
+      form.appendChild(deleteBtn);
+      box.appendChild(form);
+      box.appendChild(msg);
+      return box;
     }
 
     // The reply to one of this tab's own writes: fold it in now (the WebSocket

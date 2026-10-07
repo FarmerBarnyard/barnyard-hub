@@ -95,6 +95,15 @@ test("clean: keeps only the three fields, tidies apps, never trusts odd shapes",
 
 // ---- loading it -------------------------------------------------------------------
 
+test("load: the Stocks site never asks for the session (it is not a login origin)", async function () {
+  var f = fresh({ host: "stocks.barnyard.site", respond: function () { return ok(GUEST); } });
+  f.Theme.who.load();
+  await f.flush();
+  assert.strictEqual(f.calls.length, 0);
+  assert.strictEqual(f.Theme.who.get(), null);
+  f.done();
+});
+
 test("load: a guest session is read, cleaned, remembered for a minute and announced", async function () {
   var f = fresh({ respond: function () { return ok(GUEST); } });
   f.Theme.who.load();

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<title>Privacy &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css">
+<link rel="stylesheet" href="privacy.css">
+<script src="themes.js"></script>
+</head>
+<body class="privacy-page">
+<main class="privacy">
+  <p class="privacy-back"><a href="ops.html">Back to the Ops board</a></p>
+  <h1>Privacy</h1>
+  <p class="privacy-lead">A plain account of what this hub keeps about you, where, and how to remove it. It is a personal project run by one person for friends and colleagues they have invited, not a commercial service.</p>
+
+  <h2>Who runs it</h2>
+  <p>The person who invited you runs this hub (the &ldquo;owner&rdquo;). Ask them about anything here. The hub is a set of web pages and one small service (a Cloudflare Worker) that signs you in, saves your settings and holds your Ops board.</p>
+
+  <h2>What it keeps</h2>
+  <ul>
+    <li><strong>Your sign-in.</strong> You sign in with your Microsoft account through the owner&rsquo;s Entra tenant. The hub receives your account id, name and email address and puts them in a signed cookie that lasts 12 hours. Whether you used a second factor is noted so that sensitive actions can ask for it.</li>
+    <li><strong>Your saved appearance settings</strong> (theme, density and so on), kept under a one-way code made from your account id, so they follow you between browsers.</li>
+    <li><strong>Your Ops board</strong>, if you create one: the items, notes and history you or your own Claude add. It is private to you. Other people on the hub cannot see it.</li>
+    <li><strong>Agent keys</strong> you make for your own Claude. Only a fingerprint of each key is kept, never the key.</li>
+    <li><strong>A short activity list</strong> for your board: when keys were made, the board was exported, you signed out everywhere, or a save was refused. It never contains the text of your items.</li>
+    <li><strong>Campaign notes</strong>, if you use Campaign: kept in your own space.</li>
+    <li><strong>The owner&rsquo;s list of boards:</strong> your name and email, when your board was made, how many items it has and when it was last used. There is no screen that lets the owner read your items. The owner does run the Cloudflare account that stores them, so please keep to what you would be comfortable with that in mind.</li>
+  </ul>
+
+  <h2>What it asks you not to put on a board</h2>
+  <p>A board is for work notes. It refuses text that looks like a password, key or token, and it flags (but accepts) other people&rsquo;s emails, phone numbers, card numbers and ID numbers so you can clean them up. Please keep other people&rsquo;s personal details off it.</p>
+
+  <h2>Where it is kept</h2>
+  <p>On Cloudflare&rsquo;s network. Your data may be stored and processed outside Australia, including in the United States and Europe. New boards ask to be stored in the Oceania region, but Cloudflare treats that as a preference, not a promise, and settings and sign-in records are kept on its global storage. If that is not acceptable for what you want to do, do not use the hub for it.</p>
+
+  <h2>Your own Claude</h2>
+  <p>If you connect your own Claude to your board, it reads and writes your board using the key you gave it. What your Claude does with that text is between you and the company that runs it; check their terms. The hub itself does not send your board to any AI service.</p>
+
+  <h2>How long it is kept, and how to remove it</h2>
+  <p>Nothing is deleted on a timer: your data stays until you remove it. In <strong>Settings, Your data</strong> and on each item you can:</p>
+  <ul>
+    <li><strong>Export</strong> everything on your board as one file.</li>
+    <li><strong>Redact</strong> an item: its text and its whole change log are wiped, leaving an empty tile.</li>
+    <li><strong>Delete</strong> an item and its history.</li>
+    <li><strong>Sign out everywhere</strong>, and <strong>revoke</strong> agent keys at any time.</li>
+    <li><strong>Delete my board</strong>: erases the whole board, its keys and its activity list.</li>
+  </ul>
+  <p>You can also ask the owner to remove you, which closes your board and can erase it. Cloudflare keeps up to 30 days of history for recovery, so removed data can remain in that history until it ages out. Short-lived technical logs (3 days) record only event types and a coarse network address, never your text.</p>
+
+  <h2>If something goes wrong</h2>
+  <p>If there is a breach that is likely to cause you serious harm, you will be told as soon as it is understood, in line with Australia&rsquo;s Notifiable Data Breaches scheme, along with what it affects and what to do.</p>
+</main>
+</body>
+</html>

@@ -34,6 +34,11 @@
 #>
 
 $script:OpsBase = if ($env:OPS_BOARD_URL) { $env:OPS_BOARD_URL.TrimEnd("/") } else { "https://api.barnyard.site/ops" }
+# The key goes in an Authorization header on every call, so never send it over plain
+# http. (localhost is allowed for testing a board running on your own computer.)
+if ($script:OpsBase -notmatch '^https://' -and $script:OpsBase -notmatch '^http://(localhost|127\.0\.0\.1)(:\d+)?(/|$)') {
+  throw "OPS_BOARD_URL must start with https:// (got '$script:OpsBase'). The helper will not send your key over an unencrypted connection."
+}
 $script:OpsTokenFile = if ($env:OPS_BOARD_TOKEN_FILE) { $env:OPS_BOARD_TOKEN_FILE } else { Join-Path $HOME ".claude/ops-board-token" }
 
 function Get-OpsToken {
