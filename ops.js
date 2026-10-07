@@ -40,6 +40,7 @@
     monitoring: "Monitoring", watching: "Watching", decision_needed: "Decision needed", scheduled: "Scheduled",
     planned: "Planned", idea: "Idea", deferred: "Deferred", blocked: "Blocked", done: "Done", rejected: "Rejected"
   };
+  var STATUS_TONE = { investigating: "info", building: "info", reviewing: "info", soaking: "ok", monitoring: "ok", watching: "ok", decision_needed: "attn", scheduled: "attn", planned: "hollow", idea: "hollow", deferred: "hollow", blocked: "alert" };
   var STATUS_ORDER = ["investigating", "building", "reviewing", "soaking", "monitoring", "watching", "decision_needed", "scheduled", "planned", "idea", "deferred", "blocked", "done", "rejected"];
   var CATEGORIES = ["backend", "frontend", "agent", "security", "infrastructure", "maintenance", "docs", "data", "other"];
   var OWNER_TITLE = { claude: "With Claude", you: "With You" };
@@ -401,16 +402,26 @@
     var returnFocusId = null;
 
     // -- skeleton
+    var Shell = typeof window !== "undefined" ? window.BarnyardShell : null;
+    var Theme = typeof window !== "undefined" ? window.BarnyardTheme : null;
+    var saved = Theme ? Theme.get() : { opsLayout: "board", foldBacklog: null };
+    state.layout = saved.opsLayout === "list" ? "list" : "board";
+    state.folded = { backlog: saved.foldBacklog === null ? window.innerWidth < 1500 : !!saved.foldBacklog };
+    state.moreFilters = false;
     clear(root);
-    var statusPill = el("span", "ops-live ops-live-connecting", "Connecting…");
-    statusPill.setAttribute("role", "status");
+    var connBanner = el("div", "ops-conn");
+    connBanner.setAttribute("role", "status");
+    connBanner.hidden = true;
     var toolbar = el("div", "ops-toolbar");
     var tabs = el("div", "ops-tabs");
     tabs.setAttribute("role", "tablist");
-    var addBtn = el("button", "ops-btn ops-btn-primary", "+ Add item");
+    var layoutToggle = el("div", "ops-tabs");
+    layoutToggle.setAttribute("role", "group");
+    layoutToggle.setAttribute("aria-label", "Layout");
+    var addBtn = el("button", "ops-btn ops-btn-primary", "Add item");
     addBtn.type = "button";
     var toolbarRight = el("div", "ops-toolbar-right");
-    toolbarRight.appendChild(statusPill);
+    toolbarRight.appendChild(layoutToggle);
     toolbarRight.appendChild(addBtn);
     toolbar.appendChild(tabs);
     toolbar.appendChild(toolbarRight);
@@ -424,6 +435,7 @@
     drawer.setAttribute("aria-modal", "true");
     drawer.setAttribute("aria-hidden", "true");
     drawer.tabIndex = -1;
+    root.appendChild(connBanner);
     root.appendChild(toolbar);
     root.appendChild(content);
     root.appendChild(toasts);
@@ -442,12 +454,27 @@
       setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 5000);
     }
 
-    // -- connection pill
+    // -- connection state: the shell's Live pill, a banner when it matters, and
+    // no editing while offline (the writes would only fail)
     function setConnection(status) {
       state.connection = status;
-      var labels = { live: "Live", connecting: "Connecting…", reconnecting: "Reconnecting…", offline: "Offline" };
-      statusPill.className = "ops-live ops-live-" + status;
-      statusPill.textContent = labels[status] || status;
+      if (Shell) Shell.setConnection(status);
+      var off = status === "offline";
+      connBanner.hidden = !(status === "reconnecting" || off);
+      connBanner.className = "ops-conn is-" + status;
+      connBanner.textContent = off
+        ? "You’re offline. Editing is paused until the connection returns."
+        : "Connection lost. What you see may be out of date. Reconnecting…";
+      addBtn.disabled = off;
+      setDrawerEditable(!off);
+    }
+
+    function setDrawerEditable(on) {
+      var nodes = drawer.querySelectorAll("input, select, textarea, button");
+      for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].classList.contains("ops-close")) continue;
+        nodes[i].disabled = !on;
+      }
     }
 
     // -- applying data
@@ -505,7 +532,16 @@
       transport.done().then(function (res) { state.doneItems = res.items; if (state.tab === "done") render(); }).catch(function () { /* shown as empty */ });
     }
 
-    // -- rendering: tabs, stats, filters, lanes
+    // -- rendering: tabs, summary, filters, lanes
+    var CHEVRON = function () { return Shell ? Shell.controls.svg("down") : document.createTextNode("▾"); };
+
+    function statusDot(status) {
+      var s = el("span", "st " + (STATUS_TONE[status] || ""));
+      s.appendChild(el("i"));
+      s.appendChild(document.createTextNode(STATUS_TITLE[status] || status));
+      return s;
+    }
+
     function renderTabs() {
       clear(tabs);
       var defs = [
@@ -514,7 +550,7 @@
         { key: "done", label: "Completed", count: state.doneCount }
       ];
       defs.forEach(function (d) {
-        var b = el("button", "ops-tab" + (state.tab === d.key ? " is-active" : ""), d.label);
+        var b = el("button", "ops-tab", d.label);
         b.type = "button";
         b.setAttribute("role", "tab");
         b.setAttribute("aria-selected", state.tab === d.key ? "true" : "false");
@@ -526,21 +562,33 @@
         });
         tabs.appendChild(b);
       });
+      clear(layoutToggle);
+      layoutToggle.hidden = state.tab !== "work";
+      [["board", "Board"], ["list", "List"]].forEach(function (d) {
+        var b = el("button", "ops-tab", d[1]);
+        b.type = "button";
+        b.setAttribute("aria-pressed", state.layout === d[0] ? "true" : "false");
+        b.addEventListener("click", function () {
+          state.layout = d[0];
+          if (Theme) Theme.set({ opsLayout: d[0] });
+          render();
+        });
+        layoutToggle.appendChild(b);
+      });
     }
 
-    function renderStats(now, today) {
+    // One line of counts instead of a row of tiles: the lanes already show the
+    // same numbers, so this only says what needs attention.
+    function renderSummary(now, today) {
       var s = computeStats(itemList(), now, today);
-      var defs = [
-        ["In progress", s.in_progress, ""], ["Soaking", s.soaking, ""], ["Waiting on you", s.waiting, s.waiting ? "is-attention" : ""],
-        ["Backlog", s.backlog, ""], ["Due in 7 days", s.dueSoon, s.dueSoon ? "is-warn" : ""],
-        ["Overdue", s.overdue, s.overdue ? "is-alert" : ""], ["Aged 30+ days", s.aged, s.aged ? "is-warn" : ""]
-      ];
-      var row = el("div", "ops-stats");
-      defs.forEach(function (d) {
-        var box = el("div", "ops-stat " + d[2]);
-        box.appendChild(el("div", "ops-stat-n", String(d[1])));
-        box.appendChild(el("div", "ops-stat-l", d[0]));
-        row.appendChild(box);
+      var row = el("div", "ops-summary");
+      [[s.in_progress, "in progress", ""], [s.soaking, "soaking", ""], [s.waiting, "waiting on you", "is-attention"],
+       [s.backlog, "in the backlog", ""], [s.overdue, "overdue", "is-alert"], [s.aged, "older than 30 days", ""]].forEach(function (d) {
+        if (!d[0] && d[2] !== "is-attention") return;
+        var span = el("span", d[2]);
+        span.appendChild(el("b", null, String(d[0])));
+        span.appendChild(document.createTextNode(d[1]));
+        row.appendChild(span);
       });
       return row;
     }
@@ -552,45 +600,58 @@
       render();
     }
 
+    function filterRow(items, group, wrap) {
+      var values = facet(items, group);
+      if (!values.length) return;
+      var row = el("div", "ops-filter-row");
+      row.setAttribute("role", "group");
+      row.setAttribute("aria-label", "Filter by " + group);
+      values.forEach(function (v) {
+        var active = state.filters[group].indexOf(v.value) !== -1;
+        var label = group === "status" ? (STATUS_TITLE[v.value] || v.value) : v.value;
+        var b = el("button", "ops-filter", label.replace(/_/g, " "));
+        b.type = "button";
+        b.setAttribute("aria-pressed", active ? "true" : "false");
+        b.appendChild(el("span", "ops-filter-n", String(v.count)));
+        b.addEventListener("click", function () { toggleFilter(group, v.value); });
+        row.appendChild(b);
+      });
+      wrap.appendChild(row);
+    }
+
+    // Category is always shown; target and status sit behind "More filters" so
+    // the board stays near the top of the page.
     function renderFilters(items) {
       var wrap = el("div", "ops-filters");
-      var any = false;
-      [["category", "Category"], ["target", "Target"], ["status", "Status"]].forEach(function (g) {
-        var values = facet(items, g[0]);
-        if (!values.length) return;
-        var row = el("div", "ops-filter-row");
-        row.appendChild(el("span", "ops-filter-label", g[1]));
-        values.forEach(function (v) {
-          var active = state.filters[g[0]].indexOf(v.value) !== -1;
-          if (active) any = true;
-          var label = g[0] === "status" ? (STATUS_TITLE[v.value] || v.value) : v.value;
-          var b = el("button", "ops-filter" + (active ? " is-active" : ""), label.replace(/_/g, " "));
-          b.type = "button";
-          b.setAttribute("aria-pressed", active ? "true" : "false");
-          b.appendChild(el("span", "ops-filter-n", String(v.count)));
-          b.addEventListener("click", function () { toggleFilter(g[0], v.value); });
-          row.appendChild(b);
-        });
-        wrap.appendChild(row);
-      });
-      var anyActive = state.filters.category.length + state.filters.target.length + state.filters.status.length > 0;
+      filterRow(items, "category", wrap);
+      var extra = state.filters.target.length + state.filters.status.length;
+      var more = el("button", "ops-btn ops-btn-quiet ops-btn-sm", state.moreFilters ? "Fewer filters" : "More filters" + (extra ? " (" + extra + ")" : ""));
+      more.type = "button";
+      more.setAttribute("aria-expanded", state.moreFilters ? "true" : "false");
+      more.addEventListener("click", function () { state.moreFilters = !state.moreFilters; render(); });
+      var controls = el("div", "ops-filter-controls");
+      controls.appendChild(more);
+      var anyActive = state.filters.category.length + extra > 0;
       if (anyActive) {
-        var reset = el("button", "ops-btn ops-btn-quiet", "Clear filters");
+        var reset = el("button", "ops-btn ops-btn-quiet ops-btn-sm", "Clear filters");
         reset.type = "button";
         reset.addEventListener("click", function () { state.filters = { category: [], target: [], status: [] }; render(); });
-        wrap.appendChild(reset);
+        controls.appendChild(reset);
       }
+      wrap.appendChild(controls);
+      if (state.moreFilters) { filterRow(items, "target", wrap); filterRow(items, "status", wrap); }
       return wrap;
     }
 
     function renderUpcoming(items, today) {
       var dated = upcoming(items, today).slice(0, 6);
-      var panel = el("section", "ops-panel");
-      var head = el("div", "ops-panel-head");
-      head.appendChild(el("h2", "ops-panel-title", "Coming up"));
-      head.appendChild(el("span", "ops-panel-sub", "Dated items, soonest first"));
+      if (!dated.length) return null;
+      var panel = el("section", "ops-upcoming-list");
+      panel.setAttribute("aria-label", "Coming up");
+      var head = el("div", "ops-section-head");
+      head.appendChild(el("h2", null, "Coming up"));
+      head.appendChild(el("span", "ops-sub", "Dated items, soonest first"));
       panel.appendChild(head);
-      if (!dated.length) { panel.appendChild(el("p", "ops-empty", "Nothing is dated.")); return panel; }
       dated.forEach(function (it) {
         var info = dueInfo(it.due, today);
         var row = el("button", "ops-upcoming");
@@ -607,58 +668,116 @@
     }
 
     function renderTile(it, now, today) {
-      var tile = el("button", "ops-tile" + (it.owner === "you" ? " is-yours" : "") + (it.priority === "high" ? " is-high" : "") + (state.flashed[it.id] ? " ops-flash" : ""));
+      var tile = el("button", "ops-tile" + (it.owner === "you" ? " is-yours" : "") + (state.flashed[it.id] ? " ops-flash" : ""));
       tile.type = "button";
       tile.setAttribute("data-id", it.id);
-      var top = el("span", "ops-tile-top");
-      top.appendChild(el("span", "ops-tile-title", it.title));
-      top.appendChild(chip((STATUS_TITLE[it.status] || it.status).toUpperCase(), "ops-chip-status status-" + it.status));
-      tile.appendChild(top);
-      var tags = el("span", "ops-tile-tags");
-      if (it.priority === "high") tags.appendChild(chip("high priority", "ops-chip-high"));
-      tags.appendChild(chip(it.category, "ops-chip-cat"));
-      it.targets.forEach(function (t) { tags.appendChild(chip(t, "ops-chip-target")); });
-      tile.appendChild(tags);
-      if (it.next) {
-        var next = el("span", "ops-tile-next");
-        next.appendChild(el("span", "ops-tile-next-label", "NEXT"));
-        next.appendChild(document.createTextNode(" " + it.next));
-        tile.appendChild(next);
-      }
+      tile.appendChild(el("span", "ops-tile-title", it.title));
+      var meta = el("span", "ops-tile-meta");
+      meta.appendChild(statusDot(it.status));
+      if (it.priority === "high") meta.appendChild(chip("High priority", "ops-chip-high"));
+      tile.appendChild(meta);
+      if (it.next) tile.appendChild(el("span", "ops-tile-next", it.next));
       var foot = el("span", "ops-tile-foot");
       var info = dueInfo(it.due, today);
-      foot.appendChild(el("span", "ops-tile-due" + (info ? " tone-" + info.tone : ""), info ? "DUE " + info.text : "No due date"));
+      if (info) foot.appendChild(el("span", "ops-due tone-" + info.tone, info.text.replace(" · ", ", ")));
+      else foot.appendChild(el("span", "ops-tile-added", "Added " + ageText(it.addedAt, now)));
       foot.appendChild(el("span", "ops-tile-owner", OWNER_TITLE[it.owner] || it.owner));
       tile.appendChild(foot);
-      var meta = el("span", "ops-tile-meta");
-      meta.appendChild(el("span", null, "ADDED " + shortDate(dateString(new Date(it.addedAt))) + " · " + ageText(it.addedAt, now)));
-      meta.appendChild(el("span", "ops-tile-open", "Details ›"));
-      tile.appendChild(meta);
       tile.addEventListener("click", function () { openDrawer(it.id, tile); });
       return tile;
+    }
+
+    function renderLane(lane, visible, open, now, today) {
+      var inLane = sortForLane(visible.filter(function (i) { return i.lane === lane.key; }));
+      var folded = !!state.folded[lane.key];
+      var col = el("section", "ops-lane lane-" + lane.key);
+      col.setAttribute("data-lane", lane.key);
+      col.setAttribute("aria-label", lane.title);
+      var head = el("div", "ops-lane-head");
+      var title = el("h2", "ops-lane-title", lane.title);
+      title.appendChild(el("span", "ops-lane-count", String(inLane.length)));
+      var fold = el("button", "ops-fold");
+      fold.type = "button";
+      fold.setAttribute("aria-expanded", folded ? "false" : "true");
+      fold.setAttribute("aria-label", (folded ? "Show " : "Hide ") + lane.title);
+      fold.appendChild(CHEVRON());
+      fold.addEventListener("click", function () { state.folded[lane.key] = !folded; if (lane.key === "backlog" && Theme) Theme.set({ foldBacklog: !folded }); render(); });
+      head.appendChild(title);
+      head.appendChild(fold);
+      col.appendChild(head);
+      if (folded) { col.appendChild(el("p", "ops-empty", inLane.length + (inLane.length === 1 ? " item hidden" : " items hidden"))); return col; }
+      if (!inLane.length) col.appendChild(el("p", "ops-empty", open.length && !visible.length ? "Nothing matches the filters." : "Nothing here."));
+      inLane.forEach(function (it) { col.appendChild(renderTile(it, now, today)); });
+      return col;
+    }
+
+    // Phones show one lane at a time-ish: a strip of buttons that jump to a lane.
+    function renderLaneJump(visible) {
+      var strip = el("div", "ops-lane-jump");
+      strip.setAttribute("aria-label", "Jump to a lane");
+      LANES.forEach(function (lane) {
+        var n = visible.filter(function (i) { return i.lane === lane.key; }).length;
+        var b = el("button", "ops-filter", lane.title);
+        b.type = "button";
+        b.appendChild(el("span", "ops-filter-n", String(n)));
+        b.addEventListener("click", function () {
+          state.folded[lane.key] = false;
+          render();
+          var target = content.querySelector('[data-lane="' + lane.key + '"]');
+          if (target) target.scrollIntoView({ block: "start" });
+        });
+        strip.appendChild(b);
+      });
+      return strip;
+    }
+
+    function renderList(visible, today) {
+      var wrap = el("div", "ops-list");
+      var table = el("table");
+      var thead = el("thead"), hr = el("tr");
+      ["Item", "Status", "Owner", "Due"].forEach(function (t) { hr.appendChild(el("th", null, t)); });
+      thead.appendChild(hr);
+      table.appendChild(thead);
+      var body = el("tbody");
+      LANES.forEach(function (lane) {
+        var inLane = sortForLane(visible.filter(function (i) { return i.lane === lane.key; }));
+        var lr = el("tr", "ops-list-lane"), lc = el("td", null, lane.title + "  " + inLane.length);
+        lc.colSpan = 4;
+        lr.appendChild(lc);
+        body.appendChild(lr);
+        inLane.forEach(function (it) {
+          var tr = el("tr", "ops-list-row");
+          tr.tabIndex = 0;
+          tr.setAttribute("data-id", it.id);
+          var t = el("td"); t.appendChild(el("b", null, it.title)); tr.appendChild(t);
+          var s = el("td"); s.appendChild(statusDot(it.status)); tr.appendChild(s);
+          tr.appendChild(el("td", "ops-dim", OWNER_TITLE[it.owner] || it.owner));
+          var d = el("td"), info = dueInfo(it.due, today);
+          if (info) d.appendChild(el("span", "ops-due tone-" + info.tone, info.text.replace(" · ", ", "))); else d.appendChild(el("span", "ops-dim", "No date"));
+          tr.appendChild(d);
+          tr.addEventListener("click", function () { openDrawer(it.id, tr); });
+          tr.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); openDrawer(it.id, tr); } });
+          body.appendChild(tr);
+        });
+      });
+      table.appendChild(body);
+      wrap.appendChild(table);
+      return wrap;
     }
 
     function renderWork(now, today) {
       var all = itemList();
       var open = openItems(all);
       var frag = document.createDocumentFragment();
-      frag.appendChild(renderStats(now, today));
+      frag.appendChild(renderSummary(now, today));
       frag.appendChild(renderFilters(open));
-      frag.appendChild(renderUpcoming(filterItems(open, state.filters), today));
-      var board = el("div", "ops-lanes");
       var visible = filterItems(open, state.filters);
-      LANES.forEach(function (lane) {
-        var inLane = sortForLane(visible.filter(function (i) { return i.lane === lane.key; }));
-        var col = el("section", "ops-lane lane-" + lane.key);
-        var head = el("div", "ops-lane-head");
-        head.appendChild(el("h2", "ops-lane-title", lane.title));
-        head.appendChild(el("span", "ops-lane-count", String(inLane.length)));
-        col.appendChild(head);
-        col.appendChild(el("p", "ops-lane-blurb", lane.blurb));
-        if (!inLane.length) col.appendChild(el("p", "ops-empty", open.length && !visible.length ? "Nothing matches the filters." : "Nothing here."));
-        inLane.forEach(function (it) { col.appendChild(renderTile(it, now, today)); });
-        board.appendChild(col);
-      });
+      var up = renderUpcoming(visible, today);
+      if (up) frag.appendChild(up);
+      if (state.layout === "list") { frag.appendChild(renderList(visible, today)); return frag; }
+      frag.appendChild(renderLaneJump(visible));
+      var board = el("div", "ops-lanes");
+      LANES.forEach(function (lane) { board.appendChild(renderLane(lane, visible, open, now, today)); });
       frag.appendChild(board);
       return frag;
     }
@@ -666,11 +785,12 @@
     function renderProposals(now, today) {
       var list = proposalList();
       var wrap = el("section", "ops-panel");
-      var head = el("div", "ops-panel-head");
-      head.appendChild(el("h2", "ops-panel-title", "Proposals"));
-      head.appendChild(el("span", "ops-panel-sub", "Ideas Claude has suggested. Approve to add them to the backlog."));
-      wrap.appendChild(head);
-      if (!list.length) wrap.appendChild(el("p", "ops-empty", "No proposals waiting."));
+      if (!list.length) {
+        var empty = el("div", "ops-blank");
+        empty.appendChild(el("b", null, "No proposals to review"));
+        empty.appendChild(document.createTextNode("When Claude has an idea that needs your yes or no, it appears here before it joins the backlog."));
+        wrap.appendChild(empty);
+      }
       list.forEach(function (it) {
         var card = el("div", "ops-proposal");
         var open = el("button", "ops-proposal-main");
@@ -678,7 +798,7 @@
         open.setAttribute("data-id", it.id);
         open.appendChild(el("span", "ops-tile-title", it.title));
         if (it.next) open.appendChild(el("span", "ops-proposal-next", it.next));
-        open.appendChild(el("span", "ops-proposal-meta", it.category + " · proposed " + relativeTime(it.addedAt, now)));
+        open.appendChild(el("span", "ops-proposal-meta", it.category + ", proposed " + relativeTime(it.addedAt, now)));
         open.addEventListener("click", function () { openDrawer(it.id, open); });
         var actions = el("div", "ops-proposal-actions");
         var yes = el("button", "ops-btn ops-btn-primary", "Approve");
@@ -697,19 +817,20 @@
 
     function renderDone(now, today) {
       var wrap = el("section", "ops-panel");
-      var head = el("div", "ops-panel-head");
-      head.appendChild(el("h2", "ops-panel-title", "Completed"));
-      head.appendChild(el("span", "ops-panel-sub", "Finished and rejected items stay here with their full log."));
-      wrap.appendChild(head);
       if (state.doneItems === null) { wrap.appendChild(el("p", "ops-empty", "Loading…")); return wrap; }
-      if (!state.doneItems.length) wrap.appendChild(el("p", "ops-empty", "Nothing completed yet."));
+      if (!state.doneItems.length) {
+        var empty = el("div", "ops-blank");
+        empty.appendChild(el("b", null, "Nothing completed yet"));
+        empty.appendChild(document.createTextNode("Finished and rejected items stay here with their full change log."));
+        wrap.appendChild(empty);
+      }
       state.doneItems.forEach(function (it) {
         var row = el("button", "ops-done-row");
         row.type = "button";
         row.setAttribute("data-id", it.id);
         row.appendChild(el("span", "ops-done-date", it.doneAt ? shortDate(dateString(new Date(it.doneAt))) : ""));
         row.appendChild(el("span", "ops-done-title", it.title));
-        row.appendChild(chip((STATUS_TITLE[it.status] || it.status).toUpperCase(), "ops-chip-status status-" + it.status));
+        row.appendChild(statusDot(it.status));
         row.addEventListener("click", function () { state.items[it.id] = newer(state.items[it.id], it); openDrawer(it.id, row); });
         wrap.appendChild(row);
       });
@@ -731,6 +852,7 @@
         var again = content.querySelector('[data-id="' + focusId + '"]');
         if (again) again.focus();
       }
+      if (Shell && state.loaded) Shell.setBadge(computeStats(itemList(), now, today).waiting);
     }
 
     // -- actions
@@ -802,6 +924,9 @@
       else if (returnFocusTo && document.body.contains(returnFocusTo)) returnFocusTo.focus();
       returnFocusTo = null;
       returnFocusId = null;
+      // A link such as ops.html#it_abcd1234 opened this item; drop it from the
+      // address so a refresh does not reopen the drawer.
+      if (/^#it_[a-z0-9]{8}$/.test(location.hash) && window.history && window.history.replaceState) window.history.replaceState(null, "", location.pathname + location.search);
     }
 
     var logBox = null;
@@ -964,6 +1089,7 @@
       } else {
         logBox = null;
       }
+      setDrawerEditable(state.connection !== "offline");
     }
 
     // The reply to one of this tab's own writes: fold it in now (the WebSocket
@@ -1035,9 +1161,53 @@
     // left open overnight.
     var tick = setInterval(function () { if (state.loaded) render(); }, 60000);
 
+    // ops.html#it_xxxxxxxx (from the Overview or the search box) opens that item.
+    function openFromHash() {
+      var m = /^#(it_[a-z0-9]{8})$/.exec(location.hash);
+      if (!m || !state.loaded || state.selectedId === m[1]) return;
+      var id = m[1];
+      if (state.items[id]) { openDrawer(id, null); return; }
+      transport.item(id).then(function (res) { state.items[id] = newer(state.items[id], res.item); openDrawer(id, null); }).catch(function () { /* an unknown id just shows the board */ });
+    }
+    window.addEventListener("hashchange", openFromHash);
+
+    if (Shell) {
+      Shell.setSearchSource(function () {
+        return openItems(itemList()).map(function (i) {
+          return { title: i.title, hint: LANE_TITLE[i.lane] || "", go: function () { state.tab = "work"; render(); openDrawer(i.id, null); } };
+        });
+      });
+      // The board's own settings live in the shell's Settings panel.
+      Shell.registerTab({
+        id: "board", title: "Ops board",
+        render: function (body) {
+          var now = Theme.get();
+          body.appendChild(Shell.controls.radios("opsl", "Default view", "How the Ops board opens.", [{ value: "board", title: "Board" }, { value: "list", title: "List" }], now.opsLayout, function (v) {
+            Theme.set({ opsLayout: v });
+            state.layout = v;
+            render();
+          }));
+          var fs = el("fieldset");
+          fs.appendChild(el("legend", null, "Backlog"));
+          var row = el("div", "opt-row"), left = el("div");
+          left.appendChild(el("b", null, "Fold the backlog when the board opens"));
+          left.appendChild(el("span", "d", "Keeps the lanes you act on wider. Open it any time with the arrow."));
+          row.appendChild(left);
+          row.appendChild(Shell.controls.toggle("Fold the backlog when the board opens", now.foldBacklog === null ? window.innerWidth < 1500 : now.foldBacklog, function (on) {
+            Theme.set({ foldBacklog: on });
+            state.folded.backlog = on;
+            render();
+          }));
+          fs.appendChild(row);
+          body.appendChild(fs);
+        }
+      });
+    }
+
     transport.snapshot().then(function (snap) {
       applySnapshot(snap);
       render();
+      openFromHash();
     }).catch(function (err) {
       clear(content);
       content.appendChild(el("p", "ops-empty", errorMessage(err)));
