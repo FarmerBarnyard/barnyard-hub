@@ -1245,11 +1245,26 @@
         return;
       }
       var transport = createTransport();
-      // A 403 on the very first read means "logged in, but not in the group".
+      var Shell = window.BarnyardShell;
+      // What agent-setup.js needs from this file: the request function, a toast,
+      // the shell (for the Agent access settings tab) and a way to start over.
+      var agentCtx = {
+        request: request,
+        toast: function (text) { if (Shell && Shell.toast) Shell.toast(text); },
+        Shell: Shell,
+        reload: boot
+      };
+      var Agent = window.OpsAgentSetup;
+      // A 403 on the very first read means "logged in, but not in the group"
+      // (or, with code board_disabled, that this person's board was switched off).
+      // A 404 no_board means they have no board of their own yet.
       transport.snapshot().then(function () {
         mount(root, transport);
+        try { if (Agent) Agent.afterMount(root, agentCtx); } catch (e) { /* the board works without the setup panel */ }
       }).catch(function (err) {
-        if (err && err.status === 403) gate("You’re logged in, but your account isn’t allowed to view the ops board.");
+        if (err && err.code === "no_board" && Agent) Agent.mountOnboarding(root, agentCtx);
+        else if (err && err.code === "board_disabled") gate("Your board has been switched off. Ask the person who runs this hub.");
+        else if (err && err.status === 403) gate("You’re logged in, but your account isn’t allowed to view the ops board.");
         else if (err && err.status === 401) gate("Your session has expired.", "Log in again", typeof window.barnyardLoginUrl === "function" ? window.barnyardLoginUrl() : null);
         else gate("Couldn’t reach the ops board. Try again in a moment.");
       });
