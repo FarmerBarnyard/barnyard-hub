@@ -147,7 +147,12 @@
     return fetch(API + path, { credentials: "include", referrerPolicy: "no-referrer", signal: controller.signal })
       .then(function (r) {
         clearTimeout(timer);
-        if (!r.ok) { var e = new Error("http"); e.status = r.status; throw e; }
+        if (!r.ok) {
+          // The Worker says why in { error: "no_board" | "board_disabled" | ... }.
+          return r.json().catch(function () { return null; }).then(function (d) {
+            var e = new Error("http"); e.status = r.status; e.code = d && d.error ? d.error : null; throw e;
+          });
+        }
         return r.json();
       }, function (err) { clearTimeout(timer); throw err; });
   }
@@ -200,6 +205,8 @@
 
   function gateMessage() {
     if (model.state === "guest") return ["The board is private.", "Log in", loginHref()];
+    if (model.state === "noboard") return ["You don’t have a board yet. It takes one click to make your own.", "Create your board", "ops.html"];
+    if (model.state === "disabled") return ["Your board has been switched off. Ask the person who runs this hub.", null, null];
     if (model.state === "forbidden") return ["You’re logged in, but your account isn’t allowed to view the board.", null, null];
     if (model.state === "error") return ["Couldn’t reach the board. It will try again shortly.", null, null];
     return ["Loading…", null, null];
@@ -299,6 +306,12 @@
     } else if (model.state === "guest") {
       h1.textContent = "Barnyard.";
       sub.textContent = "Log in to see what needs you and what has changed.";
+    } else if (model.state === "noboard") {
+      h1.textContent = "Welcome.";
+      sub.textContent = "Create your own board to see what needs you, and connect your Claude to keep it up to date.";
+    } else if (model.state === "disabled") {
+      h1.textContent = "Barnyard.";
+      sub.textContent = "Your board has been switched off. The widgets below still work.";
     } else if (model.state === "forbidden") {
       h1.textContent = "Barnyard.";
       sub.textContent = "Your account can’t view the board, but the widgets below still work.";
@@ -351,6 +364,8 @@
       renderAll();
     }, function (err) {
       if (err && err.status === 401) model.state = "guest";
+      else if (err && err.status === 404 && err.code === "no_board") model.state = "noboard";
+      else if (err && err.status === 403 && err.code === "board_disabled") model.state = "disabled";
       else if (err && err.status === 403) model.state = "forbidden";
       else model.state = model.state === "ok" ? "ok" : "error";
       renderAll();
