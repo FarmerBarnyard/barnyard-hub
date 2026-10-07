@@ -128,10 +128,20 @@
     return { text: "Due " + due, tone: "" };
   }
 
+  // Widgets that show the hub owner's own data, so they are hidden for anyone else
+  // who signs in: "week" reads the owner's Google Calendar (behind the owner's
+  // Cloudflare Access login, so it would only error for a guest) and "links" is
+  // the owner's shortcut list. Hidden only for a signed-in person who is
+  // definitely not the owner; never when the session is unknown.
+  var OWNER_ONLY = ["week", "links"];
+  function widgetRestricted(id, session) {
+    return !!session && session.authenticated === true && session.owner === false && OWNER_ONLY.indexOf(id) !== -1;
+  }
+
   var helpers = {
     heroHeadline: heroHeadline, heroSubline: heroSubline, openItems: openItems, waitingItems: waitingItems, flightItems: flightItems,
     changedItemCount: changedItemCount, describeFeed: describeFeed, feedFromItems: feedFromItems, agoText: agoText, dueChip: dueChip,
-    PRESETS: PRESETS, WIDGET_TITLE: WIDGET_TITLE
+    PRESETS: PRESETS, WIDGET_TITLE: WIDGET_TITLE, OWNER_ONLY: OWNER_ONLY, widgetRestricted: widgetRestricted
   };
 
   if (typeof document === "undefined") {
@@ -374,6 +384,11 @@
 
   // ---- 4. layout ------------------------------------------------------------
 
+  function restricted(id) {
+    var Theme = window.BarnyardTheme;
+    return !!Theme.who && widgetRestricted(id, Theme.who.get());
+  }
+
   function applyLayout() {
     var settings = window.BarnyardTheme.get(), box = $("widgets");
     if (!box) return;
@@ -381,10 +396,11 @@
     settings.widgets.forEach(function (w, order) {
       var el = box.querySelector('[data-w="' + w.id + '"]');
       if (!el) return;
-      el.hidden = !w.visible;
+      var show = w.visible && !restricted(w.id);
+      el.hidden = !show;
       el.setAttribute("data-size", String(w.size));
       el.style.order = String(order);
-      if (w.visible) shown++;
+      if (show) shown++;
     });
     var none = $("all-hidden");
     if (!shown) {
@@ -421,7 +437,12 @@
             }
           }
         }
-        widgets.forEach(function (w, idx) {
+        // Widgets this person can't have (the owner's calendar and shortcuts, for a
+        // guest) are not offered; moves swap with the next one that is.
+        var allowed = [];
+        widgets.forEach(function (x, i) { if (!restricted(x.id)) allowed.push(i); });
+        allowed.forEach(function (idx, pos) {
+          var w = widgets[idx];
           var name = WIDGET_TITLE[w.id] || w.id;
           var li = h("li", "wrow" + (w.visible ? "" : " off"));
           li.appendChild(controls.toggle("Show " + name, w.visible, function (on) {
@@ -447,12 +468,12 @@
             b.type = "button";
             b.setAttribute("aria-label", "Move " + name + " " + d[0]);
             b.appendChild(controls.svg(d[0]));
-            var to = idx + d[1];
-            if (to < 0 || to >= widgets.length) b.disabled = true;
+            var to = allowed[pos + d[1]];
+            if (to === undefined) b.disabled = true;
             b.addEventListener("click", function () {
               var next = widgets.map(function (x) { return { id: x.id, visible: x.visible, size: x.size }; });
               var t = next[idx]; next[idx] = next[to]; next[to] = t;
-              commit(next, to, d[1]);
+              commit(next, pos + d[1], d[1]);
             });
             mv.appendChild(b);
           });
@@ -471,6 +492,11 @@
     registerLayoutTab();
     applyLayout();
     window.BarnyardTheme.onChange(applyLayout);
+    // Once it is known who is signed in, hide the owner's own widgets from a guest.
+    if (window.BarnyardTheme.who) window.BarnyardTheme.who.onChange(function () {
+      applyLayout();
+      if (window.BarnyardShell && window.BarnyardShell.reflow) window.BarnyardShell.reflow();
+    });
 
     var stored = 0;
     try { stored = parseInt(window.localStorage.getItem(SEEN_KEY), 10) || 0; } catch (e) { stored = 0; }
