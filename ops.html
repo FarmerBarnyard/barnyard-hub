@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- connect-src needs wss:// spelled out: https://api.barnyard.site does not
+     cover the WebSocket that carries the live updates. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site wss://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="robots" content="noindex">
+<title>Ops board &middot; Barnyard</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="ops.css">
+</head>
+<body>
+
+<header class="hub-header">
+  <div class="hub-header-main">
+    <p class="wordmark">Ops board</p>
+    <p class="tagline">Everything in flight across the projects on this account. Updates live as work happens. <a href="./">&larr; Back to the hub</a></p>
+  </div>
+  <div class="auth-status" id="auth-status"></div>
+</header>
+
+<main id="ops-root" aria-label="Ops board">
+  <p class="ops-empty">Loading&hellip;</p>
+</main>
+
+<script src="auth-gate.js"></script>
+<script src="ops.js"></script>
+</body>
+</html>
