@@ -1,0 +1,2 @@
+# The bash helper must keep Unix line endings, or it breaks when run on macOS or Linux.
+agent-kit/*.sh text eol=lf
