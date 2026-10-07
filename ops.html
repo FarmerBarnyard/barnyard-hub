@@ -8,23 +8,25 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site wss://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
 <meta name="robots" content="noindex">
 <title>Ops board &middot; Barnyard</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="shell.css">
 <link rel="stylesheet" href="ops.css">
+<script src="themes.js"></script>
 </head>
-<body>
+<body data-shell="ops">
 
-<header class="hub-header">
-  <div class="hub-header-main">
-    <p class="wordmark">Ops board</p>
-    <p class="tagline">Everything in flight across the projects on this account. Updates live as work happens. <a href="./">&larr; Back to the hub</a></p>
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Ops board</h1>
+      <p>Everything in flight across the projects on this account. It updates as work happens.</p>
+    </div>
   </div>
-  <div class="auth-status" id="auth-status"></div>
-</header>
-
-<main id="ops-root" aria-label="Ops board">
-  <p class="ops-empty">Loading&hellip;</p>
+  <div id="ops-root" aria-label="Ops board">
+    <p class="ops-empty">Loading&hellip;</p>
+  </div>
 </main>
 
+<script src="shell.js"></script>
 <script src="auth-gate.js"></script>
 <script src="ops.js"></script>
 </body>

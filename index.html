@@ -5,128 +5,99 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.open-meteo.com https://barnyard-live-prices.nathanbarnard29.workers.dev https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
 <title>Barnyard</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="shell.css">
+<script src="themes.js"></script>
 </head>
-<body>
+<body data-shell="overview">
 
-<header class="hub-header">
-  <div class="hub-header-main">
-    <p class="wordmark">Barnyard</p>
-    <p class="tagline">A hub for the projects living on this account.</p>
-  </div>
-  <div class="auth-status" id="auth-status"></div>
-</header>
+<main id="page" class="content">
 
-<section class="glance-row" aria-label="Today at a glance">
+  <header class="hero">
+    <h1 id="ov-h1">Barnyard.</h1>
+    <p id="ov-sub">Checking what needs you&hellip;</p>
+  </header>
 
-  <div class="widget widget-quicklinks">
-    <div class="widget-head">
-      <h2 class="widget-name">Quick links</h2>
-    </div>
-    <ul class="quicklinks-list" role="list">
-      <li><a class="quicklink" href="https://mail.google.com/" target="_blank" rel="noopener noreferrer"><span class="quicklink-icon" aria-hidden="true">&#128231;</span><span class="quicklink-label">Gmail</span></a></li>
-      <li><a class="quicklink" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer"><span class="quicklink-icon" aria-hidden="true">&#9654;&#65039;</span><span class="quicklink-label">YouTube</span></a></li>
-      <li><a class="quicklink" href="https://www.nabtrade.com.au/" target="_blank" rel="noopener noreferrer"><span class="quicklink-icon" aria-hidden="true">&#128200;</span><span class="quicklink-label">Nabtrade</span></a></li>
-      <li><a class="quicklink" href="https://github.com/" target="_blank" rel="noopener noreferrer"><span class="quicklink-icon" aria-hidden="true">&#128187;</span><span class="quicklink-label">GitHub</span></a></li>
-      <li><a class="quicklink" href="https://dash.cloudflare.com/" target="_blank" rel="noopener noreferrer"><span class="quicklink-icon" aria-hidden="true">&#9729;&#65039;</span><span class="quicklink-label">Cloudflare</span></a></li>
-      <li><a class="quicklink" href="https://claude.ai/" target="_blank" rel="noopener noreferrer"><span class="quicklink-icon" aria-hidden="true">&#10024;</span><span class="quicklink-label">Claude</span></a></li>
-    </ul>
-  </div>
+  <div class="widgets" id="widgets">
 
-  <div class="widget widget-weather">
-    <div class="widget-head">
-      <h2 class="widget-name">Weather</h2>
-    </div>
-    <div class="weather-body" id="weather-body">
-      <button type="button" class="weather-locate-btn" id="weather-locate-btn">Show weather near me</button>
-    </div>
-  </div>
+    <section class="w lift" data-w="need" data-size="2" aria-labelledby="need-h">
+      <div class="need-head"><h2 id="need-h">Waiting on you</h2><a href="ops.html">Open the board</a></div>
+      <ul class="need" id="need-list" role="list"></ul>
+    </section>
 
-  <div class="widget widget-calendar">
-    <div class="widget-head">
-      <h2 class="widget-name">This week</h2>
-      <span class="widget-sub" id="week-range"></span>
-    </div>
-    <ol class="week-days" id="week-days" role="list">
-      <li class="week-day"><span class="week-day-name">Mon</span><span class="week-day-num">&mdash;</span></li>
-      <li class="week-day"><span class="week-day-name">Tue</span><span class="week-day-num">&mdash;</span></li>
-      <li class="week-day"><span class="week-day-name">Wed</span><span class="week-day-num">&mdash;</span></li>
-      <li class="week-day"><span class="week-day-name">Thu</span><span class="week-day-num">&mdash;</span></li>
-      <li class="week-day"><span class="week-day-name">Fri</span><span class="week-day-num">&mdash;</span></li>
-      <li class="week-day"><span class="week-day-name">Sat</span><span class="week-day-num">&mdash;</span></li>
-      <li class="week-day"><span class="week-day-name">Sun</span><span class="week-day-num">&mdash;</span></li>
-    </ol>
-    <p class="week-status" id="week-status"></p>
-  </div>
+    <section class="w" data-w="feed" data-size="2" aria-labelledby="feed-h">
+      <div class="sec-head"><h2 id="feed-h">Since you last looked</h2></div>
+      <ol class="spine enter" id="feed-list" role="list"></ol>
+    </section>
 
-  <div class="widget widget-todo">
-    <div class="widget-head">
-      <h2 class="widget-name">To-do</h2>
-    </div>
-    <form class="todo-form" id="todo-form">
-      <input type="text" class="todo-input" id="todo-input" placeholder="Add a task&hellip;" maxlength="200" autocomplete="off" aria-label="New to-do item">
-      <button type="submit" class="todo-add-btn">Add</button>
-    </form>
-    <ul class="todo-list" id="todo-list" role="list"></ul>
-    <p class="todo-empty" id="todo-empty"></p>
-    <p class="todo-status" id="todo-status" role="status"></p>
-  </div>
+    <section class="w" data-w="flight" data-size="1" aria-labelledby="flight-h">
+      <div class="sec-head"><h2 id="flight-h">In progress and soaking</h2><span class="sub" id="flight-n"></span></div>
+      <div id="flight-list"></div>
+    </section>
 
-</section>
-
-<div class="widget-grid">
-
-  <a class="tile tile-live" href="https://stocks.barnyard.site/">
-    <div class="tile-head">
-      <span class="tile-icon" aria-hidden="true">&#128200;</span>
-      <h2 class="tile-name">Stocks</h2>
+    <section class="w" data-w="market" data-size="1" aria-labelledby="market-h">
+      <div class="sec-head"><h2 id="market-h">Nasdaq-100</h2><a class="sub" href="https://stocks.barnyard.site/">Markets</a></div>
       <span class="live-dot" data-live-field="dot" data-live-symbol="QQQ" data-live-market="NASDAQ" title="Live price — not yet loaded"></span>
-    </div>
-    <p class="tile-desc">Weekly market dashboard &mdash; NASDAQ &amp; ASX review, watchlists, and analyst cross-reference.</p>
-    <div class="tile-stat">
-      <span class="stat-label">QQQ</span>
-      <span class="live-price" data-live-field="price" data-live-symbol="QQQ" data-live-market="NASDAQ">&mdash;</span>
-      <span class="live-price" data-live-field="change" data-live-symbol="QQQ" data-live-market="NASDAQ">&nbsp;</span>
-      <span class="live-asof" data-live-field="asof" data-live-symbol="QQQ" data-live-market="NASDAQ">&nbsp;</span>
+      <span class="market-price" data-live-field="price" data-live-symbol="QQQ" data-live-market="NASDAQ">&mdash;</span>
+      <span class="market-change" data-live-field="change" data-live-symbol="QQQ" data-live-market="NASDAQ">&nbsp;</span>
+      <span class="market-asof" data-live-field="asof" data-live-symbol="QQQ" data-live-market="NASDAQ">&nbsp;</span>
       <span class="sr-only" data-live-field="status" data-live-symbol="QQQ" data-live-market="NASDAQ"></span>
-    </div>
-  </a>
+    </section>
 
-  <a class="tile" href="https://study.barnyard.site/">
-    <div class="tile-head">
-      <span class="tile-icon" aria-hidden="true">&#128218;</span>
-      <h2 class="tile-name">Study</h2>
-    </div>
-    <p class="tile-desc">Ongoing certifications and revision notes, synced from Notion.</p>
-  </a>
+    <section class="w" data-w="weather" data-size="1" aria-labelledby="weather-h">
+      <div class="sec-head"><h2 id="weather-h">Weather</h2></div>
+      <div class="weather-body" id="weather-body">
+        <button type="button" class="weather-locate-btn" id="weather-locate-btn">Show weather near me</button>
+      </div>
+    </section>
 
-  <a class="tile" href="https://campaign.barnyard.site/">
-    <div class="tile-head">
-      <span class="tile-icon" aria-hidden="true">&#128506;&#65039;</span>
-      <h2 class="tile-name">Campaign</h2>
-    </div>
-    <p class="tile-desc">Homebrew campaign builder and procedural map generator, for running tabletop games.</p>
-  </a>
+    <section class="w" data-w="week" data-size="1" aria-labelledby="week-h">
+      <div class="sec-head"><h2 id="week-h">This week</h2><span class="week-range" id="week-range"></span></div>
+      <ol class="week-days" id="week-days" role="list">
+        <li class="week-day"><span class="week-day-name">Mon</span><span class="week-day-num">&mdash;</span></li>
+        <li class="week-day"><span class="week-day-name">Tue</span><span class="week-day-num">&mdash;</span></li>
+        <li class="week-day"><span class="week-day-name">Wed</span><span class="week-day-num">&mdash;</span></li>
+        <li class="week-day"><span class="week-day-name">Thu</span><span class="week-day-num">&mdash;</span></li>
+        <li class="week-day"><span class="week-day-name">Fri</span><span class="week-day-num">&mdash;</span></li>
+        <li class="week-day"><span class="week-day-name">Sat</span><span class="week-day-num">&mdash;</span></li>
+        <li class="week-day"><span class="week-day-name">Sun</span><span class="week-day-num">&mdash;</span></li>
+      </ol>
+      <p class="week-status" id="week-status"></p>
+    </section>
 
-  <a class="tile" href="ops.html">
-    <div class="tile-head">
-      <span class="tile-icon" aria-hidden="true">&#128203;</span>
-      <h2 class="tile-name">Ops</h2>
-    </div>
-    <p class="tile-desc">Live progress board for everything in flight across these projects. Private &mdash; log in to see it.</p>
-    <div class="tile-stat"><span class="stat-label" id="ops-tile-stat" role="status">Open the board</span></div>
-  </a>
+    <section class="w" data-w="todo" data-size="1" aria-labelledby="todo-h">
+      <div class="sec-head"><h2 id="todo-h">To-do</h2><span class="sub">Saved in this browser</span></div>
+      <form class="todo-form" id="todo-form">
+        <input type="text" class="todo-input" id="todo-input" placeholder="Add a task&hellip;" maxlength="200" autocomplete="off" aria-label="New to-do item">
+        <button type="submit" class="todo-add-btn">Add</button>
+      </form>
+      <ul class="todo-list" id="todo-list" role="list"></ul>
+      <p class="todo-empty" id="todo-empty"></p>
+      <p class="todo-status" id="todo-status" role="status"></p>
+    </section>
 
-</div>
+    <section class="w" data-w="links" data-size="4" aria-labelledby="links-h">
+      <div class="sec-head"><h2 id="links-h">Shortcuts</h2></div>
+      <ul class="quick" role="list">
+        <li><a href="https://mail.google.com/" target="_blank" rel="noopener noreferrer">Gmail</a></li>
+        <li><a href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer">YouTube</a></li>
+        <li><a href="https://www.nabtrade.com.au/" target="_blank" rel="noopener noreferrer">Nabtrade</a></li>
+        <li><a href="https://github.com/" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+        <li><a href="https://dash.cloudflare.com/" target="_blank" rel="noopener noreferrer">Cloudflare</a></li>
+        <li><a href="https://claude.ai/" target="_blank" rel="noopener noreferrer">Claude</a></li>
+      </ul>
+    </section>
 
-<footer class="hub-footer">
-  Barnyard hub &mdash; static landing page, no account needed to browse, no third-party tracking. The weather widget only contacts Open-Meteo, and only if you ask it to. The calendar widget contacts api.barnyard.site (a same-account Cloudflare Worker, gated by Cloudflare Access) to show this week's events. The to-do list is stored only in this browser's own local storage and never leaves your device.
-</footer>
+  </div>
 
+  <p class="dim hub-footer">Barnyard hub &mdash; a static page with no third-party tracking. The weather widget only contacts Open-Meteo, and only if you ask it to. The calendar, board and prices come from api.barnyard.site, a Cloudflare Worker on this account. The to-do list stays in this browser. Your theme and layout choices are saved in this browser; your theme, background and density are also kept in a small cookie shared by the barnyard.site pages, so they match everywhere.</p>
+
+</main>
+
+<script src="shell.js"></script>
+<script src="auth-gate.js"></script>
 <script src="live-prices.js"></script>
 <script src="glance-widgets.js"></script>
 <script src="todo-widget.js"></script>
-<script src="auth-gate.js"></script>
-<script src="ops-tile.js"></script>
+<script src="overview.js"></script>
 </body>
 </html>
