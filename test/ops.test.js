@@ -128,6 +128,31 @@ test("upcoming: dated open items only, soonest first", function () {
   assert.deepStrictEqual(ops.upcoming(items, TODAY).map(function (i) { return i.id; }), ["it_00000002", "it_00000006", "it_00000001"]);
 });
 
+test("longestWaiting: only open items waiting on the owner, oldest first, limited", function () {
+  var items = [
+    item({ id: "it_00000001", lane: "waiting", owner: "you", addedAt: NOW - 3 * DAY }),
+    item({ id: "it_00000002", lane: "waiting", owner: "you", addedAt: NOW - 9 * DAY }),
+    item({ id: "it_00000003", lane: "waiting", owner: "claude", addedAt: NOW - 20 * DAY }),
+    item({ id: "it_00000004", lane: "backlog", owner: "you", addedAt: NOW - 30 * DAY }),
+    item({ id: "it_00000005", lane: "waiting", owner: "you", addedAt: NOW - 1 * DAY, proposal: true }),
+    item({ id: "it_00000006", lane: "waiting", owner: "you", addedAt: NOW - 5 * DAY })
+  ];
+  assert.deepStrictEqual(ops.longestWaiting(items, 10).map(function (i) { return i.id; }), ["it_00000002", "it_00000006", "it_00000001"]);
+  assert.strictEqual(ops.longestWaiting(items, 2).length, 2);
+  assert.deepStrictEqual(ops.longestWaiting([], 4), []);
+});
+
+test("recentlyDone: finished within the window, newest first, limited, ignores bad dates", function () {
+  var done = [
+    { id: "it_00000001", doneAt: NOW - 2 * DAY }, { id: "it_00000002", doneAt: NOW - 20 * DAY },
+    { id: "it_00000003", doneAt: NOW - 1 * DAY }, { id: "it_00000004" }, { id: "it_00000005", doneAt: NOW + 5 * DAY },
+    { id: "it_00000006", doneAt: NOW - 13 * DAY }
+  ];
+  assert.deepStrictEqual(ops.recentlyDone(done, NOW, 14, 10).map(function (i) { return i.id; }), ["it_00000003", "it_00000001", "it_00000006"]);
+  assert.strictEqual(ops.recentlyDone(done, NOW, 14, 1).length, 1);
+  assert.deepStrictEqual(ops.recentlyDone(null, NOW, 14, 5), []);
+});
+
 test("change descriptions are readable and never show markup as anything but text", function () {
   assert.deepStrictEqual(ops.describeChanges({ lane: ["backlog", "waiting"], status: ["planned", "decision_needed"], due: ["", "2026-10-09"], next: ["a", "b"] }), [
     "Lane: Backlog → Waiting on you", "Status: Planned → Decision needed", "Due: (none) → 2026-10-09", "Next step updated"
