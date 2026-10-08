@@ -269,3 +269,14 @@ textarea.ops-input { resize: vertical; line-height: 1.45; }
   .ops-rail .ops-upcoming-rel { grid-column: 2; grid-row: 2; font-size: 12px; }
   .ops-rail .ops-upcoming .ops-chip { display: none; }
 }
+
+/* agent runs: the chip on tiles and in the drawer, the drawer's run box, Settings -> Agent runs */
+.ops-chip-run-ok { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.ops-chip-run-warn { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.ops-chip-run-bad { color: var(--alert); background: var(--alert-soft); border-color: transparent; }
+.ops-run-box { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); margin-bottom: 16px; }
+.ops-run-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ops-run-box p { margin: 0; font-size: 13px; }
+.ops-run-how, .ops-run-conn { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.ops-run-how p, .ops-run-conn p { margin: 0; font-size: 13px; max-width: 56ch; }
+.ops-run-conn .ops-input { max-width: 560px; }

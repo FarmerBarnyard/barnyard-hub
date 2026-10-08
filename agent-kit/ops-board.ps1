@@ -22,6 +22,9 @@
     Ops-Done -Id it_xxxxxxxx [-Note "..."]
     Ops-Reopen -Id it_xxxxxxxx -Lane backlog
     Ops-Export                                   # everything, for backup
+    Ops-Approved                                 # work I have approved for you to do (run id, item id, status, fingerprint)
+    Ops-Show -Id it_xxxxxxxx                     # one item with its approval (is it still current, and its fingerprint)
+    Ops-Report -RunId rn_xxxxxxxx -Status running|done|failed [-Note "..."] [-Url https://...]   # tell me how an approved run is going
 
   Lanes: in_progress soaking waiting backlog.   Owner: claude | you.
   Categories: backend frontend agent security infrastructure maintenance docs data other.
@@ -140,3 +143,23 @@ function Ops-Reopen {
 }
 
 function Ops-Export { Invoke-Ops GET "/export" }
+
+# Work the person has approved for you to do: one line per run. Only act on a run listed here,
+# and only after Ops-Show says its approval is current and the fingerprint matches.
+function Ops-Approved {
+  $r = Invoke-Ops GET "/approved"
+  if (-not $r.runs -or $r.runs.Count -eq 0) { Write-Output "nothing approved is waiting"; return }
+  $r.runs | ForEach-Object { Write-Output "$($_.runId)  $($_.itemId)  $($_.status)  $($_.approvedHash)" }
+}
+
+function Ops-Show {
+  param([Parameter(Mandatory)][string]$Id)
+  Invoke-Ops GET "/items/$Id"
+}
+
+function Ops-Report {
+  param([Parameter(Mandatory)][string]$RunId, [Parameter(Mandatory)][ValidateSet("running", "done", "failed")][string]$Status, [string]$Note, [string]$Url)
+  $b = @{ status = $Status }; if ($Note) { $b.note = $Note }; if ($Url) { $b.url = $Url }
+  $r = Invoke-Ops POST "/runs/$RunId/report" $b
+  Write-Output "$($r.run.id) $($r.run.status)"
+}

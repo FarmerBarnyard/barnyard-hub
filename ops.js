@@ -385,7 +385,16 @@
       note: function (id, text) { return request("POST", "/items/" + id + "/note", { note: text }); },
       finish: function (id, note) { return request("POST", "/items/" + id + "/finish", note ? { note: note } : {}); },
       reopen: function (id, lane) { return request("POST", "/items/" + id + "/reopen", { lane: lane }); },
-      decide: function (id, approve, note) { return request("POST", "/items/" + id + "/decide", note ? { approve: approve, note: note } : { approve: approve }); },
+      // run: false means "approve only" (no agent run); leave it out to approve and, if the board has
+      // agent runs switched on, start one.
+      decide: function (id, approve, note, run) {
+        var body = { approve: approve };
+        if (note) body.note = note;
+        if (run === false) body.run = false;
+        return request("POST", "/items/" + id + "/decide", body);
+      },
+      startRun: function (id) { return request("POST", "/items/" + id + "/run", {}); },
+      fireRun: function (runId) { return request("POST", "/runs/" + runId + "/fire", {}); },
       // Taking an item's data out; the item's own id is the typed confirmation.
       redact: function (id) { return request("POST", "/items/" + id + "/redact", { confirm: id }); },
       remove: function (id) { return request("POST", "/items/" + id + "/delete", { confirm: id }); },
@@ -454,7 +463,9 @@
   }
 
   function mount(root, transport) {
+    var Runs = window.OpsAgentRuns;
     var state = {
+      dispatch: null,       // this board's agent-run settings, once loaded
       items: {},            // id -> item (open items, plus any done item that has been opened)
       version: 0,
       doneCount: 0,
@@ -795,6 +806,8 @@
       meta.appendChild(statusDot(it.status));
       if (it.priority === "high") meta.appendChild(chip("High priority", "ops-chip-high"));
       if (it.pii && it.pii.length) meta.appendChild(chip("Personal data", "ops-chip-pii"));
+      var rc = Runs ? Runs.helpers.runChip(it.run) : null;
+      if (rc) meta.appendChild(chip(rc.text, "ops-chip-run-" + rc.tone));
       tile.appendChild(meta);
       if (it.next) tile.appendChild(el("span", "ops-tile-next", it.next));
       var foot = el("span", "ops-tile-foot");
@@ -929,13 +942,16 @@
         open.appendChild(el("span", "ops-proposal-meta", it.category + ", proposed " + relativeTime(it.addedAt, now)));
         open.addEventListener("click", function () { openDrawer(it.id, open); });
         var actions = el("div", "ops-proposal-actions");
-        var yes = el("button", "ops-btn ops-btn-primary", "Approve");
+        var runsOn = !!(state.dispatch && state.dispatch.available && state.dispatch.enabled);
+        var yes = el("button", "ops-btn ops-btn-primary", runsOn ? "Approve and run" : "Approve");
+        var only = runsOn ? el("button", "ops-btn", "Approve only") : null;
         var no = el("button", "ops-btn", "Reject");
         yes.type = no.type = "button";
-        yes.addEventListener("click", function () { decide(it.id, true, yes, no); });
-        no.addEventListener("click", function () { decide(it.id, false, yes, no); });
-        actions.appendChild(yes);
-        actions.appendChild(no);
+        var all = only ? [yes, only, no] : [yes, no];
+        yes.addEventListener("click", function () { decide(it.id, true, all); });
+        if (only) { only.type = "button"; only.addEventListener("click", function () { decide(it.id, true, all, false); }); }
+        no.addEventListener("click", function () { decide(it.id, false, all); });
+        all.forEach(function (b) { actions.appendChild(b); });
         card.appendChild(open);
         card.appendChild(actions);
         wrap.appendChild(card);
@@ -984,16 +1000,41 @@
     }
 
     // -- actions
-    function decide(id, approve, yes, no) {
-      yes.disabled = no.disabled = true;
-      transport.decide(id, approve).then(function (res) {
+    // buttons: every button that started this, so they can all be locked until it settles.
+    function decide(id, approve, buttons, run) {
+      buttons.forEach(function (b) { b.disabled = true; });
+      transport.decide(id, approve, undefined, run).then(function (res) {
         upsert(res.item);
         if (res.event) seenEvents[res.event.seq] = true;
         state.version = Math.max(state.version, res.version);
         if (res.item.lane === "done") state.doneCount++;
         render();
+        if (Runs) toast(Runs.helpers.approveMessage(approve, res));
+        if (Runs && approve) loadDispatch();
       }).catch(function (err) {
-        yes.disabled = no.disabled = false;
+        buttons.forEach(function (b) { b.disabled = false; });
+        toast(errorMessage(err));
+      });
+    }
+
+    // This board's agent-run settings (whether to offer "Approve and run"). A board where
+    // they can't be read simply doesn't offer it.
+    function loadDispatch() {
+      if (!Runs) return;
+      Runs.loadConfig({ request: request }).then(function (cfg) { state.dispatch = cfg; render(); });
+    }
+
+    // Start (or try again) an agent run for an item from its drawer.
+    function runAction(kind, item, button) {
+      var p = kind === "fire" ? transport.fireRun(item.run.id) : transport.startRun(item.id);
+      p.then(function () { return transport.item(item.id); }).then(function (res) {
+        state.items[item.id] = Object.assign({}, state.items[item.id], res.item);
+        render();
+        if (state.selectedId === item.id) buildDrawer();
+        loadDispatch();
+        toast(kind === "fire" ? "Tried again." : "Agent run started.");
+      }).catch(function (err) {
+        if (button) button.disabled = false;
         toast(errorMessage(err));
       });
     }
@@ -1090,15 +1131,24 @@
       if (item && item.proposal) {
         var prop = el("div", "ops-banner", "This is a proposal. Approve it to add it to the backlog, or reject it.");
         var pa = el("div", "ops-banner-actions");
-        var yes = el("button", "ops-btn ops-btn-primary", "Approve");
+        var runsOnHere = !!(state.dispatch && state.dispatch.available && state.dispatch.enabled);
+        var yes = el("button", "ops-btn ops-btn-primary", runsOnHere ? "Approve and run" : "Approve");
+        var only = runsOnHere ? el("button", "ops-btn", "Approve only") : null;
         var no = el("button", "ops-btn", "Reject");
         yes.type = no.type = "button";
-        yes.addEventListener("click", function () { decide(item.id, true, yes, no); closeDrawer(); });
-        no.addEventListener("click", function () { decide(item.id, false, yes, no); closeDrawer(); });
-        pa.appendChild(yes);
-        pa.appendChild(no);
+        var everyButton = only ? [yes, only, no] : [yes, no];
+        yes.addEventListener("click", function () { decide(item.id, true, everyButton); closeDrawer(); });
+        if (only) { only.type = "button"; only.addEventListener("click", function () { decide(item.id, true, everyButton, false); closeDrawer(); }); }
+        no.addEventListener("click", function () { decide(item.id, false, everyButton); closeDrawer(); });
+        everyButton.forEach(function (b) { pa.appendChild(b); });
         prop.appendChild(pa);
         drawer.appendChild(prop);
+      }
+
+      // The agent run for an approved item: its state, a link to the session, and the buttons that apply.
+      if (item && Runs) {
+        var box = Runs.runBox(item, state.dispatch, function (kind, button) { runAction(kind, item, button); });
+        if (box) drawer.appendChild(box);
       }
 
       var form = el("form", "ops-form");
@@ -1365,6 +1415,8 @@
           return { title: i.title, hint: LANE_TITLE[i.lane] || "", go: function () { state.tab = "work"; render(); openDrawer(i.id, null); } };
         });
       });
+      // Agent runs (switch on, connect a routine) is its own tab, for everyone with a board.
+      if (Runs) Runs.registerSettingsTab({ request: request, Shell: Shell, toast: toast }, function (cfg) { state.dispatch = cfg; render(); });
       // The board's own settings live in the shell's Settings panel.
       Shell.registerTab({
         id: "board", title: "Ops board",
@@ -1395,6 +1447,7 @@
     transport.snapshot().then(function (snap) {
       applySnapshot(snap);
       render();
+      loadDispatch();
       openFromHash();
     }).catch(function (err) {
       clear(content);
