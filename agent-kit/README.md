@@ -8,6 +8,7 @@ Files in this folder are public, static and contain no secrets. They are what th
 | `ops-board.sh` | Helper for macOS and Linux (bash and curl). Save as `~/.claude/ops-board.sh`. |
 | `agent-brief.md` | The instructions your Claude follows to keep the board up to date. Paste into your Claude Code's `CLAUDE.md` (or its memory). |
 | `populate-prompt.md` | A prompt to paste once, so your Claude fills the board from your own projects. |
+| `routine-prompt.md` | Optional. A prompt for a Claude Code routine that runs an item you approved (Settings, Agent runs). |
 | `SHA256SUMS` | The SHA-256 of each file above. The board's setup panel gives a one-line check that your downloaded helper matches the copy published in the repository on GitHub. |
 
 ## Set up
@@ -17,6 +18,10 @@ Files in this folder are public, static and contain no secrets. They are what th
    - Windows: `Set-Content -Path "$HOME\.claude\ops-board-token" -Value '<key>' -NoNewline`, then download `ops-board.ps1` to `$HOME\.claude\`.
    - macOS and Linux: `printf '%s' '<key>' > ~/.claude/ops-board-token && chmod 600 ~/.claude/ops-board-token`, then download `ops-board.sh` to `~/.claude/`.
 3. Paste `agent-brief.md` into your Claude Code's `CLAUDE.md`, then paste `populate-prompt.md` into a session.
+
+## Letting your Claude do approved work
+
+Your Claude can only propose; **you** approve, at the board. If you switch on **Settings, Agent runs**, approving a proposal can also ask your own Claude to do the work and open a pull request. Two ways it starts: your Claude asks `ops_approved` / `Ops-Approved` for approved items (the helpers do this), or you connect your own Claude Code routine (`routine-prompt.md`) and approving starts it straight away. Either way only ids and a fingerprint of the approved text are sent, the work must go on a `claude/` branch as a pull request, nothing is merged for you, and if the text changes after you approved it the run is withdrawn until you approve again.
 
 ## Good to know
 

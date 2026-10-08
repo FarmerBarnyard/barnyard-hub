@@ -21,6 +21,9 @@
 #   ops_done it_xxxxxxxx ["note"]
 #   ops_reopen it_xxxxxxxx [lane] ["note"]
 #   ops_export                                     # everything, for backup
+#   ops_approved                                   # work I have approved for you to do (run id, item id, status, fingerprint)
+#   ops_show it_xxxxxxxx                           # one item with its approval (is it still current, and its fingerprint)
+#   ops_report rn_xxxxxxxx running|done|failed ["note"] [https://link]   # tell me how an approved run is going
 #
 # Lanes: in_progress soaking waiting backlog.   Owner: claude | you.
 # Categories: backend frontend agent security infrastructure maintenance docs data other.
@@ -178,3 +181,29 @@ ops_reopen() {
 }
 
 ops_export() { _ops_call GET /export; }
+
+# Work the person has approved for you to do. Only act on a run listed here, and only after
+# ops_show says its approval is current and the fingerprint matches.
+ops_approved() {
+  local r
+  r="$(_ops_call GET /approved)" || return 1
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$r" | jq -r 'if (.runs | length) == 0 then "nothing approved is waiting" else .runs[] | [.runId, .itemId, .status, .approvedHash] | @tsv end'
+  else
+    printf '%s\n' "$r"
+  fi
+}
+
+ops_show() {
+  [ -n "${1-}" ] || { echo "usage: ops_show it_xxxxxxxx" >&2; return 2; }
+  _ops_call GET "/items/$1"
+}
+
+ops_report() {
+  [ -n "${1-}" ] && [ -n "${2-}" ] || { echo "usage: ops_report rn_xxxxxxxx running|done|failed [\"note\"] [https://link]" >&2; return 2; }
+  case "$2" in running|done|failed) ;; *) echo "ops_report: status must be running, done or failed" >&2; return 2 ;; esac
+  local body="{\"status\":\"$2\""
+  [ -n "${3-}" ] && body="$body,\"note\":\"$(_ops_esc "$3")\""
+  [ -n "${4-}" ] && body="$body,\"url\":\"$(_ops_esc "$4")\""
+  _ops_call POST "/runs/$1/report" "$body}"
+}
