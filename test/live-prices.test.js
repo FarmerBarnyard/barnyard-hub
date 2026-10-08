@@ -176,6 +176,25 @@ test("decideQuoteAction: exactly at the stale threshold still routes to \"apply\
   assert.deepStrictEqual(lp.decideQuoteAction(quote, now), { action: "apply" });
 });
 
+// ---- polling rate ---------------------------------------------------------
+// 2026-10-08: a page left open at a 15 s poll used most of the free plan's
+// 100,000 daily Worker requests. Polling is now once a minute and only while the
+// tab is showing.
+
+test("polling is once a minute, no faster", function () {
+  assert.ok(lp.POLL_INTERVAL_MS >= 60000, "POLL_INTERVAL_MS is " + lp.POLL_INTERVAL_MS);
+});
+
+test("shouldPollNow: never while hidden; on a timer tick otherwise; on returning only if the last poll is old", function () {
+  var half = lp.POLL_INTERVAL_MS / 2, now = 1000000;
+  assert.strictEqual(lp.shouldPollNow(true, 0, now, false), false);
+  assert.strictEqual(lp.shouldPollNow(true, 0, now, true), false);
+  assert.strictEqual(lp.shouldPollNow(false, now - 1, now, false), true);
+  assert.strictEqual(lp.shouldPollNow(false, now - (half - 1), now, true), false, "polled a moment ago");
+  assert.strictEqual(lp.shouldPollNow(false, now - half, now, true), true);
+  assert.strictEqual(lp.shouldPollNow(false, 0, now, true), true);
+});
+
 // ---- fmtAsOfLabel ---------------------------------------------------------
 // Pins the exact "as of HH:MM" string against a fixed timestamp and an
 // explicit "en-US" locale (matching the locale fmtAsOfLabel itself now

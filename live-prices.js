@@ -14,7 +14,11 @@
   // tick fires, and (worse) markStaleIfDue's clock-driven check -- which
   // runs every tick regardless of any in-flight fetch -- would be racing
   // against a timeout that hasn't even had a chance to fire yet.
-  var POLL_INTERVAL_MS = 15000;
+  //
+  // Once a minute, and only while the tab is showing (see shouldPollNow). At
+  // 15 s a page left open all day cost most of the free plan's 100,000 daily
+  // Worker requests for prices nobody was looking at.
+  var POLL_INTERVAL_MS = 60000;
   // A few consecutive failed/incomplete polls shouldn't immediately flip a
   // tile to "stale" (could just be one blip) -- only do so once this much
   // time has passed since the last successful update.
@@ -278,7 +282,16 @@
     return { action: "apply" };
   }
 
+  // A scheduled tick polls only while the tab is showing; coming back to the tab
+  // polls at once if the last poll is at least half an interval old.
+  function shouldPollNow(hidden, lastPollAt, now, onReturn) {
+    if (hidden) return false;
+    return onReturn ? now - lastPollAt >= POLL_INTERVAL_MS / 2 : true;
+  }
+  var lastPollAt = 0;
+
   function pollAll() {
+    lastPollAt = Date.now();
     var seen = {};
     document.querySelectorAll("[data-live-symbol][data-live-market]").forEach(function (el) {
       var symbol = el.getAttribute("data-live-symbol");
@@ -351,7 +364,10 @@
   // never true under plain Node.
   if (typeof document !== "undefined" && document.querySelector("[data-live-symbol]")) {
     pollAll();
-    setInterval(pollAll, POLL_INTERVAL_MS);
+    setInterval(function () { if (shouldPollNow(document.hidden, lastPollAt, Date.now(), false)) pollAll(); }, POLL_INTERVAL_MS);
+    document.addEventListener("visibilitychange", function () {
+      if (shouldPollNow(document.hidden, lastPollAt, Date.now(), true)) pollAll();
+    });
   }
 
   // Expose pure, DOM-free helpers to the Node-based test file at
@@ -366,6 +382,7 @@
       isStaleSince: isStaleSince,
       decideQuoteAction: decideQuoteAction,
       fmtAsOfLabel: fmtAsOfLabel,
+      shouldPollNow: shouldPollNow,
       POLL_INTERVAL_MS: POLL_INTERVAL_MS,
       STALE_THRESHOLD_MS: STALE_THRESHOLD_MS,
       FETCH_TIMEOUT_MS: FETCH_TIMEOUT_MS
