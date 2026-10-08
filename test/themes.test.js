@@ -118,14 +118,14 @@ test("cookie: anything that does not validate is ignored, and layout keys never 
 });
 
 test("the pages keep to the CSP: no inline scripts, handlers or styles, and nothing remote", function () {
-  ["index.html", "ops.html"].forEach(function (file) {
+  ["index.html", "ops.html", "chat.html"].forEach(function (file) {
     var html = read(file);
     assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>/i.test(html), file + " has an inline script");
     assert.ok(!/\son[a-z]+\s*=/i.test(html.replace(/<meta[^>]*>/gi, "")), file + " has an inline event handler");
     assert.ok(!/\sstyle\s*=/i.test(html), file + " has a style attribute");
     assert.ok(!/<style[\s>]/i.test(html), file + " has a style element");
   });
-  ["shell.css", "ops.css"].forEach(function (file) {
+  ["shell.css", "ops.css", "chat.css"].forEach(function (file) {
     var css = read(file);
     assert.ok(!/@import/.test(css), file + " imports another stylesheet");
     var urls = css.match(/url\(([^)]*)\)/g) || [];
@@ -138,6 +138,8 @@ test("only the shell's icon helper assigns innerHTML, and only with its own stat
   assert.strictEqual(assigns("shell.js"), 1);
   assert.strictEqual(assigns("overview.js"), 0);
   assert.strictEqual(assigns("ops.js"), 0);
+  assert.strictEqual(assigns("chat.js"), 0);
+  assert.strictEqual(assigns("markdown.js"), 0);
   assert.strictEqual(assigns("themes.js"), 0);
   assert.ok(/s\.innerHTML = ICONS\[name\]/.test(read("shell.js")), "the one assignment is the icon table lookup");
 });

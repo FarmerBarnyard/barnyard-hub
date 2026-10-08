@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- connect-src needs wss:// spelled out: https://api.barnyard.site does not
+     cover the WebSocket that streams the reply. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site wss://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Claude &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css">
+<link rel="stylesheet" href="chat.css">
+<script src="themes.js"></script>
+</head>
+<body data-shell="chat" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Claude</h1>
+      <p>Your own Claude, for questions and project work. It runs on your server with your subscription and can read the projects and your Ops board.</p>
+    </div>
+  </div>
+  <div id="chat-root" aria-label="Claude chat">
+    <p class="chat-dim">Loading&hellip;</p>
+  </div>
+</main>
+
+<script src="shell.js"></script>
+<script src="auth-gate.js"></script>
+<script src="markdown.js"></script>
+<script src="chat.js"></script>
+</body>
+</html>
