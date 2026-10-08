@@ -187,6 +187,28 @@
     return out;
   }
 
+  // The items that have waited longest for the owner (lane "waiting", owned by "you"), oldest first.
+  // Shown in the side rail on wide screens so the oldest decision is never buried in a lane.
+  function longestWaiting(items, limit) {
+    var out = [];
+    var open = openItems(items);
+    for (var i = 0; i < open.length; i++) if (open[i].lane === "waiting" && open[i].owner === "you") out.push(open[i]);
+    out.sort(function (a, b) { return a.addedAt - b.addedAt; });
+    return out.slice(0, limit);
+  }
+
+  // Finished items from the last `days` days, newest first (the side rail's "Recently done").
+  function recentlyDone(doneItems, now, days, limit) {
+    var out = [];
+    var since = now - days * 86400000;
+    for (var i = 0; i < (doneItems || []).length; i++) {
+      var it = doneItems[i];
+      if (it.doneAt && it.doneAt >= since && it.doneAt <= now + 60000) out.push(it);
+    }
+    out.sort(function (a, b) { return b.doneAt - a.doneAt; });
+    return out.slice(0, limit);
+  }
+
   function describeChange(field, pair) {
     var title = FIELD_TITLE[field] || field;
     var from = pair[0];
@@ -270,6 +292,7 @@
     dateString: dateString, daysUntil: daysUntil, dueInfo: dueInfo, ageDays: ageDays, ageText: ageText,
     relativeTime: relativeTime, openItems: openItems, computeStats: computeStats, sortForLane: sortForLane,
     matchesFilters: matchesFilters, filterItems: filterItems, facet: facet, upcoming: upcoming,
+    longestWaiting: longestWaiting, recentlyDone: recentlyDone,
     describeChanges: describeChanges, describeEvent: describeEvent, reduceMessage: reduceMessage,
     newer: newer, changedFields: changedFields, parseTargets: parseTargets,
     errorMessage: errorMessage, piiText: piiText
@@ -567,7 +590,8 @@
           flash(action.item.id);
           if (action.event.actor === "claude") toast(describeEvent(action.event, action.item));
         }
-        if (state.tab === "done") loadDone();
+        // Keep the finished list (and the side rail's "Done in the last two weeks") current.
+        if (state.tab === "done" || action.item.lane === "done" || (before && before.lane === "done")) loadDone();
         render();
         // Only a change this tab has not already folded in (its own write's
         // echo is "seen") should rebuild the open drawer, or a just-saved
@@ -577,7 +601,7 @@
     }
 
     function loadDone() {
-      transport.done().then(function (res) { state.doneItems = res.items; if (state.tab === "done") render(); }).catch(function () { /* shown as empty */ });
+      transport.done().then(function (res) { state.doneItems = res.items; if (state.tab === "done" || state.tab === "work") render(); }).catch(function () { /* shown as empty */ });
     }
 
     // -- rendering: tabs, summary, filters, lanes
@@ -715,6 +739,53 @@
       return panel;
     }
 
+    // Right-hand rail. On a wide screen it sits beside the board and uses the space the board
+    // does not need (the tiles keep their size); below that width only "Coming up" shows, above
+    // the board, exactly as before (the other panels are hidden by CSS).
+    function railSection(title, sub, className) {
+      var s = el("section", "ops-rail-section " + (className || ""));
+      var head = el("div", "ops-section-head");
+      head.appendChild(el("h2", null, title));
+      if (sub) head.appendChild(el("span", "ops-sub", sub));
+      s.appendChild(head);
+      return s;
+    }
+
+    function railRow(it, when, whenClass) {
+      var row = el("button", "ops-rail-row");
+      row.type = "button";
+      row.setAttribute("data-id", it.id);
+      row.appendChild(el("span", "ops-rail-title", it.title));
+      row.appendChild(el("span", "ops-rail-when " + (whenClass || ""), when));
+      row.addEventListener("click", function () { state.items[it.id] = newer(state.items[it.id], it); openDrawer(it.id, row); });
+      return row;
+    }
+
+    function renderRail(visible, all, now, today) {
+      var rail = el("aside", "ops-rail");
+      rail.setAttribute("aria-label", "At a glance");
+      var up = renderUpcoming(visible, today);
+      if (up) { up.classList.add("ops-rail-section"); rail.appendChild(up); }
+      var waiting = longestWaiting(all, 4);
+      if (waiting.length) {
+        var w = railSection("Waiting longest on you", "Oldest first", "ops-rail-extra");
+        waiting.forEach(function (it) { w.appendChild(railRow(it, ageText(it.addedAt, now), "tone-" + (ageDays(it.addedAt, now) >= 7 ? "soon" : "later"))); });
+        rail.appendChild(w);
+      }
+      var done = renderRecentlyDone(now);
+      if (done) rail.appendChild(done);
+      return rail.childNodes.length ? rail : null;
+    }
+
+    function renderRecentlyDone(now) {
+      if (state.doneItems === null) { if (!state.doneRequested) { state.doneRequested = true; loadDone(); } return null; }
+      var recent = recentlyDone(state.doneItems, now, 14, 6);
+      if (!recent.length) return null;
+      var s = railSection("Done in the last two weeks", state.doneCount + " in total", "ops-rail-extra");
+      recent.forEach(function (it) { s.appendChild(railRow(it, shortDate(dateString(new Date(it.doneAt))), "")); });
+      return s;
+    }
+
     function renderTile(it, now, today) {
       var tile = el("button", "ops-tile" + (it.owner === "you" ? " is-yours" : "") + (state.flashed[it.id] ? " ops-flash" : ""));
       tile.type = "button";
@@ -821,13 +892,21 @@
       frag.appendChild(renderSummary(now, today));
       frag.appendChild(renderFilters(open));
       var visible = filterItems(open, state.filters);
-      var up = renderUpcoming(visible, today);
-      if (up) frag.appendChild(up);
-      if (state.layout === "list") { frag.appendChild(renderList(visible, today)); return frag; }
-      frag.appendChild(renderLaneJump(visible));
-      var board = el("div", "ops-lanes");
-      LANES.forEach(function (lane) { board.appendChild(renderLane(lane, visible, open, now, today)); });
-      frag.appendChild(board);
+      // The board (or list) and the side rail share a grid: one column normally (the rail's
+      // "Coming up" sits above, as it always did), two on a very wide screen.
+      var rail = renderRail(visible, all, now, today);
+      var space = el("div", "ops-workspace" + (rail ? " has-rail" : ""));
+      if (rail) space.appendChild(rail);
+      var main = el("div", "ops-main");
+      if (state.layout === "list") main.appendChild(renderList(visible, today));
+      else {
+        main.appendChild(renderLaneJump(visible));
+        var board = el("div", "ops-lanes");
+        LANES.forEach(function (lane) { board.appendChild(renderLane(lane, visible, open, now, today)); });
+        main.appendChild(board);
+      }
+      space.appendChild(main);
+      frag.appendChild(space);
       return frag;
     }
 

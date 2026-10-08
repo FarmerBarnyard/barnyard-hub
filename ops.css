@@ -242,3 +242,30 @@ textarea.ops-input { resize: vertical; line-height: 1.45; }
 .ops-activity time { flex: 0 0 auto; min-width: 9em; font-variant-numeric: tabular-nums; }
 .ops-activity .is-denied { color: var(--alert); }
 .ops-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg-dim); padding-bottom: 8px; }
+
+/* Work tab: the board, plus a side rail on very wide screens. Below 1900px nothing changes:
+   one column, with "Coming up" above the board as before. From 1900px the page is allowed to
+   grow (the shared 1320px cap would leave a third of a large monitor empty) and the extra width
+   goes to a rail of at-a-glance panels, not to bigger tiles. */
+.ops-workspace { display: block; }
+.ops-rail-section { margin-bottom: 26px; }
+.ops-rail-extra { display: none; }
+.ops-rail-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line); padding: 9px 4px; font: inherit; color: var(--fg); cursor: pointer; }
+.ops-rail-row:hover { background: var(--panel-2); }
+.ops-rail-title { min-width: 0; color: var(--fg-strong); font-weight: 500; }
+.ops-rail-when { flex: none; font: 500 12px var(--font-mono); color: var(--fg-dim); }
+@media (min-width: 1900px) {
+  body[data-shell="ops"] .content { max-width: 2140px; }
+  .ops-workspace.has-rail { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, calc(100vw - 1584px), 520px); gap: 0 32px; align-items: start; }
+  .ops-workspace.has-rail .ops-lanes { grid-template-columns: repeat(4, minmax(0, 340px)); }
+  .ops-workspace.has-rail .ops-main { grid-column: 1; grid-row: 1; min-width: 0; }
+  .ops-workspace.has-rail .ops-rail { grid-column: 2; grid-row: 1; position: sticky; top: 72px; padding-top: 10px; border-top: 2px solid var(--line); }
+  .ops-rail-extra { display: block; }
+  .ops-rail .ops-upcoming-list { max-width: none; }
+  .ops-rail .ops-section-head { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .ops-rail .ops-upcoming { grid-template-columns: 58px minmax(0, 1fr); align-items: start; padding: 9px 4px; }
+  .ops-rail .ops-upcoming-date { grid-row: 1 / 3; }
+  .ops-rail .ops-upcoming-title { grid-column: 2; grid-row: 1; }
+  .ops-rail .ops-upcoming-rel { grid-column: 2; grid-row: 2; font-size: 12px; }
+  .ops-rail .ops-upcoming .ops-chip { display: none; }
+}
