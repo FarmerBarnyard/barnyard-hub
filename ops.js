@@ -287,7 +287,22 @@
     return seen;
   }
 
+  // May this tile be dropped in this lane? Only a live (not done) item that is not still a
+  // proposal, and only into a different one of the four lanes. Proposals are decided in their
+  // own tab, and finished items come back with Reopen.
+  function canMoveToLane(item, laneKey) {
+    if (!item || item.proposal || item.lane === "done" || item.lane === laneKey) return false;
+    return LANES.some(function (l) { return l.key === laneKey; });
+  }
+
+  // The lane one step left (-1) or right (1) of a lane, for the keyboard move; null at the ends.
+  function neighbourLane(laneKey, dir) {
+    var keys = LANES.map(function (l) { return l.key; }), i = keys.indexOf(laneKey), j = i + dir;
+    return i < 0 || j < 0 || j >= keys.length ? null : keys[j];
+  }
+
   var helpers = {
+    canMoveToLane: canMoveToLane, neighbourLane: neighbourLane,
     LANES: LANES, STATUS_TITLE: STATUS_TITLE, CATEGORIES: CATEGORIES,
     dateString: dateString, daysUntil: daysUntil, dueInfo: dueInfo, ageDays: ageDays, ageText: ageText,
     relativeTime: relativeTime, openItems: openItems, computeStats: computeStats, sortForLane: sortForLane,
@@ -535,6 +550,32 @@
       toasts.appendChild(t);
       setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 5000);
     }
+
+    // -- moving a tile to another lane: drag it there, or Alt+Left / Alt+Right on a focused tile.
+    // The server does the move (a plain edit of the lane, so it shows in the log as "moved"); the
+    // tile is dimmed until it answers, and the board redraws from the reply.
+    function moveItem(id, laneKey) {
+      var item = state.items[id];
+      if (!canMoveToLane(item, laneKey) || state.connection === "offline") return;
+      var tile = content.querySelector('.ops-tile[data-id="' + id + '"]');
+      if (tile) tile.classList.add("is-moving");
+      transport.patch(id, { lane: laneKey }).then(function (res) {
+        applyReply(res);
+        toast("Moved “" + (item.title.length > 48 ? item.title.slice(0, 47) + "…" : item.title) + "” to " + LANE_TITLE[laneKey] + ".");
+      }).catch(function (err) {
+        var t = content.querySelector('.ops-tile[data-id="' + id + '"]');
+        if (t) t.classList.remove("is-moving");
+        toast(errorMessage(err));
+      });
+    }
+    if (window.BarnyardDrag) window.BarnyardDrag.attach({
+      root: content,
+      item: ".ops-tile",
+      zone: ".ops-lane",
+      canDrag: function () { return state.tab === "work" && state.connection !== "offline"; },
+      canDrop: function (tile, lane) { return canMoveToLane(state.items[tile.getAttribute("data-id")], lane.getAttribute("data-lane")); },
+      onDrop: function (tile, lane) { moveItem(tile.getAttribute("data-id"), lane.getAttribute("data-lane")); }
+    });
 
     // -- connection state: the shell's Live pill, a banner when it matters, and
     // no editing while offline (the writes would only fail)
@@ -817,6 +858,14 @@
       foot.appendChild(el("span", "ops-tile-owner", OWNER_TITLE[it.owner] || it.owner));
       tile.appendChild(foot);
       tile.addEventListener("click", function () { openDrawer(it.id, tile); });
+      // Drag the tile to another lane, or move it from the keyboard with Alt + Left / Right.
+      tile.setAttribute("aria-keyshortcuts", "Alt+ArrowLeft Alt+ArrowRight");
+      tile.addEventListener("keydown", function (ev) {
+        if (!ev.altKey || (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight")) return;
+        var to = neighbourLane(it.lane, ev.key === "ArrowLeft" ? -1 : 1);
+        ev.preventDefault();
+        if (to) moveItem(it.id, to);
+      });
       return tile;
     }
 
