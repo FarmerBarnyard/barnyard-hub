@@ -230,9 +230,11 @@ test("parseDailyForecast: \"Today\" is based on the entry's own date, not array 
   var days = gw.parseDailyForecast(makeWellFormedDaily(yesterday));
   assert.strictEqual(days[0].dayLabel, dayAbbrevFor(yesterday));
   assert.notStrictEqual(days[0].dayLabel, "Today");
-  // None of the other six entries should claim to be "Today" either.
+  // The forecast starts yesterday, so entry 1 IS today and is rightly labelled "Today"; only that
+  // entry may be. (This used to assert that no later entry was "Today", which is wrong by one day
+  // and failed whenever the test ran.)
   for (var i = 1; i < days.length; i++) {
-    assert.notStrictEqual(days[i].dayLabel, "Today");
+    assert.strictEqual(days[i].dayLabel === "Today", i === 1, "entry " + i);
   }
 });
 
