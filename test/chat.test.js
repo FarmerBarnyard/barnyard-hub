@@ -204,4 +204,36 @@ test("the shell shows the Claude page only to the owner and fails closed", funct
   assert.ok(/chat: '<path/.test(shell), "icon");
 });
 
+
+test("clockTime: today shows just the time, an earlier day adds the date, and nonsense shows nothing", function () {
+  var now = new Date(2026, 9, 9, 20, 30).getTime();
+  assert.strictEqual(chat.clockTime(new Date(2026, 9, 9, 15, 42).getTime(), now), "3:42 pm");
+  assert.strictEqual(chat.clockTime(new Date(2026, 9, 9, 0, 5).getTime(), now), "12:05 am");
+  assert.strictEqual(chat.clockTime(new Date(2026, 9, 9, 12, 0).getTime(), now), "12:00 pm");
+  assert.strictEqual(chat.clockTime(new Date(2026, 9, 9, 9, 7).getTime(), now), "9:07 am");
+  assert.strictEqual(chat.clockTime(new Date(2026, 9, 8, 23, 59).getTime(), now), "8 Oct, 11:59 pm");
+  assert.strictEqual(chat.clockTime(new Date(2025, 11, 31, 8, 0).getTime(), now), "31 Dec, 8:00 am");
+  assert.strictEqual(chat.clockTime(0, now), "");
+  assert.strictEqual(chat.clockTime(undefined, now), "");
+  assert.strictEqual(chat.clockTime(NaN, now), "");
+});
+
+test("starter prompts are short plain questions the owner could send as they are", function () {
+  assert.ok(chat.STARTERS.length >= 3 && chat.STARTERS.length <= 6);
+  chat.STARTERS.forEach(function (s) {
+    assert.ok(typeof s === "string" && s.length > 10 && s.length < 120, s);
+    assert.ok(!/[<>]/.test(s));
+  });
+  assert.strictEqual(new Set(chat.STARTERS).size, chat.STARTERS.length, "no repeats");
+});
+
+test("the page shows who said what: a Claude avatar and card, a time label, a typing indicator, and starters; no inner HTML", function () {
+  var js = read("chat.js");
+  assert.ok(js.indexOf("chat-avatar") >= 0 && js.indexOf("chat-card") >= 0 && js.indexOf("chat-dots") >= 0 && js.indexOf("chat-starter") >= 0);
+  assert.ok(!/innerHTML\s*=/.test(js), "model text never goes in as markup");
+  var css = read("chat.css");
+  assert.ok(css.indexOf("prefers-reduced-motion") >= 0 && css.indexOf(".chat-dots i { animation: none; }") >= 0, "the dots stop moving for people who ask for less motion");
+  assert.ok(css.indexOf("@media (hover: none)") >= 0, "Copy is always visible on touch screens");
+});
+
 console.log("\n" + passed + " tests passed");

@@ -53,6 +53,26 @@
     return new Date(ts).toLocaleDateString("en-AU", { day: "numeric", month: "short" });
   }
 
+  // The time a message was sent, for the small label beside it: "3:42 pm" today, "9 Oct, 3:42 pm"
+  // otherwise. Built by hand (not toLocaleTimeString) so it reads the same in every browser.
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function clockTime(ts, now) {
+    if (!ts || !Number.isFinite(ts)) return "";
+    var d = new Date(ts), n = new Date(now || Date.now());
+    var h = d.getHours(), m = d.getMinutes();
+    var clock = (h % 12 === 0 ? 12 : h % 12) + ":" + (m < 10 ? "0" : "") + m + " " + (h < 12 ? "am" : "pm");
+    var sameDay = d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+    return sameDay ? clock : d.getDate() + " " + MONTHS[d.getMonth()] + ", " + clock;
+  }
+
+  // Things to try, shown on an empty chat. Clicking one fills the box; nothing is sent until Send.
+  var STARTERS = [
+    "What is on my Ops board right now?",
+    "What changed in the projects this week?",
+    "Explain how the campaign engine and the Knowledgebase AI fit together.",
+    "Help me plan the next piece of work."
+  ];
+
   // The runner pill: {tone: "ok"|"off"|"none", text}.
   function runnerLabel(me, now) {
     var r = me && me.runner;
@@ -159,7 +179,7 @@
   var helpers = {
     statusLabel: statusLabel, isActiveStatus: isActiveStatus, newestFirst: newestFirst, titleOf: titleOf,
     relativeTime: relativeTime, runnerLabel: runnerLabel, fold: fold, groupTurns: groupTurns, isBusy: isBusy,
-    sendBlock: sendBlock, errorMessage: errorMessage, toolSummary: toolSummary, TEXT_MAX: TEXT_MAX
+    sendBlock: sendBlock, errorMessage: errorMessage, toolSummary: toolSummary, clockTime: clockTime, STARTERS: STARTERS, TEXT_MAX: TEXT_MAX
   };
 
   // ---- 2. transport ---------------------------------------------------------
@@ -457,9 +477,13 @@
     function turnNode(t) {
       var wrap = el("article", "chat-turn");
       if (t.user) {
+        var mine = el("div", "chat-msg chat-msg-user");
         var u = el("div", "chat-user");
         u.textContent = t.user.text;                 // plain text, line breaks kept by CSS
-        wrap.appendChild(u);
+        mine.appendChild(u);
+        var when = helpers.clockTime(t.user.ts);
+        if (when) mine.appendChild(el("span", "chat-time", when));
+        wrap.appendChild(mine);
       }
       var a = t.assistant;
       var active = !!a && helpers.isActiveStatus(a.status);
@@ -477,17 +501,42 @@
         var bodyNode;
         if (hit && hit.sig === sig) bodyNode = hit.node;
         else { bodyNode = replyNode(a); cache[a.seq] = { sig: sig, node: bodyNode }; }
+        // Claude's side: a small avatar and a card with "Claude" and the time above the reply.
+        var msgRow = el("div", "chat-msg chat-msg-claude");
+        var avatar = el("span", "chat-avatar", "C");
+        avatar.setAttribute("aria-hidden", "true");
+        msgRow.appendChild(avatar);
+        var card = el("div", "chat-card");
+        var head = el("div", "chat-card-head");
+        head.appendChild(el("span", "chat-who", "Claude"));
+        var replied = helpers.clockTime(a.ts);
+        if (replied) head.appendChild(el("span", "chat-time", replied));
+        card.appendChild(head);
         var reply = el("div", "chat-reply chat-reply-" + a.status);
-        reply.appendChild(bodyNode);
+        if (a.text || !active) reply.appendChild(bodyNode);
         var label = helpers.statusLabel(a.status);
-        if (label && !(a.status === "error" && a.text)) reply.appendChild(el("p", "chat-status" + (a.status === "error" ? " is-error" : ""), label));
+        if (label && !(a.status === "error" && a.text)) {
+          var st = el("p", "chat-status" + (a.status === "error" ? " is-error" : ""));
+          if (active) {
+            var dots = el("span", "chat-dots");
+            dots.setAttribute("aria-hidden", "true");
+            for (var k = 0; k < 3; k++) dots.appendChild(el("i"));
+            st.appendChild(dots);
+          }
+          st.appendChild(document.createTextNode(label));
+          reply.appendChild(st);
+        }
+        card.appendChild(reply);
         if (a.status === "done" && a.text) {
-          var cb = el("button", "chat-copy", "Copy");
+          var actions = el("div", "chat-actions");
+          var cb = el("button", "chat-copy", "Copy reply");
           cb.type = "button";
           cb.addEventListener("click", function () { copy(a.text, cb); });
-          reply.appendChild(cb);
+          actions.appendChild(cb);
+          card.appendChild(actions);
         }
-        wrap.appendChild(reply);
+        msgRow.appendChild(card);
+        wrap.appendChild(msgRow);
       }
       return wrap;
     }
@@ -500,8 +549,19 @@
         thread.appendChild(el("p", "chat-empty", "Start a chat to begin."));
       } else if (!turns.length) {
         var e = el("div", "chat-empty");
-        e.appendChild(el("p", null, "Ask anything, or work on a project."));
-        e.appendChild(el("p", "chat-dim", state.conv.mode === "edit" ? "This chat is in Edit mode." : "This chat is in Read mode: Claude can look at the projects and your Ops board but cannot change files."));
+        e.appendChild(el("h2", "chat-empty-title", "How can I help?"));
+        e.appendChild(el("p", "chat-dim", state.conv.mode === "edit"
+          ? "This chat is in Edit mode: Claude can change files and push claude/ branches."
+          : "This chat is in Read mode: Claude can look at the projects and your Ops board but cannot change files."));
+        var starters = el("div", "chat-starters");
+        helpers.STARTERS.forEach(function (text) {
+          var s = el("button", "chat-starter", text);
+          s.type = "button";
+          // Fills the box so it can be changed first; nothing is sent until Send.
+          s.addEventListener("click", function () { box.value = text; renderComposer(); box.focus(); });
+          starters.appendChild(s);
+        });
+        e.appendChild(starters);
         thread.appendChild(e);
       } else {
         turns.forEach(function (t) { thread.appendChild(turnNode(t)); });
