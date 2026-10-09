@@ -1,0 +1,33 @@
+/* Drag and drop (drag.js): the floating copy, the highlighted drop target, and the grip on each
+   Overview widget. Colours are theme tokens only. */
+
+body.drag-active { user-select: none; -webkit-user-select: none; cursor: grabbing; }
+body.drag-active * { cursor: grabbing !important; }
+
+/* the copy that follows the pointer; it never takes a click itself, so the page underneath can be hit-tested */
+.drag-ghost { position: fixed; z-index: 1000; margin: 0 !important; pointer-events: none; opacity: .92; box-shadow: var(--lift); border-radius: 10px; background: var(--panel); will-change: transform; }
+
+/* the thing being carried, left in place and dimmed */
+.is-dragging { opacity: .35; }
+.is-moving { opacity: .55; }
+
+/* where it would land */
+.drop-ok { outline: 2px dashed var(--accent); outline-offset: -2px; background: var(--accent-soft); }
+.drop-no { outline: 2px dashed var(--line); outline-offset: -2px; }
+body.drag-active .drop-no, body.drag-active .drop-no * { cursor: not-allowed !important; }
+
+/* Ops board: the lane is the drop target, so give it room to be hit even when it is empty */
+.ops-lane { border-radius: 10px; min-height: 80px; }
+.ops-tile { touch-action: manipulation; }
+
+/* Overview: a grip on the top edge of each widget */
+.w { position: relative; }
+.w-grip { position: absolute; z-index: 2; top: -9px; left: 50%; transform: translateX(-50%); width: 44px; height: 18px; padding: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--fg-dim); cursor: grab; opacity: 0; touch-action: none; transition: opacity .12s ease; }
+.w-grip .i { width: 24px; height: 8px; fill: currentColor; stroke: none; }
+.w:hover > .w-grip, .w:focus-within > .w-grip, .w-grip:focus-visible, body.drag-active .w-grip { opacity: 1; }
+.w-grip:hover { color: var(--fg-strong); border-color: var(--accent); }
+.w-grip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (hover: none) { .w-grip { opacity: .7; } }
+.w[hidden] > .w-grip { display: none; }
+
+@media (prefers-reduced-motion: reduce) { .w-grip { transition: none; } }

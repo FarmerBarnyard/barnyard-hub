@@ -408,6 +408,63 @@
     } else if (none) none.parentNode.removeChild(none);
   }
 
+  // ---- rearranging the widgets by dragging ------------------------------------------
+  //
+  // Each widget gets a small grip on its top edge (it appears on hover or keyboard focus, and is
+  // always faintly visible on a touch screen). Drag a widget onto another and it takes that
+  // place; with the grip focused, the arrow keys move it one place along. The new order is
+  // saved the same way the Settings list saves it, so the two always agree.
+
+  function widgetShown(w) { return w.visible && !restricted(w.id); }
+
+  function gripIcon() {
+    var ns = "http://www.w3.org/2000/svg", s = document.createElementNS(ns, "svg");
+    s.setAttribute("class", "i");
+    s.setAttribute("viewBox", "0 0 24 8");
+    s.setAttribute("aria-hidden", "true");
+    [5, 12, 19].forEach(function (cx) {
+      [2, 6].forEach(function (cy) {
+        var c = document.createElementNS(ns, "circle");
+        c.setAttribute("cx", String(cx)); c.setAttribute("cy", String(cy)); c.setAttribute("r", "1.1");
+        s.appendChild(c);
+      });
+    });
+    return s;
+  }
+
+  function setupDrag() {
+    var box = $("widgets"), Drag = window.BarnyardDrag, Theme = window.BarnyardTheme;
+    if (!box || !Drag) return;
+    function commit(next) { Theme.set({ widgets: next.map(function (x) { return { id: x.id, visible: x.visible, size: x.size }; }) }); }
+    function say(text) { if (window.BarnyardShell && window.BarnyardShell.toast) window.BarnyardShell.toast(text); }
+    Array.prototype.forEach.call(box.querySelectorAll(".w[data-w]"), function (el) {
+      var id = el.getAttribute("data-w"), name = WIDGET_TITLE[id] || id;
+      var grip = h("button", "w-grip");
+      grip.type = "button";
+      grip.title = "Drag to rearrange";
+      grip.setAttribute("aria-label", "Move " + name + ". Drag it, or press an arrow key to move it along.");
+      grip.appendChild(gripIcon());
+      grip.addEventListener("keydown", function (ev) {
+        var dir = ev.key === "ArrowLeft" || ev.key === "ArrowUp" ? -1 : ev.key === "ArrowRight" || ev.key === "ArrowDown" ? 1 : 0;
+        if (!dir) return;
+        ev.preventDefault();
+        var list = Theme.get().widgets, other = Drag.neighbour(list, id, dir, widgetShown);
+        if (!other) { say(name + " is already " + (dir < 0 ? "first." : "last.")); return; }
+        commit(Drag.reorder(list, id, other.id));
+        say("Moved " + name + (dir < 0 ? " earlier." : " later."));
+      });
+      el.insertBefore(grip, el.firstChild);
+    });
+    Drag.attach({
+      root: box,
+      item: ".w",
+      handle: ".w-grip",
+      zone: ".w",
+      canDrop: function (el, zone) { return !zone.hidden && zone.getAttribute("data-w") !== el.getAttribute("data-w"); },
+      onDrop: function (el, zone) { commit(Drag.reorder(Theme.get().widgets, el.getAttribute("data-w"), zone.getAttribute("data-w"))); }
+    });
+  }
+
   function registerLayoutTab() {
     if (!window.BarnyardShell) return;
     var Theme = window.BarnyardTheme, controls = window.BarnyardShell.controls;
@@ -540,6 +597,7 @@
     registerLayoutTab();
     registerAccountTab();
     applyLayout();
+    setupDrag();
     window.BarnyardTheme.onChange(applyLayout);
     // Once it is known who is signed in, hide the owner's own widgets from a guest.
     if (window.BarnyardTheme.who) window.BarnyardTheme.who.onChange(function () {
