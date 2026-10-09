@@ -162,7 +162,7 @@ test("chat.html stays inside the CSP and loads its scripts in order", function (
   assert.ok(!/<style[\s>]/i.test(html), "style element");
   assert.ok(/wss:\/\/api\.barnyard\.site/.test(html) && /connect-src 'self' https:\/\/api\.barnyard\.site/.test(html));
   assert.ok(/default-src 'self'/.test(html) && /script-src 'self'/.test(html) && /style-src 'self'/.test(html));
-  var order = ["shell.js", "auth-gate.js", "markdown.js", "chat.js"].map(function (f) { return html.indexOf('src="' + f + '"'); });
+  var order = ["shell.js", "auth-gate.js", "markdown.js", "chat.js"].map(function (f) { return html.indexOf('src="' + f); });
   assert.ok(order.every(function (i) { return i > 0; }), "a script is missing");
   assert.deepStrictEqual(order.slice().sort(function (a, b) { return a - b; }), order, "scripts out of order");
   assert.ok(/data-shell="chat"/.test(html));

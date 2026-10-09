@@ -106,9 +106,9 @@ test("every lane the tiles can be dropped on is one the Worker accepts", functio
 
 test("the pages load drag.js before the scripts that use it, and its stylesheet", function () {
   var idx = read("index.html"), opsHtml = read("ops.html");
-  assert.ok(idx.indexOf('src="drag.js"') > 0 && idx.indexOf('src="drag.js"') < idx.indexOf('src="overview.js"'));
-  assert.ok(opsHtml.indexOf('src="drag.js"') > 0 && opsHtml.indexOf('src="drag.js"') < opsHtml.indexOf('src="ops.js"'));
-  assert.ok(/href="drag\.css"/.test(idx) && /href="drag\.css"/.test(opsHtml));
+  assert.ok(idx.indexOf('src="drag.js') > 0 && idx.indexOf('src="drag.js') < idx.indexOf('src="overview.js'));
+  assert.ok(opsHtml.indexOf('src="drag.js') > 0 && opsHtml.indexOf('src="drag.js') < opsHtml.indexOf('src="ops.js'));
+  assert.ok(/href="drag\.css/.test(idx) && /href="drag\.css/.test(opsHtml));
 });
 
 test("drag.js and drag.css keep to the CSP: no innerHTML, no style attributes, no fixed colours, nothing remote", function () {
