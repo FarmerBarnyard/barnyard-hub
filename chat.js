@@ -1,10 +1,13 @@
-// The Claude chat page (chat.html): the owner's own Claude, like the desktop app.
+// The Claude chat page (chat.html): a person's own Claude, like the desktop app.
 //
 // The page only talks to the Worker (api.barnyard.site/chat/*). The Worker stores the
-// conversation and queues each message; a runner on the owner's server runs Claude Code for it
-// and posts the reply back, which reaches this page over a WebSocket as it is written. Only the
-// owner can use it (the Worker refuses anyone else), and sending, stopping, deleting and turning
-// on edit mode need a recent sign-in.
+// conversation and queues each message; a runner runs Claude Code for it and posts the reply
+// back, which reaches this page over a WebSocket as it is written. For the owner the runner is on
+// the owner's server. For a guest (when the owner has switched guest chats on) it is a program on
+// the guest's OWN computer, signed in with the guest's own Claude account, read-only; the page
+// then also shows "Connect your Claude" (download, make a key, status). The Worker decides which
+// room a person gets from their login alone. Sending, stopping, deleting, turning on edit mode
+// and making or revoking a key need a recent sign-in.
 //
 // Three parts, like ops.js:
 //   1. pure helpers   -- folding pushed messages into the list, grouping a turn, labels and
@@ -73,13 +76,58 @@
     "Help me plan the next piece of work."
   ];
 
+  // ---- guests: their own Claude, on their own computer ----------------------------
+  function isGuest(me) { return !!me && me.kind === "guest"; }
+
+  var STARTERS_GUEST = [
+    "What is in the folder I shared with you?",
+    "Summarise the main files in my shared folder.",
+    "Help me plan my week.",
+    "Explain what this project does, in plain words."
+  ];
+
+  // Where a guest's connection stands: no key yet, a key but their computer has not been seen, or connected.
+  function connectState(me) {
+    if (!isGuest(me)) return "owner";
+    if (me.runner && me.runner.online) return "connected";
+    if (me.keys && me.keys.active > 0) return "waiting";
+    return "need_key";
+  }
+
+  var KEY_LIFETIMES = [[30, "30 days"], [90, "90 days"], [365, "1 year"]];
+
+  function keyState(k, now) {
+    if (!k) return "";
+    if (k.revoked) return "Revoked";
+    if (k.expired || (k.expiresAt && k.expiresAt <= (now || Date.now()))) return "Expired";
+    return "Active";
+  }
+  function dayText(ts) { var d = new Date(ts); return d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear(); }
+  // One line about a key: never the key itself (it is shown once, when it is made).
+  function keyLine(k, now) {
+    var parts = ["Made " + relativeTime(k.createdAt, now)];
+    if (keyState(k, now) === "Active") parts.push("expires " + dayText(k.expiresAt));
+    parts.push(k.lastUsed ? "last used " + relativeTime(k.lastUsed, now) : "not used yet");
+    return parts.join(" · ");
+  }
+
+  // The download the hub offers (guest-runner/guest-runner.json). Accepted only in exactly this shape:
+  // a file name that carries the first 8 digits of its own checksum, so a mix-up is caught.
+  function parseKit(j) {
+    if (!j || typeof j !== "object") return null;
+    if (typeof j.file !== "string" || !/^guest-runner-[0-9a-f]{8}\.zip$/.test(j.file)) return null;
+    if (typeof j.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(j.sha256) || j.sha256.slice(0, 8) !== j.file.slice(13, 21)) return null;
+    return { file: j.file, sha256: j.sha256, bytes: Number.isFinite(j.bytes) && j.bytes > 0 ? j.bytes : 0 };
+  }
+  function sizeText(bytes) { return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(bytes / 1024)) + " KB"; }
+
   // The runner pill: {tone: "ok"|"off"|"none", text}.
   function runnerLabel(me, now) {
-    var r = me && me.runner;
-    if (!r) return { tone: "none", text: "Checking the runner…" };
-    if (r.online) return { tone: "ok", text: "Runner online" };
-    if (!r.lastSeen) return { tone: "off", text: "Runner has not connected yet" };
-    return { tone: "off", text: "Runner offline, last seen " + relativeTime(r.lastSeen, now) };
+    var r = me && me.runner, g = isGuest(me);
+    if (!r) return { tone: "none", text: g ? "Checking your Claude…" : "Checking the runner…" };
+    if (r.online) return { tone: "ok", text: g ? "Your Claude is connected" : "Runner online" };
+    if (!r.lastSeen) return { tone: "off", text: g ? "Your Claude is not connected yet" : "Runner has not connected yet" };
+    return { tone: "off", text: (g ? "Your Claude is offline, last seen " : "Runner offline, last seen ") + relativeTime(r.lastSeen, now) };
   }
 
   // Fold one message from the WebSocket (or a REST reply) into the state. Pure: returns a new
@@ -135,7 +183,7 @@
   function sendBlock(state) {
     if (!state.conv) return "Start a chat first.";
     if (state.busy) return "Claude is working on your last message.";
-    if (!state.me || !state.me.runner || !state.me.runner.online) return "The runner is offline, so nothing can answer yet.";
+    if (!state.me || !state.me.runner || !state.me.runner.online) return isGuest(state.me) ? "Your Claude is not connected, so nothing can answer yet." : "The runner is offline, so nothing can answer yet.";
     var t = state.text || "";
     if (!t.trim()) return "Type a message.";
     if (t.length > TEXT_MAX) return "That is too long (" + TEXT_MAX.toLocaleString("en-AU") + " characters at most).";
@@ -148,12 +196,21 @@
     api_key: "an API key", jwt: "a login token", url_password: "a password in a web address", credential: "a password or key"
   };
 
-  // What to tell the owner when the Worker refuses something.
-  function errorMessage(err) {
+  // What to tell the person when the Worker refuses something. (me: so a guest hears about their own computer.)
+  function errorMessage(err, me) {
     var code = err && err.code;
+    var guest = isGuest(me);
     if (code === "secret_detected") return "Not sent: your message looks like it contains " + (SECRET_KIND[err.kind] || "a password or key") + ". Take it out and send it again.";
     if (code === "recent_sign_in_required") return "For safety this needs a recent sign-in. Sign in again, then try again.";
-    if (code === "runner_offline") return "The runner is offline, so nothing can answer yet. Start it on the server.";
+    if (code === "runner_offline") return guest ? "Your Claude is not connected, so nothing can answer yet. Use “Connect your Claude”, or start the runner on your computer." : "The runner is offline, so nothing can answer yet. Start it on the server.";
+    if (code === "board_required") return "Open the Ops board once first: it sets up your own space. Then come back here.";
+    if (code === "board_disabled") return "Your space on the hub has been switched off by the owner.";
+    if (code === "edit_not_available") return "Guest chats are read-only: your Claude can look but not change anything.";
+    if (code === "keys_full") return "You already have two active keys. Revoke one first.";
+    if (code === "guests_full") return "Guest chats are full right now. Ask the hub owner to make room.";
+    if (code === "label_invalid") return "Give the key a short name (letters, numbers and spaces).";
+    if (code === "days_invalid") return "Pick how long the key should last.";
+    if (code === "key_expired") return "That key has expired. Make a new one.";
     if (code === "busy") return "Claude is still working on your last message in this chat.";
     if (code === "queue_full") return "Several messages are already waiting. Try again in a minute.";
     if (code === "rate_limited") return "That is a lot of messages in a minute. Wait a moment.";
@@ -164,7 +221,7 @@
     if (code === "text_too_long") return "That message is too long.";
     if (code === "not_found") return "That chat no longer exists.";
     if (err && err.status === 401) return "Your session has expired. Log in again.";
-    if (err && err.status === 403) return "Only the hub owner can use this chat.";
+    if (err && err.status === 403) return "This chat is not open to you yet. The hub owner switches guest chats on.";
     if (err && err.code) return "That did not work (" + String(err.code).replace(/_/g, " ") + ").";
     return "Couldn’t reach the server. Try again.";
   }
@@ -179,7 +236,9 @@
   var helpers = {
     statusLabel: statusLabel, isActiveStatus: isActiveStatus, newestFirst: newestFirst, titleOf: titleOf,
     relativeTime: relativeTime, runnerLabel: runnerLabel, fold: fold, groupTurns: groupTurns, isBusy: isBusy,
-    sendBlock: sendBlock, errorMessage: errorMessage, toolSummary: toolSummary, clockTime: clockTime, STARTERS: STARTERS, TEXT_MAX: TEXT_MAX
+    sendBlock: sendBlock, errorMessage: errorMessage, toolSummary: toolSummary, clockTime: clockTime, STARTERS: STARTERS, TEXT_MAX: TEXT_MAX,
+    isGuest: isGuest, STARTERS_GUEST: STARTERS_GUEST, connectState: connectState, keyState: keyState, keyLine: keyLine,
+    parseKit: parseKit, sizeText: sizeText, KEY_LIFETIMES: KEY_LIFETIMES
   };
 
   // ---- 2. transport ---------------------------------------------------------
@@ -262,6 +321,14 @@
     remove: function (id) { return request("DELETE", "/conversation?id=" + encodeURIComponent(id)); },
     send: function (conv, text) { return request("POST", "/message", { conv: conv, text: text }); },
     stop: function (conv) { return request("POST", "/stop", { conv: conv }); },
+    keys: function () { return request("GET", "/runner-keys"); },
+    makeKey: function (label, days) { return request("POST", "/runner-keys", { label: label, days: days }); },
+    revokeKey: function (id) { return request("DELETE", "/runner-key?id=" + encodeURIComponent(id)); },
+    // The download on offer, or null. Fetched from this site (not the Worker), and checked by parseKit.
+    kit: function () {
+      return fetch("guest-runner/guest-runner.json", { referrerPolicy: "no-referrer", cache: "no-cache" })
+        .then(function (res) { return res.ok ? res.json() : null; }).then(parseKit).catch(function () { return null; });
+    },
     connect: openStream
   };
 
@@ -283,7 +350,10 @@
   function mount(root, me) {
     var Shell = window.BarnyardShell;
     var MD = window.BarnyardMarkdown;
-    var state = { me: me, convs: [], conv: null, messages: [], busy: false, text: "", stream: null, streamStatus: "connecting", notice: "", confirm: null };
+    var isG = helpers.isGuest(me);
+    var state = { me: me, convs: [], conv: null, messages: [], busy: false, text: "", stream: null, streamStatus: "connecting", notice: "", confirm: null, setup: false, keys: [], kit: null, kitLoaded: false, newToken: "", makingKey: false };
+    var intro = document.getElementById("chat-intro");
+    if (intro && isG) intro.textContent = "Your own Claude, running on your own computer with your own Claude account. It can read one folder you choose and cannot change anything. Nothing about your Claude account is sent to Barnyard.";
     var cache = {};              // seq -> {sig, node}: a reply is rendered again only when it changed
     var renderQueued = false;
     var stick = true;            // keep the newest text in view unless the person scrolled up
@@ -302,6 +372,12 @@
     var listWrap = el("nav", "chat-list");
     listWrap.setAttribute("aria-label", "Chats");
     side.appendChild(newBtn);
+    var connectBtn = null;
+    if (isG) {
+      connectBtn = el("button", "chat-btn", "Connect your Claude");
+      connectBtn.type = "button";
+      side.appendChild(connectBtn);
+    }
     side.appendChild(listWrap);
 
     // main: bar, banner, thread, composer
@@ -319,6 +395,7 @@
     editBtn.title = "Claude can also change files in its own copy and push branches named claude/…";
     modes.appendChild(readBtn);
     modes.appendChild(editBtn);
+    modes.hidden = isG;                      // a guest's chat is always read-only: nothing to switch
     var pill = el("span", "chat-pill");
     var delBtn = el("button", "chat-btn chat-btn-quiet chat-btn-sm", "Delete");
     delBtn.type = "button";
@@ -356,14 +433,18 @@
     form.appendChild(box);
     form.appendChild(composerRow);
 
+    var setupPanel = el("div", "chat-setup");
+    setupPanel.hidden = true;
+
     main.appendChild(bar);
     main.appendChild(banner);
+    main.appendChild(setupPanel);
     main.appendChild(thread);
     main.appendChild(form);
 
     function toast(text) { if (Shell && Shell.toast) Shell.toast(text); }
     function say(text) { state.notice = text; renderBanner(); }
-    function fail(err) { say(helpers.errorMessage(err)); }
+    function fail(err) { say(helpers.errorMessage(err, state.me)); }
 
     // -- list ------------------------------------------------------------------
     function renderList() {
@@ -413,7 +494,11 @@
       } else if (state.notice) {
         text = state.notice; tone = "warn";
         actions = [["Dismiss", "", function () { state.notice = ""; renderBanner(); }]];
-      } else if (state.me && state.me.runner && !state.me.runner.online) {
+      } else if (isG && state.me && state.me.runner && !state.me.runner.online && !state.setup) {
+        text = "Your Claude is not connected, so messages cannot be answered yet.";
+        actions = [["Connect your Claude", "primary", function () { showSetup(true); }]];
+        tone = "warn";
+      } else if (!isG && state.me && state.me.runner && !state.me.runner.online) {
         text = "The runner is offline, so messages cannot be answered. It starts on the server (see runner/README.md in the ClaudeRepo project).";
         tone = "warn";
       } else if (c && c.mode === "edit") {
@@ -552,9 +637,10 @@
         e.appendChild(el("h2", "chat-empty-title", "How can I help?"));
         e.appendChild(el("p", "chat-dim", state.conv.mode === "edit"
           ? "This chat is in Edit mode: Claude can change files and push claude/ branches."
+          : isG ? "Your Claude can read the folder you shared and answer questions. It cannot change anything."
           : "This chat is in Read mode: Claude can look at the projects and your Ops board but cannot change files."));
         var starters = el("div", "chat-starters");
-        helpers.STARTERS.forEach(function (text) {
+        (isG ? helpers.STARTERS_GUEST : helpers.STARTERS).forEach(function (text) {
           var s = el("button", "chat-starter", text);
           s.type = "button";
           // Fills the box so it can be changed first; nothing is sent until Send.
@@ -580,6 +666,162 @@
     thread.addEventListener("scroll", function () { stick = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 80; });
 
     function renderAll() { renderList(); renderBar(); renderBanner(); renderThread(); }
+
+    // -- connect your Claude (guests) ---------------------------------------------
+    function code(text) { return el("code", null, text); }
+
+    function showSetup(on) {
+      state.setup = !!on;
+      setupPanel.hidden = !state.setup;
+      thread.hidden = state.setup;
+      form.hidden = state.setup;
+      if (connectBtn) connectBtn.setAttribute("aria-pressed", String(state.setup));
+      if (state.setup) loadSetup(); else state.newToken = "";
+      renderBanner();
+    }
+
+    function loadSetup() {
+      renderSetup();
+      transport.keys().then(function (r) { state.keys = r.keys || []; renderSetup(); }).catch(fail);
+      if (!state.kitLoaded) transport.kit().then(function (k) { state.kit = k; state.kitLoaded = true; renderSetup(); });
+    }
+
+    function makeKey(label, days) {
+      state.makingKey = true;
+      renderSetup();
+      transport.makeKey(label, days).then(function (r) {
+        state.makingKey = false;
+        state.newToken = r.token;
+        state.keys = [r.key].concat(state.keys);
+        var active = (state.me && state.me.keys ? state.me.keys.active : 0) + 1;
+        state.me = Object.assign({}, state.me, { keys: { active: active } });
+        renderSetup(); renderBar();
+      }).catch(function (err) { state.makingKey = false; fail(err); renderSetup(); });
+    }
+
+    function revokeKey(id) {
+      transport.revokeKey(id).then(function () {
+        state.keys = state.keys.map(function (k) { return k.id === id ? Object.assign({}, k, { revoked: true }) : k; });
+        state.newToken = "";
+        renderSetup();
+        pollStatus();
+      }).catch(fail);
+    }
+
+    function renderSetup() {
+      clear(setupPanel);
+      var st = helpers.connectState(state.me);
+      setupPanel.appendChild(el("h2", "chat-setup-title", "Connect your Claude"));
+      setupPanel.appendChild(el("p", "chat-dim", "This chat can use your own Claude, running on your own computer with your own Claude subscription. Nothing about your Claude account is sent to Barnyard, it can only read one folder you choose, and it cannot change anything."));
+      setupPanel.appendChild(el("p", "chat-setup-status chat-setup-" + (st === "connected" ? "ok" : "off"),
+        st === "connected" ? "Connected: your Claude is online." : st === "waiting" ? "Waiting for your computer to connect…" : "Not connected yet."));
+
+      var steps = el("ol", "chat-steps");
+
+      // 1. the download
+      var s1 = el("li");
+      s1.appendChild(el("strong", null, "Download the runner. "));
+      if (state.kit) {
+        var dl = el("a", "chat-btn chat-btn-sm", "Download (" + helpers.sizeText(state.kit.bytes) + ")");
+        dl.href = "guest-runner/" + state.kit.file;
+        dl.setAttribute("download", state.kit.file);
+        s1.appendChild(dl);
+        var sum = el("p", "chat-hash");
+        sum.appendChild(document.createTextNode("SHA-256: "));
+        sum.appendChild(code(state.kit.sha256));
+        s1.appendChild(sum);
+      } else {
+        s1.appendChild(el("span", "chat-dim", state.kitLoaded ? "The download is not available yet. Ask the hub owner." : "Looking for the download…"));
+      }
+      s1.appendChild(el("p", "chat-dim", "It needs Docker (Docker Desktop on Windows or Mac). Unzip it somewhere you will keep it."));
+      steps.appendChild(s1);
+
+      // 2. the key
+      var s2 = el("li");
+      s2.appendChild(el("strong", null, "Make a key "));
+      s2.appendChild(document.createTextNode("for this computer. It is shown once."));
+      if (state.newToken) {
+        var box2 = el("div", "chat-newkey");
+        var field = el("input", "chat-key-field");
+        field.type = "text"; field.readOnly = true; field.value = state.newToken;
+        field.setAttribute("aria-label", "Your new key");
+        field.addEventListener("focus", function () { field.select(); });
+        var cp = el("button", "chat-btn chat-btn-sm chat-btn-primary", "Copy");
+        cp.type = "button";
+        cp.addEventListener("click", function () { copy(state.newToken, cp); });
+        box2.appendChild(field);
+        box2.appendChild(cp);
+        s2.appendChild(box2);
+        var save = el("p", "chat-dim");
+        save.appendChild(document.createTextNode("Save it as "));
+        save.appendChild(code("secrets/chat_runner_key.txt"));
+        save.appendChild(document.createTextNode(" (only the key, nothing else). Treat it like a password: you will not see it again."));
+        s2.appendChild(save);
+      } else {
+        var f = el("form", "chat-keyform");
+        var label = el("input", "chat-key-label");
+        label.type = "text"; label.value = "My computer"; label.maxLength = 40; label.required = true;
+        label.setAttribute("aria-label", "A name for this key");
+        var life = el("select", "chat-key-life");
+        life.setAttribute("aria-label", "How long the key lasts");
+        helpers.KEY_LIFETIMES.forEach(function (o) { var opt = el("option", null, o[1]); opt.value = String(o[0]); if (o[0] === 90) opt.selected = true; life.appendChild(opt); });
+        var go = el("button", "chat-btn chat-btn-sm chat-btn-primary", state.makingKey ? "Making…" : "Make key");
+        go.type = "submit"; go.disabled = state.makingKey;
+        f.appendChild(label); f.appendChild(life); f.appendChild(go);
+        f.addEventListener("submit", function (e) { e.preventDefault(); makeKey(label.value.trim(), Number(life.value)); });
+        s2.appendChild(f);
+      }
+      steps.appendChild(s2);
+
+      // 3-5. the rest
+      var s3 = el("li");
+      s3.appendChild(document.createTextNode("Run "));
+      s3.appendChild(code("claude setup-token"));
+      s3.appendChild(document.createTextNode(" on your computer (it signs you in to your Claude), and save what it prints as "));
+      s3.appendChild(code("secrets/claude_oauth_token.txt"));
+      s3.appendChild(document.createTextNode("."));
+      steps.appendChild(s3);
+      var s4 = el("li");
+      s4.appendChild(document.createTextNode("Put the folder Claude may read in a folder called "));
+      s4.appendChild(code("shared"));
+      s4.appendChild(document.createTextNode(". It is mounted read-only."));
+      steps.appendChild(s4);
+      var s5 = el("li");
+      s5.appendChild(document.createTextNode("Run "));
+      s5.appendChild(code("docker compose up -d --build"));
+      s5.appendChild(document.createTextNode(". This page says Connected within a minute."));
+      steps.appendChild(s5);
+      setupPanel.appendChild(steps);
+      setupPanel.appendChild(el("p", "chat-dim", "The README inside the download has the details, how to stop it, and what is and is not covered."));
+
+      // your keys
+      setupPanel.appendChild(el("h3", "chat-setup-sub", "Your keys"));
+      var list = el("ul", "chat-keys");
+      if (!state.keys.length) list.appendChild(el("li", "chat-dim", "No keys yet."));
+      state.keys.forEach(function (k) {
+        var li = el("li", "chat-key");
+        var info = el("div", "chat-key-info");
+        var head = el("div", "chat-key-head");
+        head.appendChild(el("span", "chat-key-name", k.label));
+        var s = helpers.keyState(k);
+        head.appendChild(el("span", "chat-tag" + (s === "Active" ? "" : " chat-tag-off"), s));
+        info.appendChild(head);
+        info.appendChild(el("div", "chat-dim chat-key-meta", helpers.keyLine(k)));
+        li.appendChild(info);
+        if (s === "Active") {
+          var rv = el("button", "chat-btn chat-btn-sm chat-btn-quiet", "Revoke");
+          rv.type = "button";
+          rv.addEventListener("click", function () { revokeKey(k.id); });
+          li.appendChild(rv);
+        }
+        list.appendChild(li);
+      });
+      setupPanel.appendChild(list);
+      var done = el("button", "chat-btn chat-btn-sm", "Back to the chat");
+      done.type = "button";
+      done.addEventListener("click", function () { showSetup(false); });
+      setupPanel.appendChild(done);
+    }
 
     // -- actions -----------------------------------------------------------------
     function apply(msg) {
@@ -614,6 +856,7 @@
     }
 
     function openConversation(id) {
+      if (state.setup) showSetup(false);
       if (state.conv && state.conv.id === id) return;
       closeStream();
       state.conv = { id: id, title: "", mode: "read" };
@@ -721,6 +964,7 @@
 
     // -- wiring ------------------------------------------------------------------
     newBtn.addEventListener("click", createConversation);
+    if (connectBtn) connectBtn.addEventListener("click", function () { showSetup(!state.setup); });
     titleBtn.addEventListener("click", rename);
     readBtn.addEventListener("click", function () { if (state.conv && state.conv.mode !== "read") setMode("read"); });
     editBtn.addEventListener("click", function () { if (state.conv && state.conv.mode !== "edit") { state.confirm = "edit"; renderBanner(); } });
@@ -740,9 +984,11 @@
     // tells the Worker the page is in use, so the runner polls quickly).
     function pollStatus() {
       if (document.hidden) return;
-      transport.me().then(function (m) { state.me = m; renderBar(); renderBanner(); renderComposer(); }).catch(function () { /* keep the last answer */ });
+      transport.me().then(function (m) { state.me = m; renderBar(); renderBanner(); renderComposer(); if (state.setup) renderSetup(); }).catch(function () { /* keep the last answer */ });
     }
     setInterval(pollStatus, STATUS_POLL_MS);
+    // While a guest is waiting for their computer to connect, look a little more often.
+    setInterval(function () { if (isG && state.setup && helpers.connectState(state.me) === "waiting") pollStatus(); }, 5000);
     document.addEventListener("visibilitychange", pollStatus);
 
     // First view: the list, then the chat that was open (or the newest).
@@ -751,6 +997,7 @@
       var pick = state.convs.filter(function (c) { return c.id === wanted; })[0] || helpers.newestFirst(state.convs)[0];
       renderAll();
       if (pick) openConversation(pick.id);
+      else if (isG && helpers.connectState(state.me) === "need_key") showSetup(true);
     });
     renderAll();
   }
@@ -777,7 +1024,9 @@
       }
       transport.me().then(function (me) { mount(root, me); }).catch(function (err) {
         if (err && err.code === "chat_disabled") gate("The chat is switched off. It is turned on in the Worker settings (CHAT_ENABLED).");
-        else if (err && err.status === 403) gate("This page is only for the person who runs the hub.");
+        else if (err && err.code === "board_required") gate("Open the Ops board once first: it sets up your own space. Then come back to this page.", "Open the Ops board", "ops.html");
+        else if (err && err.code === "board_disabled") gate("Your space on the hub has been switched off by the owner.");
+        else if (err && err.status === 403) gate("This chat is not open to you yet. The hub owner switches guest chats on.");
         else if (err && err.status === 401) gate("Your session has expired.", "Log in again", typeof window.barnyardLoginUrl === "function" ? window.barnyardLoginUrl() : null);
         else gate("Couldn’t reach the chat. Try again in a moment.");
       });
