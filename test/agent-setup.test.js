@@ -140,8 +140,8 @@ test("the new script never assigns innerHTML (everything is built with textConte
 
 test("ops.html loads agent-setup.js before ops.js, and stays inside the CSP", function () {
   var html = read("ops.html");
-  assert.ok(html.indexOf('src="agent-setup.js"') !== -1);
-  assert.ok(html.indexOf('src="agent-setup.js"') < html.indexOf('src="ops.js"'));
+  assert.ok(html.indexOf('src="agent-setup.js') !== -1);
+  assert.ok(html.indexOf('src="agent-setup.js') < html.indexOf('src="ops.js'));
   assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>/i.test(html), "no inline script");
 });
 

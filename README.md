@@ -55,3 +55,9 @@ Personal hub: widget-grid landing page linking out to other web apps.
 ### Chat: easier to read (2026-10-09)
 
 The Claude chat page now shows who said what: your messages as a tinted bubble on the right with the time under them, Claude's replies on the left in a card with a small avatar, its name and the time, larger text with more line spacing, animated dots while it is waiting or working, a "Copy reply" button that appears when you point at a reply (always visible on touch screens), and four starter prompts on an empty chat (they only fill the box; nothing is sent until you press Send). Tests: `node test/chat.test.js` (19).
+
+### Cache tags: a deploy is never hidden behind Cloudflare's cache (2026-10-09)
+
+Cloudflare keeps static files (scripts, stylesheets) for hours, so after a deploy a browser could keep running yesterday's script. Every local script and stylesheet link in the pages now names its file by content, e.g. `chat.js?v=9df75216` (the first 8 hex digits of the file's hash, line endings ignored). A changed file is a new address and is fetched at once; an unchanged one stays cached.
+
+**After changing any script or stylesheet, run `node tools/stamp-assets.js`** (it rewrites the links; `--check` only reports). `test/cache-tags.test.js` fails if a link is missing or stale, so a forgotten stamp is caught before it ships. Tests: 7 new.
