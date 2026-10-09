@@ -84,10 +84,12 @@ test("isGuest: only a signed-in person who is definitely not the owner", functio
   assert.strictEqual(T.who.isGuest(null), false);
 });
 
-test("clean: keeps only the three fields, tidies apps, never trusts odd shapes", function () {
+test("clean: keeps only the four fields, tidies apps, never trusts odd shapes", function () {
   var T = fresh().Theme;
-  assert.deepStrictEqual(T.who.clean({ authenticated: true, owner: false, apps: ["hub", 5, "x".repeat(50), null, "study"], email: "x", sub: "secret" }), { authenticated: true, owner: false, apps: ["hub", "study"] });
-  assert.deepStrictEqual(T.who.clean({ authenticated: true, owner: "yes", apps: "hub" }), { authenticated: true, owner: null, apps: null });
+  assert.deepStrictEqual(T.who.clean({ authenticated: true, owner: false, apps: ["hub", 5, "x".repeat(50), null, "study"], email: "x", sub: "secret" }), { authenticated: true, owner: false, apps: ["hub", "study"], chat: false });
+  assert.deepStrictEqual(T.who.clean({ authenticated: true, owner: "yes", apps: "hub" }), { authenticated: true, owner: null, apps: null, chat: false });
+  assert.deepStrictEqual(T.who.clean({ authenticated: true, owner: false, apps: ["hub"], chat: true }), { authenticated: true, owner: false, apps: ["hub"], chat: true });
+  assert.strictEqual(T.who.clean({ authenticated: true, owner: false, chat: "yes" }).chat, false, "only a real true counts");
   assert.deepStrictEqual(T.who.clean({ authenticated: "true" }), { authenticated: false });
   assert.deepStrictEqual(T.who.clean(null), { authenticated: false });
   assert.strictEqual(T.who.clean({ authenticated: true, apps: new Array(40).fill("a") }).apps.length, 10);
@@ -111,7 +113,7 @@ test("load: a guest session is read, cleaned, remembered for a minute and announ
   assert.strictEqual(f.calls.length, 1);
   assert.strictEqual(f.calls[0].url, "https://api.barnyard.site/auth/session");
   assert.strictEqual(f.calls[0].init.credentials, "include");
-  assert.deepStrictEqual(f.Theme.who.get(), { authenticated: true, owner: false, apps: ["hub"] });
+  assert.deepStrictEqual(f.Theme.who.get(), { authenticated: true, owner: false, apps: ["hub"], chat: false });
   assert.ok(!("email" in f.Theme.who.get()), "no email is kept");
   assert.strictEqual(f.seen.length, 1);
   assert.ok(f.stored() && f.stored().t > 0);

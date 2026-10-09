@@ -196,11 +196,11 @@ test("a reply is rendered by the safe renderer, which allows no images and no ra
   assert.deepStrictEqual(hrefs, ["https://evil.example/p.png", "https://ok.example/"]);
 });
 
-test("the shell shows the Claude page only to the owner and fails closed", function () {
+test("the shell shows the Claude page only to the owner or someone the Worker says may use it, and fails closed", function () {
   var shell = read("shell.js");
-  assert.ok(/id: "chat", title: "Claude", group: "Work", icon: "chat", path: "chat\.html", local: "chat\.html", ownerOnly: true/.test(shell));
-  assert.ok(/if \(p\.ownerOnly\) \{ var s = Theme\.who && Theme\.who\.get\(\); return !!s && s\.owner === true; \}/.test(shell), "owner check");
-  assert.ok(/if \(p\.ownerOnly\) a\.hidden = !pageAllowed\(p\);/.test(shell), "hidden until known");
+  assert.ok(/id: "chat", title: "Claude", group: "Work", icon: "chat", path: "chat\.html", local: "chat\.html", chatOnly: true/.test(shell));
+  assert.ok(/if \(p\.chatOnly\) \{ var c = Theme\.who && Theme\.who\.get\(\); return !!c && \(c\.owner === true \|\| c\.chat === true\); \}/.test(shell), "owner or chat hint");
+  assert.ok(/if \(p\.ownerOnly \|\| p\.chatOnly\) a\.hidden = !pageAllowed\(p\);/.test(shell), "hidden until known");
   assert.ok(/chat: '<path/.test(shell), "icon");
 });
 
@@ -234,6 +234,128 @@ test("the page shows who said what: a Claude avatar and card, a time label, a ty
   var css = read("chat.css");
   assert.ok(css.indexOf("prefers-reduced-motion") >= 0 && css.indexOf(".chat-dots i { animation: none; }") >= 0, "the dots stop moving for people who ask for less motion");
   assert.ok(css.indexOf("@media (hover: none)") >= 0, "Copy is always visible on touch screens");
+});
+
+// ---- guests: their own Claude on their own computer ----------------------------------------------
+
+var GUEST = { kind: "guest", runner: { online: false, lastSeen: null }, keys: { active: 0 } };
+
+test("a guest is told apart from the owner by the Worker's own answer, and the owner's wording is unchanged", function () {
+  assert.strictEqual(chat.isGuest(GUEST), true);
+  assert.strictEqual(chat.isGuest({ kind: "owner" }), false);
+  assert.strictEqual(chat.isGuest({}), false);
+  assert.strictEqual(chat.isGuest(null), false);
+  assert.deepStrictEqual(chat.runnerLabel({ kind: "owner", runner: { online: true } }, 1), { tone: "ok", text: "Runner online" });
+});
+
+test("connectState: no key, a key but nothing connected, connected", function () {
+  assert.strictEqual(chat.connectState(GUEST), "need_key");
+  assert.strictEqual(chat.connectState({ kind: "guest", runner: { online: false }, keys: { active: 1 } }), "waiting");
+  assert.strictEqual(chat.connectState({ kind: "guest", runner: { online: true }, keys: { active: 1 } }), "connected");
+  assert.strictEqual(chat.connectState({ kind: "guest" }), "need_key", "a half-formed answer is treated as not connected");
+  assert.strictEqual(chat.connectState({ kind: "owner", runner: { online: false } }), "owner");
+});
+
+test("a guest's labels and messages talk about their own Claude, not a runner on a server", function () {
+  var now = 10 * 60000;
+  assert.deepStrictEqual(chat.runnerLabel({ kind: "guest", runner: { online: true } }, now), { tone: "ok", text: "Your Claude is connected" });
+  assert.deepStrictEqual(chat.runnerLabel(GUEST, now), { tone: "off", text: "Your Claude is not connected yet" });
+  assert.deepStrictEqual(chat.runnerLabel({ kind: "guest", runner: { online: false, lastSeen: now - 5 * 60000 } }, now), { tone: "off", text: "Your Claude is offline, last seen 5 min ago" });
+  assert.match(chat.sendBlock({ conv: CONV, busy: false, me: GUEST, text: "hi" }), /Your Claude is not connected/);
+  assert.match(chat.errorMessage({ code: "runner_offline", status: 503 }, GUEST), /Connect your Claude/);
+  assert.match(chat.errorMessage({ code: "runner_offline", status: 503 }, { kind: "owner" }), /Start it on the server/);
+});
+
+test("the new refusals are said in plain words", function () {
+  var e = function (code, status) { return chat.errorMessage({ code: code, status: status }, GUEST); };
+  assert.match(e("board_required", 403), /Ops board once/);
+  assert.match(e("board_disabled", 403), /switched off by the owner/);
+  assert.match(e("edit_not_available", 400), /read-only/);
+  assert.match(e("keys_full", 409), /two active keys/);
+  assert.match(e("guests_full", 409), /full right now/);
+  assert.match(e("label_invalid", 400), /short name/);
+  assert.match(e("key_expired", 401), /expired/);
+  assert.match(e(null, 403), /not open to you yet/);
+  ["board_required", "keys_full", "guests_full"].forEach(function (c) { assert.ok(!/_/.test(e(c, 400)), "never the raw code: " + c); });
+});
+
+test("keys are described without ever showing the key", function () {
+  var now = 100 * 86400000;
+  var active = { id: "rk_aaaaaaaa", label: "Laptop", createdAt: now - 3 * 86400000, expiresAt: now + 87 * 86400000, lastUsed: now - 5 * 60000, revoked: false, expired: false };
+  assert.strictEqual(chat.keyState(active, now), "Active");
+  assert.strictEqual(chat.keyState(Object.assign({}, active, { revoked: true }), now), "Revoked");
+  assert.strictEqual(chat.keyState(Object.assign({}, active, { expired: true }), now), "Expired");
+  assert.strictEqual(chat.keyState(Object.assign({}, active, { expiresAt: now - 1 }), now), "Expired");
+  assert.match(chat.keyLine(active, now), /^Made 3 d ago · expires \d+ \w{3} \d{4} · last used 5 min ago$/);
+  assert.match(chat.keyLine(Object.assign({}, active, { lastUsed: null }), now), /not used yet/);
+  assert.ok(chat.keyLine(Object.assign({}, active, { revoked: true }), now).indexOf("expires") < 0, "a revoked key has no expiry to show");
+  assert.deepStrictEqual(chat.KEY_LIFETIMES.map(function (o) { return o[0]; }), [30, 90, 365]);
+});
+
+test("parseKit accepts only the exact shape, with the name carrying the checksum", function () {
+  var sha = "602a242d" + "9".repeat(56);
+  var good = { file: "guest-runner-602a242d.zip", sha256: sha, bytes: 61749 };
+  assert.deepStrictEqual(chat.parseKit(good), { file: "guest-runner-602a242d.zip", sha256: sha, bytes: 61749 });
+  assert.strictEqual(chat.parseKit(Object.assign({}, good, { bytes: "x" })).bytes, 0);
+  [null, "x", {}, Object.assign({}, good, { file: "../evil.zip" }), Object.assign({}, good, { file: "guest-runner-602a242d.exe" }),
+    Object.assign({}, good, { file: "https://evil.example/guest-runner-602a242d.zip" }), Object.assign({}, good, { sha256: "abc" }),
+    Object.assign({}, good, { sha256: "deadbeef" + "9".repeat(56) }), Object.assign({}, good, { sha256: sha.toUpperCase() })
+  ].forEach(function (bad) { assert.strictEqual(chat.parseKit(bad), null, JSON.stringify(bad)); });
+  assert.strictEqual(chat.sizeText(61749), "60 KB");
+  assert.strictEqual(chat.sizeText(3 * 1048576), "3.0 MB");
+});
+
+test("guest starters are plain questions that fit a read-only chat on their own folder", function () {
+  assert.ok(chat.STARTERS_GUEST.length >= 3 && chat.STARTERS_GUEST.length <= 6);
+  chat.STARTERS_GUEST.forEach(function (s) {
+    assert.ok(s.length > 10 && s.length < 120 && !/[<>]/.test(s), s);
+    assert.ok(!/Ops board|campaign|Knowledgebase/i.test(s), "no mention of the owner's things: " + s);
+  });
+});
+
+test("the connect panel is built from DOM calls only, downloads only from this site, and shows the key in a field", function () {
+  var js = read("chat.js");
+  assert.ok(!/innerHTML\s*=/.test(js));
+  assert.ok(js.indexOf('dl.href = "guest-runner/"') >= 0, "the download link is a relative path on this site");
+  assert.ok(js.indexOf("chat-key-field") >= 0 && js.indexOf("readOnly = true") >= 0);
+  var html = read("chat.html");
+  assert.ok(/<p id="chat-intro">/.test(html), "the intro can be reworded for a guest");
+  assert.ok(/connect-src 'self' https:\/\/api\.barnyard\.site wss:\/\/api\.barnyard\.site;/.test(html), "the page still talks only to this site and the Worker");
+});
+
+function readZipEntries(buf) {
+  var end = buf.length - 22;
+  assert.strictEqual(buf.readUInt32LE(end), 0x06054b50, "a zip");
+  var count = buf.readUInt16LE(end + 10), p = buf.readUInt32LE(end + 16), out = [];
+  for (var i = 0; i < count; i++) {
+    var nameLen = buf.readUInt16LE(p + 28), extra = buf.readUInt16LE(p + 30), comment = buf.readUInt16LE(p + 32);
+    var local = buf.readUInt32LE(p + 42), size = buf.readUInt32LE(p + 24);
+    var dataStart = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
+    out.push({ name: buf.toString("utf8", p + 46, p + 46 + nameLen), data: buf.slice(dataStart, dataStart + size) });
+    p += 46 + nameLen + extra + comment;
+  }
+  return out;
+}
+
+test("the published runner download is the one the manifest names, its checksum is right, and it holds no secret", function () {
+  var crypto = require("crypto");
+  var m = JSON.parse(read("guest-runner/guest-runner.json"));
+  var kit = chat.parseKit(m);
+  assert.ok(kit, "the manifest has the shape the page accepts");
+  var zipBuf = fs.readFileSync(path.join(root, "guest-runner", kit.file));
+  assert.strictEqual(crypto.createHash("sha256").update(zipBuf).digest("hex"), kit.sha256);
+  assert.strictEqual(zipBuf.length, m.bytes);
+  var files = readZipEntries(zipBuf);
+  var names = files.map(function (f) { return f.name; });
+  ["Dockerfile", "docker-compose.yml", "README.md", "bin/runner.js", "src/config.js", "image/chat-system-guest.md"].forEach(function (n) { assert.ok(names.indexOf(n) >= 0, n); });
+  files.forEach(function (f) {
+    var text = f.data.toString("utf8");
+    assert.ok(!/sk-ant-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_|cr_[0-9a-f]{32}_[A-Za-z0-9_-]{43}|ob_[0-9a-f]{32}_[A-Za-z0-9_-]{43}/.test(text), f.name);
+  });
+  var compose = files.filter(function (f) { return f.name === "docker-compose.yml"; })[0].data.toString("utf8");
+  assert.ok(/RUNNER_PROFILE: guest/.test(compose) && /:\/workspace\/shared:ro/.test(compose));
+  var zips = fs.readdirSync(path.join(root, "guest-runner")).filter(function (n) { return /\.zip$/.test(n); });
+  assert.deepStrictEqual(zips, [kit.file], "only the current download is kept");
 });
 
 console.log("\n" + passed + " tests passed");
