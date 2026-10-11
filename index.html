@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.open-meteo.com https://barnyard-live-prices.nathanbarnard29.workers.dev https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
 <title>Barnyard</title>
-<link rel="stylesheet" href="shell.css?v=e24bd259">
+<link rel="stylesheet" href="shell.css?v=95410439">
 <link rel="stylesheet" href="drag.css?v=34b10090">
 <script src="themes.js?v=70f6889a"></script>
 </head>
@@ -17,6 +17,12 @@
     <h1 id="ov-h1">Barnyard.</h1>
     <p id="ov-sub">Checking what needs you&hellip;</p>
   </header>
+
+  <div class="ov-status" id="ov-status" role="list" aria-label="System status" hidden></div>
+  <section class="ov-expiry" id="ov-expiry-box" aria-labelledby="ov-expiry-h" hidden>
+    <h2 id="ov-expiry-h">Running out soon <a href="ops.html">Add a date</a></h2>
+    <ul id="ov-expiry" role="list"></ul>
+  </section>
 
   <div class="widgets" id="widgets">
 
@@ -100,6 +106,6 @@
 <script src="glance-widgets.js?v=927e4936"></script>
 <script src="todo-widget.js?v=368b0ba5"></script>
 <script src="drag.js?v=5d1cccf4"></script>
-<script src="overview.js?v=4d1d7607"></script>
+<script src="overview.js?v=40a1f66e"></script>
 </body>
 </html>

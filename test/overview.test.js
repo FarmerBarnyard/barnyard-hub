@@ -119,4 +119,64 @@ test("layout presets: every preset lists each widget once and survives normalize
   Theme.WIDGET_IDS.forEach(function (id) { assert.ok(Overview.WIDGET_TITLE[id], id + " has a title"); });
 });
 
+// ---- the status row (GET /hub/status) -------------------------------------------------------
+
+var HOUR = 3600000;
+var allWell = {
+  runner: { enabled: true, online: true, lastSeen: NOW }, engine: { enabled: true, online: true, lastSeen: NOW },
+  check: { known: true, ok: true, lastAt: NOW - 3 * HOUR, id: "it_check001" }, expiries: []
+};
+
+test("status chips: online parts are green, offline ones amber with when they were last seen, switched-off ones are left out", function () {
+  var chips = Overview.statusChips(allWell, NOW);
+  assert.deepStrictEqual(chips.map(function (c) { return c.text; }), ["Runner online", "Engine online", "Daily check passed 3 h ago"]);
+  assert.deepStrictEqual(chips.map(function (c) { return c.tone; }), ["ok", "ok", "ok"]);
+  var off = Overview.statusChips({ runner: { enabled: true, online: false, lastSeen: NOW - 20 * 60000 }, engine: { enabled: false } }, NOW);
+  assert.deepStrictEqual(off.map(function (c) { return c.text; }), ["Runner offline (seen 20 min ago)"]);
+  assert.strictEqual(off[0].tone, "attn");
+  assert.deepStrictEqual(Overview.statusChips(null, NOW), []);
+});
+
+test("status chips: a part the Worker could not read is unknown, never online; a failed check links to its item", function () {
+  var chips = Overview.statusChips({ runner: { enabled: true, error: true }, check: { known: true, ok: false, id: "it_check001" } }, NOW);
+  assert.strictEqual(chips[0].text, "Runner unknown");
+  assert.strictEqual(chips[0].tone, "");
+  assert.strictEqual(chips[1].text, "Daily check found something");
+  assert.strictEqual(chips[1].tone, "alert");
+  assert.strictEqual(chips[1].href, "ops.html#it_check001");
+  assert.deepStrictEqual(Overview.statusChips({ check: { known: false } }, NOW), []);
+});
+
+test("issues: only real problems count (offline when enabled, a failed check), not switched-off or unreadable parts", function () {
+  assert.deepStrictEqual(Overview.statusIssues(allWell), []);
+  assert.deepStrictEqual(Overview.statusIssues({ runner: { enabled: false }, engine: { enabled: true, error: true } }), []);
+  assert.deepStrictEqual(Overview.statusIssues({
+    runner: { enabled: true, online: false }, engine: { enabled: true, online: false }, check: { known: true, ok: false }
+  }), ["the chat runner is offline", "the campaign engine is offline", "the daily check found something"]);
+  assert.deepStrictEqual(Overview.statusIssues(null), []);
+});
+
+test("sub-line: says what is not running instead of claiming everything is, and is unchanged when nothing is wrong", function () {
+  assert.strictEqual(Overview.heroSubline(0), "Nothing has changed since you were last here. Everything else is running.");
+  assert.strictEqual(Overview.heroSubline(2, []), "Claude changed 2 items since you were last here. Everything else is running.");
+  assert.strictEqual(Overview.heroSubline(0, ["the chat runner is offline"]), "Nothing has changed since you were last here. Not everything is running: the chat runner is offline.");
+  assert.strictEqual(Overview.heroSubline(1, ["a", "b"]), "Claude changed 1 item since you were last here. Not everything is running: a, b.");
+});
+
+test("expiry rows: red when expired or today, amber inside two weeks, accent inside two months, plain after, linked to where to act", function () {
+  var rows = Overview.expiryRows([
+    { kind: "item", id: "it_a", label: "Gone", due: "2026-10-01", daysLeft: -10 },
+    { kind: "item", id: "it_b", label: "Now", due: "2026-10-11", daysLeft: 0 },
+    { kind: "item", id: "it_c", label: "Soon", due: "2026-10-12", daysLeft: 1 },
+    { kind: "item", id: "it_d", label: "Month", due: "2026-11-20", daysLeft: 40 },
+    { kind: "runner_key", id: "rk_1", label: "Runner key: laptop", due: "2027-03-01", daysLeft: 141 }
+  ]);
+  assert.deepStrictEqual(rows.map(function (r) { return [r.chip.text, r.chip.tone]; }), [
+    ["Expired 10 days ago", "alert"], ["Today", "alert"], ["In 1 day", "attn"], ["In 40 days", "accent"], ["In 5 months", ""]
+  ]);
+  assert.strictEqual(rows[0].href, "ops.html#it_a");
+  assert.strictEqual(rows[4].href, "chat.html");
+  assert.deepStrictEqual(Overview.expiryRows(null), []);
+});
+
 console.log("\n" + passed + " tests passed");

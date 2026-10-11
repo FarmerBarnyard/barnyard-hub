@@ -184,6 +184,17 @@ a.sub { text-decoration: none; } a.sub:hover { color: var(--fg-strong); text-dec
 .hero { margin: 20px 0 var(--hero-gap); max-width: 880px; }
 .hero h1 { font: 700 clamp(32px, 4.4vw, 48px)/1.04 var(--font-display); letter-spacing: -.028em; color: var(--fg-strong); text-wrap: balance; }
 .hero p { margin-top: 14px; font-size: 16px; color: var(--fg-dim); max-width: 60ch; }
+.ov-status { display: flex; flex-wrap: wrap; gap: 8px; margin: calc(var(--hero-gap) * -0.5) 0 var(--hero-gap); }
+.ov-status a.chip { text-decoration: none; }
+.ov-expiry { margin: 0 0 var(--hero-gap); max-width: 880px; }
+.ov-expiry h2 { display: flex; align-items: baseline; gap: 14px; font: 600 12px var(--font-body, inherit); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-dim); margin-bottom: 6px; }
+.ov-expiry h2 a { font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--fg-dim); font-size: 13px; }
+.ov-expiry ul { list-style: none; margin: 0; padding: 0; }
+.ov-expiry li { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.ov-expiry li:first-child { border-top: 0; }
+.ov-expiry li a { color: var(--fg-strong); text-decoration: none; font-weight: 500; }
+.ov-expiry li .when { color: var(--fg-dim); font-size: 13px; font-variant-numeric: tabular-nums; }
+.ov-expiry li.dim { display: block; color: var(--fg-dim); }
 .widgets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--row-gap) var(--col-gap); align-items: start; }
 .w { min-width: 0; container-type: inline-size; }
 .w[data-size="1"] { grid-column: span 1; } .w[data-size="2"] { grid-column: span 2; } .w[data-size="4"] { grid-column: span 4; }
