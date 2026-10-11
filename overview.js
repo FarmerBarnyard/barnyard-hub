@@ -401,7 +401,10 @@
       if (c.href) el.href = c.href;
       row.appendChild(el);
     });
-    row.hidden = !chips.length;
+    var healthLink = h("a", "chip", "System health →");
+    healthLink.href = "health.html";
+    row.appendChild(healthLink);
+    row.hidden = false;
     var rows = expiryRows(s.expiries);
     rows.forEach(function (r) {
       var li = h("li");
