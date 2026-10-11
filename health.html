@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>System health &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=95410439">
+<link rel="stylesheet" href="health.css?v=958e6ac6">
+<script src="themes.js?v=70f6889a"></script>
+</head>
+<body data-shell="overview" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>System health</h1>
+      <p>Whether the pieces behind the hub are up, and how close the Worker is to its free limits. <a href="index.html">Back to the overview</a></p>
+    </div>
+    <div class="hl-tools">
+      <button type="button" class="btn btn-sm" id="health-refresh">Refresh</button>
+      <span class="dim" id="health-stamp"></span>
+    </div>
+  </div>
+  <div id="health-root" aria-live="polite">
+    <p class="dim">Loading&hellip;</p>
+  </div>
+</main>
+
+<script src="shell.js?v=07960b0d"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="health.js?v=791e4073"></script>
+</body>
+</html>
