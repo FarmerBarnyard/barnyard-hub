@@ -25,6 +25,7 @@
   "use strict";
 
   var API = "https://api.barnyard.site/ops";
+  var HUB_API = "https://api.barnyard.site/hub";
   var SEEN_KEY = "barnyard-overview-seen";
   var POLL_MS = 90000;
   var DAY_MS = 86400000;
@@ -54,10 +55,13 @@
     return words + (n <= 1 ? " needs you." : " need you.");
   }
 
-  function heroSubline(changedItems) {
+  // issues (optional) is statusIssues() below: when something is down the line says so instead of
+  // claiming everything is running.
+  function heroSubline(changedItems, issues) {
     var n = Math.max(0, changedItems | 0);
-    if (!n) return "Nothing has changed since you were last here. Everything else is running.";
-    return "Claude changed " + n + (n === 1 ? " item" : " items") + " since you were last here. Everything else is running.";
+    var tail = issues && issues.length ? " Not everything is running: " + issues.join(", ") + "." : " Everything else is running.";
+    if (!n) return "Nothing has changed since you were last here." + tail;
+    return "Claude changed " + n + (n === 1 ? " item" : " items") + " since you were last here." + tail;
   }
 
   function openItems(items) {
@@ -128,6 +132,56 @@
     return { text: "Due " + due, tone: "" };
   }
 
+  // ---- the status row (GET /hub/status, the owner only) ---------------------------------------
+  //
+  // status = { runner, engine, check, expiries } as hub-routes.js returns it. A part that is switched off
+  // ({enabled:false}) is left out rather than shown as a problem; a part the Worker could not read
+  // ({error:true}) shows as unknown, never as online.
+
+  function statusChips(status, now) {
+    var out = [];
+    if (!status) return out;
+    [["runner", "Runner"], ["engine", "Engine"]].forEach(function (p) {
+      var x = status[p[0]];
+      if (!x || !x.enabled) return;
+      if (x.error) out.push({ id: p[0], text: p[1] + " unknown", tone: "", href: "" });
+      else if (x.online) out.push({ id: p[0], text: p[1] + " online", tone: "ok", href: "" });
+      else out.push({ id: p[0], text: p[1] + " offline" + (x.lastSeen ? " (seen " + agoText(x.lastSeen, now) + ")" : ""), tone: "attn", href: "" });
+    });
+    var c = status.check;
+    if (c && c.known) {
+      out.push({
+        id: "check", tone: c.ok ? "ok" : "alert", href: c.id ? "ops.html#" + c.id : "",
+        text: c.ok ? "Daily check passed" + (c.lastAt ? " " + agoText(c.lastAt, now) : "") : "Daily check found something"
+      });
+    }
+    return out;
+  }
+
+  // What is wrong, as short phrases for the headline's second line. Empty when all is well.
+  function statusIssues(status) {
+    var out = [];
+    if (!status) return out;
+    if (status.runner && status.runner.enabled && !status.runner.error && !status.runner.online) out.push("the chat runner is offline");
+    if (status.engine && status.engine.enabled && !status.engine.error && !status.engine.online) out.push("the campaign engine is offline");
+    if (status.check && status.check.known && !status.check.ok) out.push("the daily check found something");
+    return out;
+  }
+
+  // The dated things, each with how close it is: expired and today are red, two weeks is amber, two
+  // months is the accent colour, further off is plain.
+  function expiryRows(list) {
+    return (list || []).map(function (e) {
+      var d = e.daysLeft, text, tone;
+      if (d < 0) { text = "Expired " + (-d) + (d === -1 ? " day ago" : " days ago"); tone = "alert"; }
+      else if (d === 0) { text = "Today"; tone = "alert"; }
+      else if (d <= 14) { text = "In " + d + (d === 1 ? " day" : " days"); tone = "attn"; }
+      else if (d <= 60) { text = "In " + d + " days"; tone = "accent"; }
+      else { var months = Math.round(d / 30); text = "In " + months + (months === 1 ? " month" : " months"); tone = ""; }
+      return { label: e.label, due: e.due, chip: { text: text, tone: tone }, href: e.kind === "item" ? "ops.html#" + e.id : "chat.html" };
+    });
+  }
+
   // Widgets that show the hub owner's own data, so they are hidden for anyone else
   // who signs in: "week" reads the owner's Google Calendar (behind the owner's
   // Cloudflare Access login, so it would only error for a guest) and "links" is
@@ -140,6 +194,7 @@
 
   var helpers = {
     heroHeadline: heroHeadline, heroSubline: heroSubline, openItems: openItems, waitingItems: waitingItems, flightItems: flightItems,
+    statusChips: statusChips, statusIssues: statusIssues, expiryRows: expiryRows,
     changedItemCount: changedItemCount, describeFeed: describeFeed, feedFromItems: feedFromItems, agoText: agoText, dueChip: dueChip,
     PRESETS: PRESETS, WIDGET_TITLE: WIDGET_TITLE, OWNER_ONLY: OWNER_ONLY, widgetRestricted: widgetRestricted
   };
@@ -151,10 +206,10 @@
 
   // ---- 2. data --------------------------------------------------------------
 
-  function getJson(path) {
+  function getJson(path, base) {
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, 10000);
-    return fetch(API + path, { credentials: "include", referrerPolicy: "no-referrer", signal: controller.signal })
+    return fetch((base || API) + path, { credentials: "include", referrerPolicy: "no-referrer", signal: controller.signal })
       .then(function (r) {
         clearTimeout(timer);
         if (!r.ok) {
@@ -194,7 +249,7 @@
     return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
   }
 
-  var model = { state: "loading", items: [], events: [], since: 0, firstFeed: true };
+  var model = { state: "loading", items: [], events: [], since: 0, firstFeed: true, status: null };
 
   function loginHref() { return typeof window.barnyardLoginUrl === "function" ? window.barnyardLoginUrl() : null; }
 
@@ -312,7 +367,7 @@
     var h1 = $("ov-h1"), sub = $("ov-sub");
     if (model.state === "ok") {
       h1.textContent = heroHeadline(waitingItems(model.items).length);
-      sub.textContent = heroSubline(changedItemCount(model.events, model.since));
+      sub.textContent = heroSubline(changedItemCount(model.events, model.since), statusIssues(model.status));
     } else if (model.state === "guest") {
       h1.textContent = "Barnyard.";
       sub.textContent = "Log in to see what needs you and what has changed.";
@@ -334,8 +389,36 @@
     }
   }
 
+  function renderStatus() {
+    var row = $("ov-status"), box = $("ov-expiry-box"), list = $("ov-expiry");
+    if (!row || !box || !list) return;
+    clear(row); clear(list);
+    var s = model.status;
+    if (!s) { row.hidden = true; box.hidden = true; return; }   // a guest, a failed call or not signed in: nothing to show
+    var chips = statusChips(s, Date.now());
+    chips.forEach(function (c) {
+      var el = h(c.href ? "a" : "span", "chip" + (c.tone ? " " + c.tone : ""), c.text);
+      if (c.href) el.href = c.href;
+      row.appendChild(el);
+    });
+    row.hidden = !chips.length;
+    var rows = expiryRows(s.expiries);
+    rows.forEach(function (r) {
+      var li = h("li");
+      var a = h("a", null, r.label);
+      a.href = r.href;
+      li.appendChild(a);
+      li.appendChild(h("span", "when", r.due));
+      li.appendChild(chip(r.chip.text, r.chip.tone));
+      list.appendChild(li);
+    });
+    if (!rows.length) list.appendChild(h("li", "dim", "Nothing with a date in the next year. Give an Ops item a Due date and it shows here."));
+    box.hidden = false;
+  }
+
   function renderAll() {
     renderHero();
+    renderStatus();
     renderNeed();
     renderFeed();
     renderFlight();
@@ -370,6 +453,9 @@
       model.items = Array.isArray(board.items) ? board.items : [];
       model.state = "ok";
       return getJson("/recent?limit=30").then(function (res) { model.events = Array.isArray(res.events) ? res.events : []; }, function () { model.events = []; });
+    }).then(function () {
+      // Best effort and owner only: anything but a clean answer (a guest gets 403) just hides the row.
+      return getJson("/status", HUB_API).then(function (s) { model.status = s && s.ok ? s : null; }, function () { model.status = null; });
     }).then(function () {
       renderAll();
     }, function (err) {
