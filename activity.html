@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Activity &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=0cc08dbd">
+<link rel="stylesheet" href="activity.css?v=f63b4cc5">
+<script src="themes.js?v=70f6889a"></script>
+</head>
+<body data-shell="overview" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Activity</h1>
+      <p>What changed on your board and what was done to it, newest first. <a href="index.html">Back to the overview</a></p>
+    </div>
+    <button type="button" class="btn btn-sm" id="act-refresh">Refresh</button>
+  </div>
+  <div class="act-filters" id="act-filters" hidden>
+    <div class="seg" id="act-type" role="group" aria-label="Show">
+      <button type="button" data-v="all" aria-pressed="true">Everything</button>
+      <button type="button" data-v="change" aria-pressed="false">Board changes</button>
+      <button type="button" data-v="audit" aria-pressed="false">Security</button>
+    </div>
+    <div class="seg" id="act-actor" role="group" aria-label="By">
+      <button type="button" data-v="any" aria-pressed="true">Anyone</button>
+      <button type="button" data-v="you" aria-pressed="false">You</button>
+      <button type="button" data-v="claude" aria-pressed="false">Claude</button>
+      <button type="button" data-v="agent" aria-pressed="false">Agents</button>
+    </div>
+  </div>
+  <div id="act-root" aria-live="polite">
+    <p class="dim">Loading&hellip;</p>
+  </div>
+</main>
+
+<script src="shell.js?v=07960b0d"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="activity.js?v=ded5caac"></script>
+</body>
+</html>

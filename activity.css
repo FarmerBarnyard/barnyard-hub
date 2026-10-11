@@ -1,0 +1,21 @@
+/* Activity page (activity.html). Colours come from the shell's tokens so every theme works. */
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.act-filters { display: flex; flex-wrap: wrap; gap: 14px; margin: 6px 0 20px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; padding: 6px 14px; background: transparent; color: var(--fg-dim); border: 0; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#act-root { max-width: 880px; display: grid; gap: 24px; }
+.act-day h2 { font: 600 12px var(--font-body, inherit); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-dim); margin-bottom: 6px; }
+.act-list { list-style: none; margin: 0; padding: 0; }
+.act-row { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: baseline; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.act-row:first-child { border-top: 0; }
+.act-time { color: var(--fg-dim); font-variant-numeric: tabular-nums; font-size: 13px; }
+.act-body a { color: var(--fg-strong); text-decoration: none; }
+.act-body a:hover { text-decoration: underline; }
+.act-body p { margin-top: 2px; font-size: 13px; }
+.act-row.attn .act-body { color: var(--attn); }
+.act-row.alert .act-body { color: var(--alert); font-weight: 500; }
+.act-note { font-size: 13px; }
+.dim { color: var(--fg-dim); }

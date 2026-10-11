@@ -95,7 +95,7 @@ test("the page is wired: strict CSP, no inline script or style, and the Overview
   var js = fs.readFileSync(path.join(root, "health.js"), "utf8");
   assert.ok(!/\.innerHTML\s*\+?=|insertAdjacentHTML|document\.write/.test(js), "server text never reaches innerHTML");
   var ov = fs.readFileSync(path.join(root, "overview.js"), "utf8");
-  assert.ok(ov.indexOf('healthLink.href = "health.html"') !== -1);
+  assert.ok(ov.indexOf('["System health", "health.html"]') !== -1);
 });
 
 console.log("\n" + passed + " tests passed");

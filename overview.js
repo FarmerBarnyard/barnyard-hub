@@ -182,6 +182,29 @@
     });
   }
 
+  // ---- quick capture ---------------------------------------------------------------------------
+  //
+  // One box that files a thought where it belongs. kind: "note" (a note in the Notebook's inbox, through
+  // POST /hub/capture), "item" (an Ops item in the backlog, yours) or "proposal" (an idea for you to approve).
+  // The first line is the title; the rest goes in the details. -> { base: "hub"|"ops", path, body } or null
+  // when there is nothing to file or it is too long for that kind.
+  function buildCapture(kind, text) {
+    var t = String(text == null ? "" : text).replace(/\r\n/g, "\n").trim();
+    if (!t) return null;
+    if (kind === "note") return t.length > 8000 ? null : { base: "hub", path: "/capture", body: { text: t } };
+    if (kind !== "item" && kind !== "proposal") return null;
+    var first = t.split("\n")[0].replace(/\s+/g, " ").trim();
+    var title = first.slice(0, 120).trim();
+    if (!title) return null;
+    var body = { title: title, lane: "backlog", category: "other" };
+    if (t.length > title.length) {
+      if (t.length > 6000) return null;
+      body.details = t;
+    }
+    if (kind === "proposal") body.proposal = true; else body.owner = "you";
+    return { base: "ops", path: "/items", body: body };
+  }
+
   // Widgets that show the hub owner's own data, so they are hidden for anyone else
   // who signs in: "week" reads the owner's Google Calendar (behind the owner's
   // Cloudflare Access login, so it would only error for a guest) and "links" is
@@ -194,7 +217,7 @@
 
   var helpers = {
     heroHeadline: heroHeadline, heroSubline: heroSubline, openItems: openItems, waitingItems: waitingItems, flightItems: flightItems,
-    statusChips: statusChips, statusIssues: statusIssues, expiryRows: expiryRows,
+    statusChips: statusChips, statusIssues: statusIssues, expiryRows: expiryRows, buildCapture: buildCapture,
     changedItemCount: changedItemCount, describeFeed: describeFeed, feedFromItems: feedFromItems, agoText: agoText, dueChip: dueChip,
     PRESETS: PRESETS, WIDGET_TITLE: WIDGET_TITLE, OWNER_ONLY: OWNER_ONLY, widgetRestricted: widgetRestricted
   };
@@ -221,8 +244,8 @@
         return r.json();
       }, function (err) { clearTimeout(timer); throw err; });
   }
-  function postJson(path, body) {
-    return fetch(API + path, { method: "POST", credentials: "include", referrerPolicy: "no-referrer", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
+  function postJson(path, body, base) {
+    return fetch((base || API) + path, { method: "POST", credentials: "include", referrerPolicy: "no-referrer", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
       .then(function (r) { if (!r.ok) { var e = new Error("http"); e.status = r.status; throw e; } return r.json(); });
   }
 
@@ -401,10 +424,14 @@
       if (c.href) el.href = c.href;
       row.appendChild(el);
     });
-    var healthLink = h("a", "chip", "System health →");
-    healthLink.href = "health.html";
-    row.appendChild(healthLink);
+    [["Search everything", "search.html"], ["Activity", "activity.html"], ["System health", "health.html"]].forEach(function (l) {
+      var a = h("a", "chip", l[0] + " →");
+      a.href = l[1];
+      row.appendChild(a);
+    });
     row.hidden = false;
+    var cap = $("ov-capture");
+    if (cap) cap.hidden = false;
     var rows = expiryRows(s.expiries);
     rows.forEach(function (r) {
       var li = h("li");
@@ -417,6 +444,33 @@
     });
     if (!rows.length) list.appendChild(h("li", "dim", "Nothing with a date in the next year. Give an Ops item a Due date and it shows here."));
     box.hidden = false;
+  }
+
+  function setupCapture() {
+    var form = $("ov-capture"), input = $("ov-cap-input"), kind = $("ov-cap-kind"), status = $("ov-cap-status");
+    if (!form) return;
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var plan = buildCapture(kind.value, input.value);
+      if (!plan) { status.textContent = input.value.trim() ? "That is too long for this kind. Shorten it, or use a note." : "Type something first."; return; }
+      var btn = $("ov-cap-add");
+      btn.disabled = true;
+      status.textContent = "Saving…";
+      postJson(plan.path, plan.body, plan.base === "hub" ? HUB_API : API).then(function (r) {
+        input.value = "";
+        status.textContent = "";
+        if (window.BarnyardShell) window.BarnyardShell.toast(kind.value === "note" ? "Saved to your Notebook inbox" : kind.value === "proposal" ? "Proposal added" : "Added to the backlog");
+        if (plan.base === "ops") refresh();
+        btn.disabled = false;
+        return r;
+      }).catch(function (err) {
+        btn.disabled = false;
+        status.textContent = err && err.status === 401 ? "Your session has expired. Log in again."
+          : err && err.status === 422 ? "That looks like it holds a password or key, so it was not saved."
+          : err && err.status === 403 ? "Your account can’t save that here."
+          : "Couldn’t save it just now. Try again.";
+      });
+    });
   }
 
   function renderAll() {
@@ -698,6 +752,7 @@
     try { stored = parseInt(window.localStorage.getItem(SEEN_KEY), 10) || 0; } catch (e) { stored = 0; }
     model.since = stored || (Date.now() - DAY_MS);
 
+    setupCapture();
     renderAll();
     var authCheck = typeof window.barnyardAuthState === "function" ? window.barnyardAuthState() : Promise.resolve({ authenticated: false });
     authCheck.then(function (auth) {
