@@ -186,6 +186,12 @@ a.sub { text-decoration: none; } a.sub:hover { color: var(--fg-strong); text-dec
 .hero p { margin-top: 14px; font-size: 16px; color: var(--fg-dim); max-width: 60ch; }
 .ov-status { display: flex; flex-wrap: wrap; gap: 8px; margin: calc(var(--hero-gap) * -0.5) 0 var(--hero-gap); }
 .ov-status a.chip { text-decoration: none; }
+.ov-capture { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 880px; margin: 0 0 var(--hero-gap); }
+.ov-capture input { flex: 1 1 260px; min-width: 0; font: inherit; font-size: 15px; padding: 8px 12px; border-radius: var(--radius, 10px); border: 1px solid var(--line); background: var(--surface, transparent); color: var(--fg-strong); }
+.ov-capture select { font: inherit; font-size: 14px; padding: 8px 10px; border-radius: var(--radius, 10px); border: 1px solid var(--line); background: var(--surface, transparent); color: var(--fg-strong); }
+.ov-capture input:focus-visible, .ov-capture select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ov-capture .dim { font-size: 13px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .ov-expiry { margin: 0 0 var(--hero-gap); max-width: 880px; }
 .ov-expiry h2 { display: flex; align-items: baseline; gap: 14px; font: 600 12px var(--font-body, inherit); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-dim); margin-bottom: 6px; }
 .ov-expiry h2 a { font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--fg-dim); font-size: 13px; }

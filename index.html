@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.open-meteo.com https://barnyard-live-prices.nathanbarnard29.workers.dev https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
 <title>Barnyard</title>
-<link rel="stylesheet" href="shell.css?v=95410439">
+<link rel="stylesheet" href="shell.css?v=0cc08dbd">
 <link rel="stylesheet" href="drag.css?v=34b10090">
 <script src="themes.js?v=70f6889a"></script>
 </head>
@@ -19,6 +19,18 @@
   </header>
 
   <div class="ov-status" id="ov-status" role="list" aria-label="System status" hidden></div>
+  <form class="ov-capture" id="ov-capture" autocomplete="off" hidden>
+    <label class="sr-only" for="ov-cap-input">Capture a thought, task or idea</label>
+    <input id="ov-cap-input" type="text" maxlength="500" placeholder="Capture a thought, task or idea&hellip;">
+    <label class="sr-only" for="ov-cap-kind">File it as</label>
+    <select id="ov-cap-kind">
+      <option value="note">Note</option>
+      <option value="item">Ops item</option>
+      <option value="proposal">Proposal</option>
+    </select>
+    <button type="submit" class="btn btn-sm" id="ov-cap-add">Add</button>
+    <span class="dim" id="ov-cap-status" role="status"></span>
+  </form>
   <section class="ov-expiry" id="ov-expiry-box" aria-labelledby="ov-expiry-h" hidden>
     <h2 id="ov-expiry-h">Running out soon <a href="ops.html">Add a date</a></h2>
     <ul id="ov-expiry" role="list"></ul>
@@ -106,6 +118,6 @@
 <script src="glance-widgets.js?v=927e4936"></script>
 <script src="todo-widget.js?v=368b0ba5"></script>
 <script src="drag.js?v=5d1cccf4"></script>
-<script src="overview.js?v=ae61c27b"></script>
+<script src="overview.js?v=00c0d0e3"></script>
 </body>
 </html>

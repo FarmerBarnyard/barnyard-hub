@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Search &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=0cc08dbd">
+<link rel="stylesheet" href="search.css?v=0e5c04a7">
+<script src="themes.js?v=70f6889a"></script>
+</head>
+<body data-shell="overview" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Search</h1>
+      <p>Your Ops board, your Notebook and the Knowledgebase in one go. <a href="index.html">Back to the overview</a></p>
+    </div>
+  </div>
+  <form id="search-form" class="search-form" role="search" autocomplete="off">
+    <label class="sr-only" for="search-input">Search everything</label>
+    <input id="search-input" type="search" maxlength="100" placeholder="Search everything&hellip;" aria-describedby="search-root">
+    <button type="submit" class="btn">Search</button>
+  </form>
+  <div id="search-root" aria-live="polite"></div>
+</main>
+
+<script src="shell.js?v=07960b0d"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="search.js?v=86669760"></script>
+</body>
+</html>
