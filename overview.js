@@ -182,6 +182,41 @@
     });
   }
 
+  // ---- the bell and the backup (GET /hub/notifications, GET /hub/export) --------------------------------
+  //
+  // Events come from the Worker already worked out (proposals waiting, expiries near, a failed daily check,
+  // finished campaign jobs). Which are new is decided here: the time the person last marked them read lives in
+  // this browser only. Links are only ones the Worker could have made.
+
+  function safeNotifyHref(href) {
+    var h = String(href || "");
+    if (/^ops\.html#[A-Za-z0-9_-]{1,40}$/.test(h) || h === "ops.html" || h === "chat.html" || h === "https://campaign.barnyard.site/") return h;
+    return "";
+  }
+
+  function unreadCount(events, seen) {
+    return (events || []).filter(function (e) { return e && e.ts > seen; }).length;
+  }
+
+  function bellRows(events, seen, now) {
+    return (events || []).map(function (e) {
+      return { id: e.id, text: e.text, tone: e.tone || "", href: safeNotifyHref(e.href), when: agoText(e.ts, now), unread: e.ts > seen };
+    });
+  }
+
+  // How the last backup reads: never is amber, a month or more is amber, otherwise calm.
+  function backupChip(lastExport, now) {
+    if (!lastExport) return { text: "No backup yet", tone: "attn" };
+    var days = Math.floor((now - lastExport) / DAY_MS);
+    var when = days < 1 ? "today" : days === 1 ? "yesterday" : days + " days ago";
+    return { text: "Last backup " + when, tone: days >= 30 ? "attn" : "ok" };
+  }
+
+  function exportFileName(now) {
+    var d = new Date(now), p = function (n) { return n < 10 ? "0" + n : "" + n; };
+    return "barnyard-export-" + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + ".json";
+  }
+
   // ---- quick capture ---------------------------------------------------------------------------
   //
   // One box that files a thought where it belongs. kind: "note" (a note in the Notebook's inbox, through
@@ -217,7 +252,7 @@
 
   var helpers = {
     heroHeadline: heroHeadline, heroSubline: heroSubline, openItems: openItems, waitingItems: waitingItems, flightItems: flightItems,
-    statusChips: statusChips, statusIssues: statusIssues, expiryRows: expiryRows, buildCapture: buildCapture,
+    statusChips: statusChips, statusIssues: statusIssues, expiryRows: expiryRows, buildCapture: buildCapture, safeNotifyHref: safeNotifyHref, unreadCount: unreadCount, bellRows: bellRows, backupChip: backupChip, exportFileName: exportFileName,
     changedItemCount: changedItemCount, describeFeed: describeFeed, feedFromItems: feedFromItems, agoText: agoText, dueChip: dueChip,
     PRESETS: PRESETS, WIDGET_TITLE: WIDGET_TITLE, OWNER_ONLY: OWNER_ONLY, widgetRestricted: widgetRestricted
   };
@@ -272,7 +307,13 @@
     return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
   }
 
-  var model = { state: "loading", items: [], events: [], since: 0, firstFeed: true, status: null };
+  var model = { state: "loading", items: [], events: [], since: 0, firstFeed: true, status: null, bell: [], bellOpen: false };
+  var BELL_KEY = "barnyard-bell-seen";
+  function bellSeen() {
+    var v = 0;
+    try { v = parseInt(window.localStorage.getItem(BELL_KEY), 10) || 0; } catch (e) { v = 0; }
+    return v || Date.now() - 3 * DAY_MS;   // the first visit shows the last three days, not everything ever
+  }
 
   function loginHref() { return typeof window.barnyardLoginUrl === "function" ? window.barnyardLoginUrl() : null; }
 
@@ -412,18 +453,81 @@
     }
   }
 
+  function renderBell(row) {
+    var seen = bellSeen(), n = unreadCount(model.bell, seen);
+    var btn = h("button", "chip chip-btn" + (n ? " attn" : ""), n ? "Notifications (" + n + ")" : "Notifications");
+    btn.type = "button";
+    btn.setAttribute("aria-expanded", String(model.bellOpen));
+    btn.setAttribute("aria-controls", "ov-bell");
+    btn.addEventListener("click", function () { model.bellOpen = !model.bellOpen; renderStatus(); });
+    row.appendChild(btn);
+    var panel = $("ov-bell"), list = $("ov-bell-list");
+    if (!panel || !list) return;
+    clear(list);
+    panel.hidden = !model.bellOpen;
+    if (!model.bellOpen) return;
+    var rows = bellRows(model.bell, seen, Date.now());
+    if (!rows.length) list.appendChild(h("li", "dim", "Nothing needs your attention."));
+    rows.forEach(function (r) {
+      var li = h("li", (r.unread ? "unread " : "") + r.tone);
+      var a = r.href ? h("a", null, r.text) : h("span", null, r.text);
+      if (r.href) a.href = r.href;
+      li.appendChild(a);
+      li.appendChild(h("span", "when", r.when));
+      list.appendChild(li);
+    });
+  }
+
+  function markBellRead() {
+    try { window.localStorage.setItem(BELL_KEY, String(Date.now())); } catch (e) { /* storage blocked: they stay unread */ }
+    renderStatus();
+  }
+
+  // Downloads the whole backup as one JSON file. Needs a recent sign-in; says so when it is refused.
+  function backup(btn) {
+    btn.disabled = true;
+    var say = function (t) { if (window.BarnyardShell && window.BarnyardShell.toast) window.BarnyardShell.toast(t); };
+    say("Preparing your backup…");
+    fetch(HUB_API + "/export", { credentials: "include", referrerPolicy: "no-referrer" }).then(function (r) {
+      if (r.status === 403) { say("A backup needs a recent sign-in. Log in again, then try once more."); return null; }
+      if (r.status === 429) { say("A backup was made a moment ago. Try again in a minute."); return null; }
+      if (r.status === 413) { say("The backup is too big to make in one go."); return null; }
+      if (!r.ok) { say("Couldn’t make the backup just now."); return null; }
+      return r.blob();
+    }).then(function (blob) {
+      if (!blob) return;
+      var url = URL.createObjectURL(blob), a = document.createElement("a");
+      a.href = url; a.download = exportFileName(Date.now());
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+      say("Backup saved. Images are not in it; the file lists their ids.");
+      refresh();
+    }).catch(function () { say("Couldn’t make the backup just now."); }).then(function () { btn.disabled = false; });
+  }
+
   function renderStatus() {
     var row = $("ov-status"), box = $("ov-expiry-box"), list = $("ov-expiry");
     if (!row || !box || !list) return;
     clear(row); clear(list);
     var s = model.status;
-    if (!s) { row.hidden = true; box.hidden = true; return; }   // a guest, a failed call or not signed in: nothing to show
+    if (!s) {   // a guest, a failed call or not signed in: nothing to show
+      row.hidden = true; box.hidden = true;
+      var bellBox = $("ov-bell"); if (bellBox) bellBox.hidden = true;
+      return;
+    }
     var chips = statusChips(s, Date.now());
     chips.forEach(function (c) {
       var el = h(c.href ? "a" : "span", "chip" + (c.tone ? " " + c.tone : ""), c.text);
       if (c.href) el.href = c.href;
       row.appendChild(el);
     });
+    renderBell(row);
+    var bk = backupChip(s.lastExport, Date.now());
+    row.appendChild(h("span", "chip " + bk.tone, bk.text));
+    var backBtn = h("button", "chip chip-btn", "Back up everything");
+    backBtn.type = "button";
+    backBtn.addEventListener("click", function () { backup(backBtn); });
+    row.appendChild(backBtn);
     [["Search everything", "search.html"], ["Activity", "activity.html"], ["System health", "health.html"]].forEach(function (l) {
       var a = h("a", "chip", l[0] + " →");
       a.href = l[1];
@@ -444,6 +548,11 @@
     });
     if (!rows.length) list.appendChild(h("li", "dim", "Nothing with a date in the next year. Give an Ops item a Due date and it shows here."));
     box.hidden = false;
+  }
+
+  function setupBell() {
+    var read = $("ov-bell-read");
+    if (read) read.addEventListener("click", markBellRead);
   }
 
   function setupCapture() {
@@ -513,6 +622,9 @@
     }).then(function () {
       // Best effort and owner only: anything but a clean answer (a guest gets 403) just hides the row.
       return getJson("/status", HUB_API).then(function (s) { model.status = s && s.ok ? s : null; }, function () { model.status = null; });
+    }).then(function () {
+      if (!model.status) { model.bell = []; return; }
+      return getJson("/notifications", HUB_API).then(function (n) { model.bell = n && Array.isArray(n.events) ? n.events : []; }, function () { model.bell = []; });
     }).then(function () {
       renderAll();
     }, function (err) {
@@ -753,6 +865,7 @@
     model.since = stored || (Date.now() - DAY_MS);
 
     setupCapture();
+    setupBell();
     renderAll();
     var authCheck = typeof window.barnyardAuthState === "function" ? window.barnyardAuthState() : Promise.resolve({ authenticated: false });
     authCheck.then(function (auth) {

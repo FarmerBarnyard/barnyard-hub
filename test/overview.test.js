@@ -179,4 +179,41 @@ test("expiry rows: red when expired or today, amber inside two weeks, accent ins
   assert.deepStrictEqual(Overview.expiryRows(null), []);
 });
 
+// ---- the bell and the backup --------------------------------------------------------------
+
+test("bell: which events are new is a comparison with the time the person last marked them read", function () {
+  var events = [{ id: "a", ts: NOW - 1000, text: "New" }, { id: "b", ts: NOW - 10 * HOUR, text: "Old" }];
+  assert.strictEqual(Overview.unreadCount(events, NOW - 5 * HOUR), 1);
+  assert.strictEqual(Overview.unreadCount(events, NOW - 20 * HOUR), 2);
+  assert.strictEqual(Overview.unreadCount(events, NOW), 0);
+  assert.strictEqual(Overview.unreadCount(null, 0), 0);
+  var rows = Overview.bellRows(events, NOW - 5 * HOUR, NOW);
+  assert.deepStrictEqual(rows.map(function (r) { return [r.text, r.unread, r.when]; }), [["New", true, "just now"], ["Old", false, "10 h ago"]]);
+});
+
+test("bell: links are only ones the Worker makes (an item, the chat page, the campaign site) and tones pass through", function () {
+  assert.strictEqual(Overview.safeNotifyHref("ops.html#it_abc12345"), "ops.html#it_abc12345");
+  assert.strictEqual(Overview.safeNotifyHref("ops.html"), "ops.html");
+  assert.strictEqual(Overview.safeNotifyHref("chat.html"), "chat.html");
+  assert.strictEqual(Overview.safeNotifyHref("https://campaign.barnyard.site/"), "https://campaign.barnyard.site/");
+  ["javascript:alert(1)", "https://evil.example/", "https://campaign.barnyard.site.evil.example/", "ops.html#<b>", "//evil.example", "", undefined].forEach(function (bad) {
+    assert.strictEqual(Overview.safeNotifyHref(bad), "", String(bad));
+  });
+  var r = Overview.bellRows([{ id: "x", ts: NOW, text: "T", tone: "alert", href: "javascript:alert(1)" }], 0, NOW)[0];
+  assert.deepStrictEqual([r.tone, r.href], ["alert", ""]);
+});
+
+test("backup chip: never is amber, a month or more is amber, recent is calm", function () {
+  assert.deepStrictEqual(Overview.backupChip(null, NOW), { text: "No backup yet", tone: "attn" });
+  assert.deepStrictEqual(Overview.backupChip(NOW - 2 * HOUR, NOW), { text: "Last backup today", tone: "ok" });
+  assert.deepStrictEqual(Overview.backupChip(NOW - 30 * HOUR, NOW), { text: "Last backup yesterday", tone: "ok" });
+  assert.deepStrictEqual(Overview.backupChip(NOW - 9 * 86400000, NOW), { text: "Last backup 9 days ago", tone: "ok" });
+  assert.deepStrictEqual(Overview.backupChip(NOW - 30 * 86400000, NOW), { text: "Last backup 30 days ago", tone: "attn" });
+});
+
+test("the backup file is named for the day it was made", function () {
+  assert.strictEqual(Overview.exportFileName(new Date(2026, 9, 11, 15, 0).getTime()), "barnyard-export-2026-10-11.json");
+  assert.strictEqual(Overview.exportFileName(new Date(2026, 0, 5, 0, 1).getTime()), "barnyard-export-2026-01-05.json");
+});
+
 console.log("\n" + passed + " tests passed");
