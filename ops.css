@@ -280,3 +280,33 @@ textarea.ops-input { resize: vertical; line-height: 1.45; }
 .ops-run-how, .ops-run-conn { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .ops-run-how p, .ops-run-conn p { margin: 0; font-size: 13px; max-width: 56ch; }
 .ops-run-conn .ops-input { max-width: 560px; }
+
+/* the briefing at the top of an item */
+.ops-chip-needs { color: var(--attn); background: var(--attn-soft); border-color: transparent; font-weight: 600; }
+.ops-needs { margin-bottom: 18px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); }
+.ops-needs.is-open { border-color: color-mix(in srgb, var(--attn) 45%, var(--line)); background: var(--attn-soft); }
+.ops-needs-title { font: 600 15px var(--font-display); color: var(--fg-strong); margin: 0 0 6px; }
+.ops-needs-title:not(:first-child) { margin-top: 14px; }
+.ops-needs-q { margin: 0 0 10px; font-size: 14px; color: var(--fg-strong); }
+.ops-needs-hint { margin: 0 0 8px; font-size: 13px; color: var(--fg-dim); }
+.ops-needs textarea { width: 100%; margin-bottom: 10px; }
+.ops-needs .ops-banner-actions { margin-top: 0; }
+.ops-decision { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 14px; }
+.ops-decision p { margin: 4px 0 0; }
+.ops-decision-note { color: var(--fg-strong); }
+.ops-decision.is-stale .ops-decision-stale { color: var(--alert); }
+.ops-todo { list-style: decimal; margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; }
+.ops-todo-item { padding-left: 4px; }
+.ops-todo-label { display: inline-flex; align-items: flex-start; gap: 9px; cursor: pointer; font-size: 14px; }
+.ops-todo-label input { margin-top: 3px; }
+.ops-todo-item.is-done .ops-todo-text { color: var(--fg-dim); text-decoration: line-through; }
+.ops-todo-item .ops-chip { margin-left: 8px; vertical-align: 1px; }
+.ops-brief { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
+.ops-brief h3 { font: 600 12px var(--font-body); letter-spacing: .06em; text-transform: uppercase; color: var(--fg-dim); margin: 14px 0 0; }
+.ops-brief h3:first-child { margin-top: 0; }
+.ops-brief-text, .ops-brief-where, .ops-brief-next { margin: 0; font-size: 14px; color: var(--fg); }
+.ops-brief-where { color: var(--fg-dim); font-size: 13px; }
+.ops-brief-details { font-size: 13.5px; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 70ch; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.ops-edit { margin: 4px 0 20px; }
+.ops-edit > summary { cursor: pointer; font-weight: 500; color: var(--fg-dim); padding: 6px 0; }
+.ops-edit[open] > summary { margin-bottom: 8px; }
