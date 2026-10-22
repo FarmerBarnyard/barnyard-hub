@@ -1,0 +1,75 @@
+/* Markdown to PDF (md-pdf.html). Colours come from the shell's tokens so every theme works.
+   The @page rule is added by md-pdf.js (the CSP forbids inline <style>). */
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.dim { color: var(--fg-dim); }
+
+.mp-bar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 10px 14px; margin: 6px 0 16px; }
+.mp-bar label.btn { cursor: pointer; }
+.mp-bar label.btn:focus-within { outline: 2px solid var(--accent); }
+.mp-opt { display: grid; gap: 3px; font-size: 12px; color: var(--fg-dim); }
+.mp-opt select { font: inherit; font-size: 14px; height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); }
+.mp-grow { flex: 1; }
+
+.mp-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .mp-cols { grid-template-columns: minmax(0, 1fr); } }
+.mp-pane { min-width: 0; display: grid; gap: 6px; }
+.mp-label { font-size: 13px; font-weight: 600; color: var(--fg-strong); }
+.mp-label .dim { font-weight: 400; }
+#mp-src { width: 100%; min-height: 62vh; resize: vertical; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); font: 13.5px/1.55 var(--font-mono); tab-size: 2; }
+#mp-src:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mp-hint { margin-top: 14px; font-size: 13px; max-width: 70ch; }
+
+/* The preview is always dark text on white, like the paper, whatever the theme. */
+.mp-sheet { background: #fff; color: #1b1f24; border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--lift); padding: 20px 22px; min-height: 62vh; max-height: 78vh; overflow: auto; }
+.mp-sheet.landscape { padding-inline: 28px; }
+.mp-empty { color: #6a7480; font-style: italic; }
+
+#mp-doc { line-height: 1.55; overflow-wrap: anywhere; }
+#mp-doc.sans { font-family: var(--font-body); }
+#mp-doc.serif { font-family: Georgia, "Times New Roman", serif; }
+#mp-doc.fs-10 { font-size: 13px; }
+#mp-doc.fs-11 { font-size: 14.5px; }
+#mp-doc.fs-12 { font-size: 16px; }
+#mp-doc > * + * { margin-top: .8em; }
+#mp-doc h1, #mp-doc h2, #mp-doc h3, #mp-doc h4, #mp-doc h5, #mp-doc h6 { line-height: 1.25; color: #0e1720; font-family: var(--font-display); font-weight: 600; margin-top: 1.4em; }
+#mp-doc.serif h1, #mp-doc.serif h2, #mp-doc.serif h3, #mp-doc.serif h4, #mp-doc.serif h5, #mp-doc.serif h6 { font-family: Georgia, "Times New Roman", serif; }
+#mp-doc h1 { font-size: 1.9em; padding-bottom: .25em; border-bottom: 1px solid #d5dbe2; margin-top: 0; }
+#mp-doc h2 { font-size: 1.45em; padding-bottom: .2em; border-bottom: 1px solid #e3e7ec; }
+#mp-doc h3 { font-size: 1.2em; }
+#mp-doc h4, #mp-doc h5, #mp-doc h6 { font-size: 1em; }
+#mp-doc a { color: #1d56a6; text-decoration: underline; }
+#mp-doc code { padding: .1em .35em; border-radius: 4px; background: #eef1f4; font: .88em var(--font-mono); }
+#mp-doc pre { padding: .8em 1em; border: 1px solid #d5dbe2; border-radius: 6px; background: #f5f7f9; white-space: pre-wrap; overflow-wrap: anywhere; }
+#mp-doc pre code { padding: 0; background: none; font-size: .85em; line-height: 1.5; }
+#mp-doc blockquote { padding: .1em 0 .1em 1em; border-left: 3px solid #c3ccd6; color: #4a5560; }
+#mp-doc ul, #mp-doc ol { padding-left: 1.6em; }
+#mp-doc li + li { margin-top: .25em; }
+#mp-doc li.task { list-style: none; margin-left: -1.3em; display: flex; gap: .5em; }
+#mp-doc hr { border: 0; border-top: 1px solid #cbd3dc; margin: 1.4em 0; }
+#mp-doc .table-wrap { overflow-x: auto; }
+#mp-doc table { border-collapse: collapse; width: 100%; font-size: .94em; }
+#mp-doc th, #mp-doc td { border: 1px solid #cbd3dc; padding: .35em .6em; text-align: left; vertical-align: top; }
+#mp-doc th { background: #eef1f4; font-weight: 600; }
+#mp-doc [data-align="right"] { text-align: right; }
+#mp-doc [data-align="center"] { text-align: center; }
+#mp-doc .callout { padding: .6em .9em; border: 1px solid #cbd3dc; border-radius: 6px; background: #f5f7f9; }
+#mp-doc .callout-title { font-weight: 600; margin-bottom: .2em; }
+#mp-doc .linkcard { display: block; padding: .5em .8em; border: 1px solid #cbd3dc; border-radius: 6px; text-decoration: none; color: inherit; }
+#mp-doc .lc-title { display: block; font-weight: 600; color: #0e1720; }
+#mp-doc .lc-host, #mp-doc .lc-path { display: block; font-size: .85em; color: #5a6672; }
+#mp-doc .wiki { color: inherit; text-decoration: none; }
+
+/* Printing: the paper is the document and nothing else. */
+@media print {
+  html, body { background: #fff !important; }
+  .bg, .side, .top, .toast, #settings, .page-head, .mp-bar, .mp-pane:first-child, .mp-label, .mp-hint { display: none !important; }
+  .app, .main { display: block !important; min-height: 0 !important; }
+  main#page { display: block !important; margin: 0 !important; padding: 0 !important; max-width: none !important; width: auto !important; }
+  .mp-cols, .mp-pane { display: block; }
+  .mp-sheet { border: 0; box-shadow: none; padding: 0; max-height: none; overflow: visible; min-height: 0; border-radius: 0; background: #fff; }
+  #mp-doc { color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #mp-doc h1, #mp-doc h2, #mp-doc h3, #mp-doc h4, #mp-doc h5, #mp-doc h6 { break-after: avoid; page-break-after: avoid; }
+  #mp-doc pre, #mp-doc blockquote, #mp-doc table, #mp-doc tr, #mp-doc .callout, #mp-doc .linkcard { break-inside: avoid; page-break-inside: avoid; }
+  #mp-doc .table-wrap { overflow: visible; }
+}
