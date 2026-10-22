@@ -528,7 +528,7 @@
     backBtn.type = "button";
     backBtn.addEventListener("click", function () { backup(backBtn); });
     row.appendChild(backBtn);
-    [["Search everything", "search.html"], ["Activity", "activity.html"], ["System health", "health.html"]].forEach(function (l) {
+    [["Search everything", "search.html"], ["Activity", "activity.html"], ["System health", "health.html"], ["Markdown to PDF", "md-pdf.html"]].forEach(function (l) {
       var a = h("a", "chip", l[0] + " →");
       a.href = l[1];
       row.appendChild(a);

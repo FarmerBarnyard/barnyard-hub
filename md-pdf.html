@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Markdown to PDF &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=61714599">
+<link rel="stylesheet" href="md-pdf.css?v=96a70384">
+<script src="themes.js?v=70f6889a"></script>
+</head>
+<body data-shell="overview" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Markdown to PDF</h1>
+      <p>Paste Markdown or open a .md file, check the preview, then save it as a PDF. Nothing leaves this page. <a href="index.html">Back to the overview</a></p>
+    </div>
+  </div>
+
+  <div class="mp-bar">
+    <label class="btn" for="mp-file">Open .md file</label>
+    <input id="mp-file" class="sr-only" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain">
+    <label class="mp-opt">Paper
+      <select id="mp-size">
+        <option value="A4">A4</option>
+        <option value="Letter">Letter</option>
+        <option value="Legal">Legal</option>
+        <option value="A5">A5</option>
+      </select>
+    </label>
+    <label class="mp-opt">Orientation
+      <select id="mp-orient">
+        <option value="portrait">Portrait</option>
+        <option value="landscape">Landscape</option>
+      </select>
+    </label>
+    <label class="mp-opt">Margins
+      <select id="mp-margin">
+        <option value="12">Narrow</option>
+        <option value="20" selected>Normal</option>
+        <option value="28">Wide</option>
+      </select>
+    </label>
+    <label class="mp-opt">Text
+      <select id="mp-font">
+        <option value="fs-10">Small</option>
+        <option value="fs-11" selected>Medium</option>
+        <option value="fs-12">Large</option>
+      </select>
+    </label>
+    <label class="mp-opt">Typeface
+      <select id="mp-face">
+        <option value="sans" selected>Sans</option>
+        <option value="serif">Serif</option>
+      </select>
+    </label>
+    <span class="mp-grow"></span>
+    <button id="mp-clear" type="button" class="btn">Clear</button>
+    <button id="mp-print" type="button" class="btn btn-primary" disabled>Save as PDF</button>
+  </div>
+
+  <div class="mp-cols">
+    <section class="mp-pane" aria-label="Markdown">
+      <label class="mp-label" for="mp-src">Markdown <span id="mp-count" class="dim"></span></label>
+      <textarea id="mp-src" spellcheck="false" placeholder="# My document&#10;&#10;Paste or type Markdown here&hellip;"></textarea>
+    </section>
+    <section class="mp-pane" aria-label="Preview">
+      <div class="mp-label">Preview <span class="dim">(this is what the PDF will look like)</span></div>
+      <div id="mp-sheet" class="mp-sheet"><article id="mp-doc" class="md fs-11 sans"></article></div>
+    </section>
+  </div>
+  <p id="mp-hint" class="dim mp-hint">In the print window choose &ldquo;Save as PDF&rdquo; as the destination and turn headers and footers off for a clean page.</p>
+</main>
+
+<script src="shell.js?v=07960b0d"></script>
+<script src="markdown.js?v=16084133"></script>
+<script src="md-pdf.js?v=eb8bf0c7"></script>
+</body>
+</html>
