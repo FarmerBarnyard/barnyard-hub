@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Vulnerabilities &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=61714599">
+<link rel="stylesheet" href="vuln.css?v=ca27f717">
+<script src="themes.js?v=70f6889a"></script>
+</head>
+<body data-shell="vuln" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Vulnerabilities</h1>
+      <p>The known security holes that apply to what you run. Add your servers and software, and this keeps a record of each one, with a plan to fix it you can approve.</p>
+    </div>
+  </div>
+  <div id="vn-root" aria-live="polite">
+    <p class="dim">Loading&hellip;</p>
+  </div>
+</main>
+
+<script src="shell.js?v=121d445a"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="vuln.js?v=ff7b11b7"></script>
+</body>
+</html>
