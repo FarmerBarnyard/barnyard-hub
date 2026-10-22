@@ -79,7 +79,7 @@ test("computeStats ignores done items and proposals; classifies due dates", func
     item({ id: "it_00000006", lane: "done", due: "2026-10-01" }),
     item({ id: "it_00000007", lane: "backlog", proposal: true, due: "2026-10-01", addedAt: NOW - 90 * DAY })
   ];
-  assert.deepStrictEqual(ops.computeStats(items, NOW, TODAY), { in_progress: 1, soaking: 1, waiting: 2, backlog: 1, dueSoon: 2, overdue: 1, aged: 1 });
+  assert.deepStrictEqual(ops.computeStats(items, NOW, TODAY), { in_progress: 1, soaking: 1, waiting: 2, backlog: 1, dueSoon: 2, overdue: 1, aged: 1, needsYou: 0 });
 });
 
 test("sortForLane: high priority first, then oldest, stable by id", function () {
@@ -234,6 +234,108 @@ test("piiText names each kind of personal data", function () {
 test("a redacted entry reads sensibly in the log and the live feed", function () {
   var it = item({ title: "[redacted]" });
   assert.strictEqual(ops.describeEvent({ actor: "you", kind: "redacted", changes: {} }, it), "You redacted “[redacted]”");
+});
+
+// ---- the briefing: what an item is, where it is at and what it needs from you ----
+
+var PLAN = [
+  { text: "Open the Cloudflare dashboard", who: "you", done: false },
+  { text: "Delete the cloud DNS record", who: "you", done: true },
+  { text: "Check the site still loads", who: "claude", done: false },
+  { text: "Remove the tunnel", who: "you", done: false }
+];
+
+test("an item needs you when it holds a decision or a step that is yours and not done", function () {
+  assert.strictEqual(ops.needsYou(item({ lane: "waiting", status: "decision_needed" })), true);
+  assert.strictEqual(ops.needsYou(item({ ask: "Reboot tonight?" })), true);
+  assert.strictEqual(ops.needsYou(item({ proposal: true })), true);
+  assert.strictEqual(ops.needsYou(item({ steps: PLAN })), true);
+  assert.strictEqual(ops.needsYou(item({ steps: [PLAN[1], PLAN[2]] })), false, "your only step is ticked; the other is Claude's");
+  assert.strictEqual(ops.needsYou(item({ ask: "?", decision: { verdict: "approved", state: "new" } })), false, "already answered");
+  assert.strictEqual(ops.needsYou(item({ lane: "done", ask: "?", steps: PLAN })), false);
+  assert.strictEqual(ops.needsYou(item({})), false);
+  assert.strictEqual(ops.needsYou(null), false);
+});
+
+test("the tile says what is wanted, in a few words", function () {
+  assert.strictEqual(ops.needsText(item({ ask: "?" })), "Decision needed");
+  assert.strictEqual(ops.needsText(item({ steps: PLAN })), "2 actions for you");
+  assert.strictEqual(ops.needsText(item({ steps: [PLAN[0], PLAN[2]] })), "1 action for you");
+  assert.strictEqual(ops.needsText(item({})), "");
+  assert.deepStrictEqual(ops.stepCounts(item({ steps: PLAN })), { total: 4, done: 1 });
+  assert.deepStrictEqual(ops.stepCounts(item({})), { total: 0, done: 0 });
+});
+
+test("your open steps keep their place in the whole plan, so ticking one flips the right line", function () {
+  assert.deepStrictEqual(ops.yourSteps(item({ steps: PLAN })).map(function (x) { return x.index; }), [0, 3]);
+  assert.deepStrictEqual(ops.stepsFor(item({ steps: PLAN }), "claude").map(function (x) { return x.text; }), ["Check the site still loads"]);
+  assert.strictEqual(ops.stepsFor(item({ steps: PLAN })).length, 4);
+});
+
+test("the summary row counts the items that need you", function () {
+  var items = [item({ id: "it_00000001", lane: "waiting", status: "decision_needed" }), item({ id: "it_00000002", steps: PLAN }), item({ id: "it_00000003" })];
+  assert.strictEqual(ops.computeStats(items, NOW, TODAY).needsYou, 2);
+});
+
+test("steps are written and read back as lines, keeping who and what is ticked", function () {
+  var text = ops.stepsToText(PLAN);
+  assert.strictEqual(text.split("\n")[1], "[x] you: Delete the cloud DNS record");
+  assert.deepStrictEqual(ops.parseSteps(text, []).steps, PLAN);
+  var r = ops.parseSteps("you: First\nSecond\n[x] claude: Third\n\n", []);
+  assert.deepStrictEqual(r.steps, [{ text: "First", who: "you", done: false }, { text: "Second", who: "claude", done: false }, { text: "Third", who: "claude", done: true }]);
+  // a line with no tick keeps the tick it had
+  assert.strictEqual(ops.parseSteps("you: Delete the cloud DNS record", PLAN).steps[0].done, true);
+  assert.strictEqual(ops.parseSteps("claude: Delete the cloud DNS record", PLAN).steps[0].done, false, "a different person's step is a different step");
+  assert.deepStrictEqual(ops.parseSteps("", PLAN).steps, []);
+  assert.ok(ops.parseSteps("you:", []).error);
+  assert.ok(ops.parseSteps("[x]", []).error);
+  assert.ok(ops.parseSteps("a\n".repeat(16), []).error);
+  assert.ok(ops.parseSteps("x".repeat(301), []).error);
+});
+
+test("the edit form sends only the briefing fields and steps that changed", function () {
+  var it = item({ summary: "S", progress: "P", ask: "", steps: PLAN });
+  assert.deepStrictEqual(ops.changedFields(it, { summary: "S", progress: "P2", ask: "", steps: PLAN }), { progress: "P2" });
+  assert.deepStrictEqual(ops.changedFields(it, { steps: PLAN.slice(0, 2) }), { steps: PLAN.slice(0, 2) });
+  assert.deepStrictEqual(ops.changedFields(item({}), { steps: [] }), {}, "no steps either way is no change");
+  assert.deepStrictEqual(ops.changedFields(item({}), { ask: "Go?" }), { ask: "Go?" });
+});
+
+test("the answer given is described with its note, and what Claude has done about it", function () {
+  var at = NOW - 3 * 3600000;
+  var base = { verdict: "approved", note: "Yes, 2am", at: at, state: "new", stale: false, question: "Reboot?" };
+  var v = ops.decisionView(item({ decision: base }), NOW);
+  assert.strictEqual(v.headline, "You approved this 3 h ago");
+  assert.strictEqual(v.note, "Yes, 2am");
+  assert.strictEqual(v.status, "Claude has not picked this up yet.");
+  assert.strictEqual(ops.decisionView(item({ decision: Object.assign({}, base, { state: "working" }) }), NOW).status, "Claude is working on it.");
+  assert.strictEqual(ops.decisionView(item({ decision: Object.assign({}, base, { state: "handled" }) }), NOW).status, "Claude has dealt with it.");
+  var no = ops.decisionView(item({ decision: Object.assign({}, base, { verdict: "rejected", state: "working" }) }), NOW);
+  assert.strictEqual(no.headline, "You rejected this 3 h ago");
+  assert.strictEqual(no.status, "Claude is rethinking it.");
+  assert.strictEqual(ops.decisionView(item({ decision: Object.assign({}, base, { stale: true }) }), NOW).stale, true);
+  assert.strictEqual(ops.decisionView(item({}), NOW), null);
+});
+
+test("an item with no summary shows the first paragraph of its details instead", function () {
+  assert.strictEqual(ops.summaryOf(item({ summary: "Short one", details: "Long text" })), "Short one");
+  assert.strictEqual(ops.summaryOf(item({ details: "First paragraph.\n\nSecond paragraph." })), "First paragraph.");
+  assert.strictEqual(ops.summaryOf(item({ details: "x".repeat(400) })).length, 320);
+  assert.strictEqual(ops.summaryOf(item({})), "");
+});
+
+test("the log describes the new fields and the decision in plain words", function () {
+  assert.deepStrictEqual(ops.describeChanges({ steps: ["3 steps, 0 done", "3 steps, 1 done"], progress: ["a", "b"], summary: ["", "x"], ask: ["", "Go?"] }),
+    ["Steps: 3 steps, 0 done → 3 steps, 1 done", "Where it’s at updated", "Summary updated", "Question updated"]);
+  assert.strictEqual(ops.describeEvent({ actor: "you", kind: "approved", changes: {} }, { title: "Reboot" }), "You approved “Reboot”");
+});
+
+test("the drawer's new pieces never write markup, and the edit form is folded away for an existing item", function () {
+  var fs = require("fs");
+  var js = fs.readFileSync(path.join(__dirname, "..", "ops.js"), "utf8");
+  assert.ok(!/\.innerHTML\s*\+?=|insertAdjacentHTML|document\.write/.test(js.slice(js.indexOf("function decisionPanel"), js.indexOf("function buildDrawer"))), "built with text only");
+  assert.ok(/function decisionPanel\(/.test(js) && /function briefing\(/.test(js) && /"ops-edit"/.test(js));
+  assert.ok(/transport\.decide\(id, approve, note \|\| undefined, run\)/.test(js), "the owner's note travels with the decision");
 });
 
 console.log("\n" + passed + " tests passed");

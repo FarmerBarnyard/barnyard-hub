@@ -46,12 +46,13 @@
   var OWNER_TITLE = { claude: "With Claude", you: "With You" };
   var EVENT_VERB = {
     created: "added this", proposed: "proposed this", updated: "changed this", moved: "moved this", note: "added a note",
-    done: "marked this done", reopened: "reopened this", approved: "approved this proposal", rejected: "rejected this proposal",
+    done: "marked this done", reopened: "reopened this", approved: "approved this", rejected: "rejected this",
     redacted: "redacted this"
   };
   var FIELD_TITLE = {
     title: "Title", lane: "Lane", status: "Status", category: "Category", owner: "Owner", priority: "Priority",
-    targets: "Targets", next: "Next step", details: "Details", due: "Due", proposal: "Proposal"
+    targets: "Targets", next: "Next step", details: "Details", due: "Due", proposal: "Proposal",
+    summary: "Summary", progress: "Where it’s at", ask: "Question", steps: "Steps"
   };
 
   function pad2(n) { return n < 10 ? "0" + n : "" + n; }
@@ -120,11 +121,12 @@
   }
 
   function computeStats(items, now, today) {
-    var s = { in_progress: 0, soaking: 0, waiting: 0, backlog: 0, dueSoon: 0, overdue: 0, aged: 0 };
+    var s = { in_progress: 0, soaking: 0, waiting: 0, backlog: 0, dueSoon: 0, overdue: 0, aged: 0, needsYou: 0 };
     var open = openItems(items);
     for (var i = 0; i < open.length; i++) {
       var it = open[i];
       s[it.lane]++;
+      if (needsYou(it)) s.needsYou++;
       var n = daysUntil(it.due, today);
       if (n !== null && n < 0) s.overdue++;
       else if (n !== null && n <= 7) s.dueSoon++;
@@ -216,7 +218,7 @@
     if (field === "lane") { from = LANE_TITLE[from] || from; to = LANE_TITLE[to] || to; }
     if (field === "status") { from = STATUS_TITLE[from] || from; to = STATUS_TITLE[to] || to; }
     if (field === "owner") { from = OWNER_TITLE[from] || from; to = OWNER_TITLE[to] || to; }
-    if (field === "details" || field === "next") return title + " updated";
+    if (field === "details" || field === "next" || field === "summary" || field === "progress" || field === "ask") return title + " updated";
     return title + ": " + (from === "" ? "(none)" : from) + " → " + (to === "" ? "(none)" : to);
   }
 
@@ -269,12 +271,100 @@
   // Which fields of the edit form differ from the item, as a PATCH body.
   function changedFields(item, form) {
     var out = {};
-    var keys = ["title", "lane", "status", "category", "owner", "priority", "due", "next", "details"];
+    var keys = ["title", "lane", "status", "category", "owner", "priority", "due", "next", "details", "summary", "progress", "ask"];
     for (var i = 0; i < keys.length; i++) {
       if (form[keys[i]] !== undefined && form[keys[i]] !== item[keys[i]]) out[keys[i]] = form[keys[i]];
     }
     if (form.targets !== undefined && JSON.stringify(form.targets) !== JSON.stringify(item.targets)) out.targets = form.targets;
+    if (form.steps !== undefined && JSON.stringify(form.steps) !== JSON.stringify(item.steps || [])) out.steps = form.steps;
     return out;
+  }
+
+  // ---- the briefing: what an item is, where it is at and what it needs from you ----
+
+  var STEP_MAX = 15, STEP_CHARS = 300;
+  var WHO_TITLE = { you: "You", claude: "Claude" };
+
+  // Mirrors the Worker's rule (ops-logic.js awaitingDecision): a proposal, an item with a question nobody has
+  // answered, or one parked in "Waiting on you" as a decision.
+  function awaitingDecision(item) {
+    if (!item || item.lane === "done") return false;
+    if (item.proposal) return true;
+    if (item.decision) return false;
+    return !!item.ask || (item.lane === "waiting" && item.status === "decision_needed");
+  }
+
+  // The steps still to do, as {index, text}: the index is the step's place in the whole list.
+  function stepsFor(item, who, open) {
+    var out = [];
+    ((item && item.steps) || []).forEach(function (st, i) {
+      if ((!who || st.who === who) && (!open || !st.done)) out.push({ index: i, text: st.text, who: st.who, done: !!st.done });
+    });
+    return out;
+  }
+  function yourSteps(item) { return stepsFor(item, "you", true); }
+
+  // Does this item want something from the owner: a decision, or a step that is theirs to do?
+  function needsYou(item) {
+    return !!item && item.lane !== "done" && (awaitingDecision(item) || yourSteps(item).length > 0);
+  }
+
+  function stepCounts(item) {
+    var all = (item && item.steps) || [];
+    return { total: all.length, done: all.filter(function (x) { return x.done; }).length };
+  }
+
+  // One line for a tile: "Decision needed", "2 actions for you", or "" when it needs nothing.
+  function needsText(item) {
+    if (!needsYou(item)) return "";
+    if (awaitingDecision(item)) return "Decision needed";
+    var n = yourSteps(item).length;
+    return n === 1 ? "1 action for you" : n + " actions for you";
+  }
+
+  // The steps as editable text, one per line: "[x] you: Delete the DNS record".
+  function stepsToText(steps) {
+    return (steps || []).map(function (st) { return "[" + (st.done ? "x" : " ") + "] " + st.who + ": " + st.text; }).join("\n");
+  }
+
+  // Text back to steps. A line may start with [x] or [ ], and with "you:" or "claude:" (Claude by default). A line
+  // with no tick keeps the tick of an earlier step with the same words. -> {steps} or {error}.
+  function parseSteps(text, previous) {
+    var lines = String(text || "").split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+    if (lines.length > STEP_MAX) return { error: "At most " + STEP_MAX + " steps." };
+    var out = [];
+    for (var i = 0; i < lines.length; i++) {
+      var m = /^(?:\[( |x|X)\]\s*)?(?:(you|claude)\s*:\s*)?(.*)$/i.exec(lines[i]);
+      var body = m[3].trim();
+      if (!body) return { error: "Step " + (i + 1) + " has no words." };
+      if (body.length > STEP_CHARS) return { error: "Step " + (i + 1) + " is longer than " + STEP_CHARS + " characters." };
+      var who = m[2] ? m[2].toLowerCase() : "claude";
+      var done;
+      if (m[1] !== undefined) done = m[1] !== " ";
+      else done = (previous || []).some(function (p) { return p.text === body && p.who === who && p.done; });
+      out.push({ text: body, who: who, done: done });
+    }
+    return { steps: out };
+  }
+
+  // What the owner decided and what Claude has done about it: {headline, note, status, stale} or null.
+  function decisionView(item, now) {
+    var d = item && item.decision;
+    if (!d) return null;
+    var yes = d.verdict === "approved";
+    var status = d.state === "new" ? (yes ? "Claude has not picked this up yet." : "Claude has not looked at this yet.")
+      : d.state === "working" ? (yes ? "Claude is working on it." : "Claude is rethinking it.") : "Claude has dealt with it.";
+    return {
+      headline: (yes ? "You approved this " : "You rejected this ") + relativeTime(d.at, now),
+      note: d.note || "", question: d.question || "", status: status, state: d.state, yes: yes, stale: !!d.stale
+    };
+  }
+
+  // The first paragraph of the details, for an item with no summary of its own.
+  function summaryOf(item) {
+    if (item.summary) return item.summary;
+    var first = String(item.details || "").split(/\n\s*\n/)[0].trim();
+    return first.length > 320 ? first.slice(0, 319) + "…" : first;
   }
 
   function parseTargets(text) {
@@ -310,7 +400,9 @@
     longestWaiting: longestWaiting, recentlyDone: recentlyDone,
     describeChanges: describeChanges, describeEvent: describeEvent, reduceMessage: reduceMessage,
     newer: newer, changedFields: changedFields, parseTargets: parseTargets,
-    errorMessage: errorMessage, piiText: piiText
+    errorMessage: errorMessage, piiText: piiText,
+    awaitingDecision: awaitingDecision, yourSteps: yourSteps, stepsFor: stepsFor, needsYou: needsYou, needsText: needsText, stepCounts: stepCounts,
+    stepsToText: stepsToText, parseSteps: parseSteps, decisionView: decisionView, summaryOf: summaryOf
   };
 
   // ---- 2. transport ---------------------------------------------------------
@@ -707,7 +799,7 @@
       var s = computeStats(itemList(), now, today);
       var row = el("div", "ops-summary");
       [[s.in_progress, "in progress", ""], [s.soaking, "soaking", ""], [s.waiting, "waiting on you", "is-attention"],
-       [s.backlog, "in the backlog", ""], [s.overdue, "overdue", "is-alert"], [s.aged, "older than 30 days", ""]].forEach(function (d) {
+       [s.needsYou, "need your action or decision", "is-attention"], [s.backlog, "in the backlog", ""], [s.overdue, "overdue", "is-alert"], [s.aged, "older than 30 days", ""]].forEach(function (d) {
         if (!d[0] && d[2] !== "is-attention") return;
         var span = el("span", d[2]);
         span.appendChild(el("b", null, String(d[0])));
@@ -846,11 +938,17 @@
       var meta = el("span", "ops-tile-meta");
       meta.appendChild(statusDot(it.status));
       if (it.priority === "high") meta.appendChild(chip("High priority", "ops-chip-high"));
+      var needs = needsText(it);
+      if (needs) meta.appendChild(chip(needs, "ops-chip-needs"));
+      var dv = decisionView(it, now);
+      if (dv && dv.state !== "handled") meta.appendChild(chip(dv.yes ? (dv.state === "working" ? "Approved, Claude working" : "Approved, Claude to pick up") : "Rejected, Claude to rethink", "ops-chip-run-warn"));
+      var sc = stepCounts(it);
+      if (sc.total) meta.appendChild(chip(sc.done + "/" + sc.total + " steps"));
       if (it.pii && it.pii.length) meta.appendChild(chip("Personal data", "ops-chip-pii"));
       var rc = Runs ? Runs.helpers.runChip(it.run) : null;
       if (rc) meta.appendChild(chip(rc.text, "ops-chip-run-" + rc.tone));
       tile.appendChild(meta);
-      if (it.next) tile.appendChild(el("span", "ops-tile-next", it.next));
+      if (it.progress || it.next) tile.appendChild(el("span", "ops-tile-next", it.progress || it.next));
       var foot = el("span", "ops-tile-foot");
       var info = dueInfo(it.due, today);
       if (info) foot.appendChild(el("span", "ops-due tone-" + info.tone, info.text.replace(" · ", ", ")));
@@ -1050,15 +1148,18 @@
 
     // -- actions
     // buttons: every button that started this, so they can all be locked until it settles.
-    function decide(id, approve, buttons, run) {
+    function decide(id, approve, buttons, run, note) {
       buttons.forEach(function (b) { b.disabled = true; });
-      transport.decide(id, approve, undefined, run).then(function (res) {
+      transport.decide(id, approve, note || undefined, run).then(function (res) {
         upsert(res.item);
         if (res.event) seenEvents[res.event.seq] = true;
         state.version = Math.max(state.version, res.version);
         if (res.item.lane === "done") state.doneCount++;
         render();
-        if (Runs) toast(Runs.helpers.approveMessage(approve, res));
+        if (Runs) {
+          var said = Runs.helpers.approveMessage(approve, res);
+          toast(said === "Approved." ? "Approved. Claude will pick it up." : !approve ? "Rejected. Claude will rethink it." : said);
+        }
         if (Runs && approve) loadDispatch();
       }).catch(function (err) {
         buttons.forEach(function (b) { b.disabled = false; });
@@ -1150,6 +1251,104 @@
     var logBox = null;
     var noticeBox = null;
 
+    // Ticking a step: the whole list goes back with that one flipped.
+    function toggleStep(item, index, box) {
+      var steps = (item.steps || []).map(function (st, i) { return { text: st.text, who: st.who, done: i === index ? !st.done : st.done }; });
+      box.disabled = true;
+      transport.patch(item.id, { steps: steps }).then(function (res) { applyReply(res); }).catch(function (err) { box.disabled = false; box.checked = !box.checked; toast(errorMessage(err)); });
+    }
+
+    // A numbered list of steps with a tick box and who does each one.
+    function stepsList(item, steps, withWho) {
+      var ol = el("ol", "ops-todo");
+      steps.forEach(function (st) {
+        var li = el("li", "ops-todo-item" + (st.done ? " is-done" : ""));
+        var label = el("label", "ops-todo-label");
+        var box = el("input"); box.type = "checkbox"; box.checked = !!st.done;
+        box.setAttribute("aria-label", (st.done ? "Done: " : "Mark done: ") + st.text);
+        box.disabled = state.connection === "offline";
+        box.addEventListener("change", function () { toggleStep(item, st.index !== undefined ? st.index : steps.indexOf(st), box); });
+        label.appendChild(box);
+        label.appendChild(el("span", "ops-todo-text", st.text));
+        li.appendChild(label);
+        if (withWho) li.appendChild(chip(WHO_TITLE[st.who] || st.who, "ops-chip-actor actor-" + st.who));
+        ol.appendChild(li);
+      });
+      return ol;
+    }
+
+    // At the top of an item: a decision to make, the steps that are yours, and the answer already given.
+    function decisionPanel(item) {
+      var awaiting = awaitingDecision(item);
+      var mine = yourSteps(item);
+      var dv = decisionView(item, Date.now());
+      if (!awaiting && !mine.length && !dv) return null;
+      var box = el("section", "ops-needs" + (awaiting || mine.length ? " is-open" : ""));
+      if (awaiting) {
+        box.appendChild(el("h3", "ops-needs-title", item.proposal ? "A proposal needs your decision" : "This needs your decision"));
+        box.appendChild(el("p", "ops-needs-q", item.ask || (item.proposal ? "Approve it to add it to the backlog and let Claude start on it, or reject it." : item.next || "Approve it, or reject it and say why.")));
+        var note = el("textarea", "ops-input"); note.rows = 2; note.maxLength = 2000;
+        note.placeholder = "Add a note (optional). Claude reads it and acts on it.";
+        note.setAttribute("aria-label", "Note with your decision");
+        box.appendChild(note);
+        var pa = el("div", "ops-banner-actions");
+        var runsOnHere = !!(item.proposal && state.dispatch && state.dispatch.available && state.dispatch.enabled);
+        var yes = el("button", "ops-btn ops-btn-primary", runsOnHere ? "Approve and run" : "Approve");
+        var only = runsOnHere ? el("button", "ops-btn", "Approve only") : null;
+        var no = el("button", "ops-btn", "Reject");
+        yes.type = no.type = "button";
+        var every = only ? [yes, only, no] : [yes, no];
+        yes.addEventListener("click", function () { decide(item.id, true, every, undefined, note.value.trim()); closeDrawer(); });
+        if (only) { only.type = "button"; only.addEventListener("click", function () { decide(item.id, true, every, false, note.value.trim()); closeDrawer(); }); }
+        no.addEventListener("click", function () { decide(item.id, false, every, undefined, note.value.trim()); closeDrawer(); });
+        every.forEach(function (b) { pa.appendChild(b); });
+        box.appendChild(pa);
+      }
+      if (mine.length) {
+        box.appendChild(el("h3", "ops-needs-title", mine.length === 1 ? "1 action for you" : mine.length + " actions for you"));
+        box.appendChild(el("p", "ops-needs-hint", "Do these in order. Tick each one when it is done, and Claude will carry on from there."));
+        box.appendChild(stepsList(item, mine, false));
+      }
+      if (dv) {
+        var done = el("div", "ops-decision" + (dv.stale ? " is-stale" : ""));
+        done.appendChild(el("strong", null, dv.headline + "."));
+        if (dv.note) done.appendChild(el("p", "ops-decision-note", "Your note: “" + dv.note + "”"));
+        done.appendChild(el("p", null, dv.status));
+        if (dv.stale) done.appendChild(el("p", "ops-decision-stale", "The wording was edited after your answer, so Claude will ask again instead of acting on it."));
+        box.appendChild(done);
+      }
+      return box;
+    }
+
+    // What the item is, where it is at, the whole plan and the details, in plain reading order.
+    function briefing(item) {
+      var wrap = el("section", "ops-brief");
+      wrap.appendChild(el("h3", null, "What this is"));
+      wrap.appendChild(el("p", "ops-brief-text", summaryOf(item) || "No summary yet."));
+      wrap.appendChild(el("h3", null, "Where it’s at"));
+      var line = el("p", "ops-brief-where");
+      line.appendChild(statusDot(item.status));
+      line.appendChild(document.createTextNode(" · " + (LANE_TITLE[item.lane] || item.lane) + " · " + (OWNER_TITLE[item.owner] || item.owner) + " · last change " + relativeTime(item.lastEventAt || item.updatedAt, Date.now())));
+      wrap.appendChild(line);
+      wrap.appendChild(el("p", "ops-brief-text", item.progress || "No progress note yet."));
+      if (item.next) {
+        var nx = el("p", "ops-brief-next");
+        nx.appendChild(el("strong", null, "Next: "));
+        nx.appendChild(document.createTextNode(item.next));
+        wrap.appendChild(nx);
+      }
+      if (item.steps && item.steps.length) {
+        var sc = stepCounts(item);
+        wrap.appendChild(el("h3", null, (item.proposal ? "The plan" : "Steps") + " (" + sc.done + " of " + sc.total + " done)"));
+        wrap.appendChild(stepsList(item, stepsFor(item), true));
+      }
+      if (item.details) {
+        wrap.appendChild(el("h3", null, "Details"));
+        wrap.appendChild(el("div", "ops-brief-details", item.details));
+      }
+      return wrap;
+    }
+
     function buildDrawer() {
       clear(drawer);
       var isNew = state.selectedId === "new";
@@ -1177,21 +1376,10 @@
           "This item contains personal data (" + piiText(item.pii) + "). Keep this board to work notes. Use “Remove data” at the bottom to redact it for good."));
       }
 
-      if (item && item.proposal) {
-        var prop = el("div", "ops-banner", "This is a proposal. Approve it to add it to the backlog, or reject it.");
-        var pa = el("div", "ops-banner-actions");
-        var runsOnHere = !!(state.dispatch && state.dispatch.available && state.dispatch.enabled);
-        var yes = el("button", "ops-btn ops-btn-primary", runsOnHere ? "Approve and run" : "Approve");
-        var only = runsOnHere ? el("button", "ops-btn", "Approve only") : null;
-        var no = el("button", "ops-btn", "Reject");
-        yes.type = no.type = "button";
-        var everyButton = only ? [yes, only, no] : [yes, no];
-        yes.addEventListener("click", function () { decide(item.id, true, everyButton); closeDrawer(); });
-        if (only) { only.type = "button"; only.addEventListener("click", function () { decide(item.id, true, everyButton, false); closeDrawer(); }); }
-        no.addEventListener("click", function () { decide(item.id, false, everyButton); closeDrawer(); });
-        everyButton.forEach(function (b) { pa.appendChild(b); });
-        prop.appendChild(pa);
-        drawer.appendChild(prop);
+      if (item) {
+        var panel = decisionPanel(item);
+        if (panel) drawer.appendChild(panel);
+        drawer.appendChild(briefing(item));
       }
 
       // The agent run for an approved item: its state, a link to the session, and the buttons that apply.
@@ -1202,7 +1390,7 @@
 
       var form = el("form", "ops-form");
       form.noValidate = true;
-      var src = item || { title: "", lane: "backlog", status: "planned", category: "other", owner: "claude", priority: "normal", due: "", next: "", details: "", targets: [] };
+      var src = item || { title: "", lane: "backlog", status: "planned", category: "other", owner: "claude", priority: "normal", due: "", next: "", details: "", targets: [], summary: "", progress: "", ask: "", steps: [] };
 
       var fTitle = el("input", "ops-input"); fTitle.type = "text"; fTitle.maxLength = 120; fTitle.value = src.title;
       var fLane = select(["in_progress", "soaking", "waiting", "backlog"].concat(item && item.lane === "done" ? ["done"] : []), src.lane, function (v) { return LANE_TITLE[v]; });
@@ -1214,6 +1402,10 @@
       var fTargets = el("input", "ops-input"); fTargets.type = "text"; fTargets.value = src.targets.join(", ");
       var fNext = el("textarea", "ops-input"); fNext.rows = 2; fNext.maxLength = 400; fNext.value = src.next;
       var fDetails = el("textarea", "ops-input ops-details"); fDetails.rows = 6; fDetails.maxLength = 6000; fDetails.value = src.details;
+      var fSummary = el("textarea", "ops-input"); fSummary.rows = 2; fSummary.maxLength = 600; fSummary.value = src.summary || "";
+      var fProgress = el("textarea", "ops-input"); fProgress.rows = 2; fProgress.maxLength = 600; fProgress.value = src.progress || "";
+      var fAsk = el("textarea", "ops-input"); fAsk.rows = 2; fAsk.maxLength = 400; fAsk.value = src.ask || "";
+      var fSteps = el("textarea", "ops-input ops-details"); fSteps.rows = 5; fSteps.value = stepsToText(src.steps);
 
       form.appendChild(field("Title", fTitle));
       var grid = el("div", "ops-form-grid");
@@ -1225,10 +1417,14 @@
       grid.appendChild(field("Due", fDue));
       form.appendChild(grid);
       form.appendChild(field("Targets", fTargets, "Comma-separated, up to 6."));
+      form.appendChild(field("What this is", fSummary, "A sentence or two in plain words."));
+      form.appendChild(field("Where it’s at", fProgress, "How far along it is right now."));
       form.appendChild(field("Next step", fNext));
+      form.appendChild(field("Question for you", fAsk, "Fill this in to ask for a decision: Approve and Reject buttons appear for it."));
+      form.appendChild(field("Steps", fSteps, "One per line, like “[ ] you: Delete the DNS record” or “[x] claude: Check the site”. Start with you: or claude: to say who does it."));
       form.appendChild(field("Details", fDetails));
 
-      var controls = { title: fTitle, lane: fLane, status: fStatus, category: fCategory, owner: fOwner, priority: fPriority, due: fDue, targets: fTargets, next: fNext, details: fDetails };
+      var controls = { title: fTitle, lane: fLane, status: fStatus, category: fCategory, owner: fOwner, priority: fPriority, due: fDue, targets: fTargets, next: fNext, details: fDetails, summary: fSummary, progress: fProgress, ask: fAsk, steps: fSteps };
       Object.keys(controls).forEach(function (k) {
         controls[k].addEventListener("input", function () { drawerDirty = true; });
         controls[k].addEventListener("change", function () { drawerDirty = true; });
@@ -1269,9 +1465,12 @@
 
       form.addEventListener("submit", function (ev) {
         ev.preventDefault();
+        var parsedSteps = parseSteps(fSteps.value, src.steps);
+        if (parsedSteps.error) { msg.textContent = parsedSteps.error; fSteps.focus(); return; }
         var values = {
           title: fTitle.value.trim(), lane: fLane.value, status: fStatus.value, category: fCategory.value, owner: fOwner.value,
-          priority: fPriority.value, due: fDue.value, next: fNext.value.trim(), details: fDetails.value.trim(), targets: parseTargets(fTargets.value)
+          priority: fPriority.value, due: fDue.value, next: fNext.value.trim(), details: fDetails.value.trim(), targets: parseTargets(fTargets.value),
+          summary: fSummary.value.trim(), progress: fProgress.value.trim(), ask: fAsk.value.trim(), steps: parsedSteps.steps
         };
         if (!values.title) { msg.textContent = "Give it a title."; fTitle.focus(); return; }
         save.disabled = true;
@@ -1291,7 +1490,14 @@
           else msg.textContent = "Saved.";
         }).catch(function (err) { save.disabled = false; msg.textContent = errorMessage(err); });
       });
-      drawer.appendChild(form);
+      if (isNew) {
+        drawer.appendChild(form);
+      } else {
+        var editFold = el("details", "ops-edit");
+        editFold.appendChild(el("summary", null, "Edit this item"));
+        editFold.appendChild(form);
+        drawer.appendChild(editFold);
+      }
 
       if (!isNew) {
         var noteForm = el("form", "ops-note-form");
