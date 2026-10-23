@@ -153,6 +153,70 @@ test("an affected-version line reads the way a person would say it", function ()
   assert.strictEqual(V.rangeText(null), "");
 });
 
+test("a pasted list is checked field by field, and nothing is sent when anything is wrong", function () {
+  var good = JSON.stringify({ servers: [{ name: "vps", internet: true, importance: "high", notes: "public", software: [{ product: "caddy", vendor: "caddyserver", version: "2.11.7", name: "Caddy 2.11.7" }, { product: "openssh" }] }], software: [{ product: "ollama", version: "0.5.0" }] });
+  var p = V.parseImport(good);
+  assert.deepStrictEqual(p.problems, []);
+  assert.strictEqual(p.servers.length, 1);
+  assert.deepStrictEqual(p.servers[0].payload, { kind: "infra", name: "vps", internet: true, importance: "high", notes: "public" });
+  assert.deepStrictEqual(p.servers[0].software[0], { kind: "software", product: "caddy", vendor: "caddyserver", version: "2.11.7", name: "Caddy 2.11.7" });
+  assert.deepStrictEqual(p.loose, [{ kind: "software", product: "ollama", version: "0.5.0" }]);
+
+  function problems(obj) { return V.parseImport(typeof obj === "string" ? obj : JSON.stringify(obj)).problems; }
+  assert.match(problems("{not json")[0], /isn't valid JSON/);
+  assert.match(problems("[]")[0], /should be an object/);
+  assert.match(problems({})[0], /empty/);
+  assert.match(problems({ servers: [{ name: "a" }], extra: 1 }).join("|"), /Unknown top-level field extra/);
+  assert.match(problems({ servers: [{ internet: true }] }).join("|"), /servers\[0\]: name is missing/);
+  assert.match(problems({ servers: [{ name: "a", internet: "yes" }] }).join("|"), /internet should be true or false/);
+  assert.match(problems({ servers: [{ name: "a", importance: "huge" }] }).join("|"), /importance should be low, normal or high/);
+  assert.match(problems({ servers: [{ name: "a", colour: "red" }] }).join("|"), /unknown field colour/);
+  assert.match(problems({ servers: [{ name: "a", software: [{ version: "1" }] }] }).join("|"), /servers\[0\]\.software\[0\]: product is missing/);
+  assert.match(problems({ software: [{ product: "x", version: 8 }] }).join("|"), /version should be text/);
+  assert.match(problems({ servers: [{ name: new Array(90).join("x") }] }).join("|"), /name is longer than 80/);
+  assert.match(problems({ servers: ["web01"] }).join("|"), /should be an object/);
+  assert.match(problems({ servers: "web01" }).join("|"), /servers should be a list/);
+});
+
+test("an import has the same limits as the Worker, so a list that would be refused part way is refused up front", function () {
+  var many = []; for (var i = 0; i < 51; i++) many.push({ name: "h" + i });
+  assert.match(V.parseImport(JSON.stringify({ servers: many })).problems.join("|"), /At most 50 servers/);
+  var sw = []; for (var j = 0; j < 201; j++) sw.push({ product: "p" + j });
+  assert.match(V.parseImport(JSON.stringify({ software: sw })).problems.join("|"), /At most 200 software/);
+  assert.strictEqual(V.IMPORT_LIMITS.software, 200);
+});
+
+test("importing the same list twice adds nothing the second time", function () {
+  var parsed = V.parseImport(JSON.stringify({ servers: [{ name: "vps", software: [{ product: "caddy", version: "2.11.7" }, { product: "node", version: "24.22.1" }] }, { name: "cld01" }], software: [{ product: "ollama" }] }));
+  var first = V.planImport(parsed, []);
+  assert.deepStrictEqual([first.add, first.skip], [5, 0]);
+  assert.deepStrictEqual(first.steps.map(function (s) { return s.type + ":" + (s.payload.name || s.payload.product); }), ["server:vps", "software:caddy", "software:node", "server:cld01", "software:ollama"]);
+  // what the Worker would now hold
+  var held = [
+    { id: "vi_host0001", kind: "infra", name: "VPS" }, { id: "vi_host0002", kind: "infra", name: "cld01" },
+    { id: "vi_soft0001", kind: "software", product: "caddy", version: "2.11.7", parentId: "vi_host0001" },
+    { id: "vi_soft0002", kind: "software", product: "NODE", version: "24.22.1", parentId: "vi_host0001" },
+    { id: "vi_soft0003", kind: "software", product: "ollama", version: "", parentId: null }
+  ];
+  var second = V.planImport(parsed, held);
+  assert.strictEqual(second.add, 0);
+  assert.strictEqual(second.skip, 5);
+  assert.ok(second.steps.every(function (s) { return s.type === "server" && s.existingId; }), "only the existing servers are carried through, to hang anything new on");
+});
+
+test("new software is added to an existing server, and the same product on another server is not a duplicate", function () {
+  var parsed = V.parseImport(JSON.stringify({ servers: [{ name: "vps", software: [{ product: "caddy", version: "2.12.0" }] }, { name: "app02", software: [{ product: "caddy", version: "2.11.7" }] }] }));
+  var held = [
+    { id: "vi_host0001", kind: "infra", name: "vps" },
+    { id: "vi_soft0001", kind: "software", product: "caddy", version: "2.11.7", parentId: "vi_host0001" }
+  ];
+  var plan = V.planImport(parsed, held);
+  assert.strictEqual(plan.add, 3, "a new version on vps, plus the app02 server and its caddy");
+  assert.strictEqual(plan.skip, 1, "vps already exists");
+  var vps = plan.steps.filter(function (s) { return s.type === "server" && s.payload.name === "vps"; })[0];
+  assert.strictEqual(vps.existingId, "vi_host0001");
+});
+
 test("how recently an item was checked is stated honestly", function () {
   var sw = function (s, at) { return { kind: "software", matchState: s, matchedAt: at }; };
   assert.strictEqual(V.matchText(sw("ok", NOW - 5 * 60000), NOW), "Checked 5 min ago");
