@@ -365,6 +365,17 @@ test("every route the page calls exists on the Worker", function () {
   }
 });
 
+test("the page is drawn as soon as the person's own data is in, without waiting for the catalogue's status", function () {
+  var start = js.indexOf("Promise.all([\n      api.me()");
+  assert.ok(start !== -1, "the start-up block is there");
+  var block = js.slice(start, js.indexOf("function (err) {", start));
+  var firstFetch = block.slice(0, block.indexOf("]).then("));
+  assert.ok(/api\.me\(\)/.test(firstFetch) && /api\.environment\(\)/.test(firstFetch), "the summary and the list are fetched together");
+  assert.ok(!/catalogStatus/.test(firstFetch), "the catalogue status is not part of what the first draw waits for");
+  assert.ok(block.indexOf("render();") < block.indexOf("api.catalogStatus()"), "it is asked for after the page is drawn");
+  assert.ok(/querySelector\("\.vn-catalog"\)/.test(block), "and it only fills in the one line when it arrives");
+});
+
 test("the shell lists the page under Work, with its icon, and knows which page it is", function () {
   assert.ok(/\{ id: "vuln", title: "Vulnerabilities", group: "Work", icon: "shield", path: "vulnerabilities\.html", local: "vulnerabilities\.html" \}/.test(shell));
   assert.ok(/shield: '<path/.test(shell), "the icon exists");

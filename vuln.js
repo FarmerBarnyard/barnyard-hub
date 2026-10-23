@@ -561,12 +561,19 @@
         strip.appendChild(b);
       });
       host.appendChild(strip);
+      host.appendChild(el("div", "vn-catalog", catalogLine()));
+    }
+
+    // "4 open. Checked against 394,770 known CVEs, updated 3 min ago." The catalogue part is added when its status arrives, so
+    // the page never waits for it.
+    function catalogLine() {
+      var s = S.summary || { openTotal: 0 };
       var line = (s.openTotal || 0) + " open";
       if (S.catalog && S.catalog.total) {
         var when = S.catalog.sources && S.catalog.sources.cve_list && S.catalog.sources.cve_list.lastOk;
         line += ". Checked against " + thousands(S.catalog.total) + " known CVEs" + (when ? ", updated " + agoText(when, Date.now()) : "");
       }
-      host.appendChild(el("div", "vn-catalog", line + "."));
+      return line + ".";
     }
 
     function drawTabs(host) {
@@ -1349,15 +1356,19 @@
       if (linkText) { var a = el("a", "btn btn-primary", linkText); a.href = href; box.appendChild(a); }
       root.appendChild(box);
     }
-    api.me().then(function (me) {
-      S.summary = me.summary;
-      return Promise.all([
-        api.environment().then(function (e) { S.env = e; }),
-        api.catalogStatus().then(function (c) { S.catalog = c; }, function () { S.catalog = null; })
-      ]);
-    }).then(function () {
+    // Your summary and your list are fetched together and the page is drawn as soon as they are in. The catalogue's own
+    // status comes after and only fills in one line (it used to hold the whole page back).
+    Promise.all([
+      api.me().then(function (me) { S.summary = me.summary; }),
+      api.environment().then(function (e) { S.env = e; })
+    ]).then(function () {
       if (S.env && !S.env.items.length) S.view = "env";
       render();
+      api.catalogStatus().then(function (c) {
+        S.catalog = c;
+        var line = root.querySelector(".vn-catalog");
+        if (line) line.textContent = catalogLine();
+      }, function () { S.catalog = null; });
     }, function (err) {
       if (err && err.status === 401) gate("Sign in to keep a record of the vulnerabilities that apply to what you run.", "Sign in", "https://api.barnyard.site/auth/login?return_to=" + encodeURIComponent(location.href));
       else if (err && err.status === 403) gate("Your account can't use this page.", null);
