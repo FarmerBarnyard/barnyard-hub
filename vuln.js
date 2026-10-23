@@ -243,7 +243,54 @@
     return "The first full load of the CVE list is still running (" + thousands(s.total) + " CVEs so far), so the catalogue is not complete yet. It fills in by itself.";
   }
 
+  // ---- what a CVE record says about how it is attacked and which versions it affects
+
+  var VECTOR_ATTACK = { N: "over the network", A: "from an adjacent network", L: "locally on the machine", P: "with physical access" };
+  var VECTOR_COMPLEXITY = { L: "low complexity", H: "high complexity" };
+  var VECTOR_PRIVS = { N: "no privileges needed", L: "low privileges needed", H: "high privileges needed" };
+  var VECTOR_USER = { N: "no user interaction", R: "user interaction needed", P: "a little user interaction", A: "user interaction needed" };
+
+  // A CVSS vector string ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/...") in plain words: how, how hard, what the attacker needs. "" when
+  // it cannot be read.
+  function vectorText(vector) {
+    if (typeof vector !== "string" || !/^CVSS:\d\.\d\//.test(vector)) return "";
+    var m = {};
+    vector.split("/").slice(1).forEach(function (p) { var kv = p.split(":"); if (kv.length === 2) m[kv[0]] = kv[1]; });
+    var parts = [];
+    if (VECTOR_ATTACK[m.AV]) parts.push("Attacked " + VECTOR_ATTACK[m.AV]);
+    if (VECTOR_COMPLEXITY[m.AC]) parts.push(VECTOR_COMPLEXITY[m.AC]);
+    if (VECTOR_PRIVS[m.PR]) parts.push(VECTOR_PRIVS[m.PR]);
+    if (VECTOR_USER[m.UI]) parts.push(VECTOR_USER[m.UI]);
+    return parts.join("; ");
+  }
+
+  // The CVSS scores a record carries, newest standard first: [{ label: "CVSS 4.0", text: "9.3 Critical", how: "...", vector }].
+  function cvssRows(cvss) {
+    cvss = cvss || {};
+    var out = [];
+    [["v40", "CVSS 4.0"], ["v31", "CVSS 3.1"]].forEach(function (k) {
+      var c = cvss[k[0]];
+      if (!c || c.score === null || c.score === undefined) return;
+      out.push({ label: k[1], text: scoreText({ score: c.score, severity: c.severity }), how: vectorText(c.vector), vector: typeof c.vector === "string" ? c.vector.slice(0, 120) : "" });
+    });
+    return out;
+  }
+
+  // One affected-version line from the catalogue ({ product, from, fromIncl, to, toIncl, exact }).
+  function rangeText(a) {
+    var name = (a && (a.product || a.vendor)) || "";
+    if (!a) return "";
+    if (a.exact) return name + " " + a.exact;
+    var from = a.from && a.from !== "0" ? a.from : "";
+    var start = (a.fromIncl === false ? "after " : "from ") + from;
+    if (from && a.to) return name + " " + start + " up to " + (a.toIncl ? "and including " : "but not including ") + a.to;
+    if (a.to) return name + " " + (a.toIncl ? "up to and including " : "before ") + a.to;
+    if (from) return name + " " + (a.fromIncl === false ? "after " : "") + from + (a.fromIncl === false ? "" : " and later");
+    return name + " (all versions)";
+  }
+
   var helpers = {
+    vectorText: vectorText, cvssRows: cvssRows, rangeText: rangeText,
     catalogTiles: catalogTiles, sourceRows: sourceRows, loadBanner: loadBanner,
     stateText: stateText, stateTone: stateTone, priorityTone: priorityTone, priorityHint: priorityHint, fmtDate: fmtDate, monthLabel: monthLabel,
     agoText: agoText, thousands: thousands, scoreText: scoreText, scoreTone: scoreTone, epssText: epssText, confidenceText: confidenceText,
@@ -674,6 +721,7 @@
       var facts = el("dl", "vn-facts");
       function fact(k, v) { if (!v) return; facts.appendChild(el("dt", null, k)); facts.appendChild(el("dd", null, v)); }
       fact("Score", scoreText(full));
+      cvssRows(rec.cvss).forEach(function (c) { fact(c.label, c.text + (c.how ? ". " + c.how + "." : "")); });
       if (full.kev) fact("Exploited", "Yes" + (full.kevAdded ? ", added " + fmtDate(full.kevAdded) : "") + (full.kevInfo && full.kevInfo.due ? ", fix due " + fmtDate(full.kevInfo.due) : "") + (full.kevInfo && full.kevInfo.ransomware ? ", used in ransomware: " + full.kevInfo.ransomware : ""));
       fact("Exploit chance", epssText(full.epss) ? epssText(full.epss).replace("EPSS ", "") + " in the next 30 days" : "");
       fact("Published", fmtDate(full.published));
@@ -682,6 +730,13 @@
       if (rec.products && rec.products.length) fact("Products", rec.products.map(function (p) { return (p.vendor ? p.vendor + " " : "") + p.product; }).join(", "));
       card.appendChild(facts);
       if (rec.description) card.appendChild(el("p", "vn-desc", rec.description));
+      var affected = (full.affected || []).map(rangeText).filter(Boolean);
+      if (affected.length) {
+        card.appendChild(el("h3", null, "Affected versions"));
+        var al = el("ul", "vn-refs");
+        affected.slice(0, 40).forEach(function (t) { al.appendChild(el("li", null, t)); });
+        card.appendChild(al);
+      }
       var refs = (rec.refs || []).map(safeUrl).filter(Boolean).slice(0, 8);
       if (refs.length) {
         var ul = el("ul", "vn-refs");

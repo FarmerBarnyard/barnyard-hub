@@ -124,6 +124,35 @@ test("while the first full load is running the catalogue says it is incomplete",
   assert.strictEqual(V.loadBanner(null), null);
 });
 
+test("a CVSS vector is put in plain words, and one that cannot be read is left out", function () {
+  assert.strictEqual(V.vectorText("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"), "Attacked over the network; low complexity; no privileges needed; no user interaction");
+  assert.strictEqual(V.vectorText("CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:C/C:L/I:L/A:L"), "Attacked locally on the machine; high complexity; high privileges needed; user interaction needed");
+  assert.strictEqual(V.vectorText("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"), "Attacked over the network; low complexity; no privileges needed; a little user interaction");
+  ["", "AV:N/AC:L", "not a vector", null, undefined, 5].forEach(function (bad) { assert.strictEqual(V.vectorText(bad), "", String(bad)); });
+  assert.strictEqual(V.vectorText("CVSS:3.1/AV:X"), "", "unknown letters say nothing rather than guess");
+});
+
+test("the CVSS scores on a record read newest standard first", function () {
+  var rows = V.cvssRows({ v31: { score: 9.8, severity: "CRITICAL", vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" }, v40: { score: 9.3, severity: "CRITICAL", vector: "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N" } });
+  assert.deepStrictEqual(rows.map(function (r) { return r.label + " " + r.text; }), ["CVSS 4.0 9.3 Critical", "CVSS 3.1 9.8 Critical"]);
+  assert.ok(rows[0].how.indexOf("over the network") !== -1);
+  assert.deepStrictEqual(V.cvssRows(null), []);
+  assert.deepStrictEqual(V.cvssRows({ v31: { score: null } }), []);
+  assert.ok(V.cvssRows({ v31: { score: 5, vector: new Array(300).join("x") } })[0].vector.length <= 120);
+});
+
+test("an affected-version line reads the way a person would say it", function () {
+  assert.strictEqual(V.rangeText({ product: "PHP", exact: "8.3.30" }), "PHP 8.3.30");
+  assert.strictEqual(V.rangeText({ product: "PHP", from: "8.3.0", fromIncl: true, to: "8.3.36", toIncl: false }), "PHP from 8.3.0 up to but not including 8.3.36");
+  assert.strictEqual(V.rangeText({ product: "PHP", from: "8.3.0", fromIncl: false, to: "8.3.36", toIncl: true }), "PHP after 8.3.0 up to and including 8.3.36");
+  assert.strictEqual(V.rangeText({ product: "PHP", from: "0", to: "8.2.35", toIncl: false }), "PHP before 8.2.35", "a range from version 0 is just 'before'");
+  assert.strictEqual(V.rangeText({ product: "PHP", to: "8.2.35", toIncl: true }), "PHP up to and including 8.2.35");
+  assert.strictEqual(V.rangeText({ product: "PHP", from: "8.4.0", fromIncl: true }), "PHP 8.4.0 and later");
+  assert.strictEqual(V.rangeText({ product: "Caddy" }), "Caddy (all versions)");
+  assert.strictEqual(V.rangeText({ vendor: "Acme" }), "Acme (all versions)");
+  assert.strictEqual(V.rangeText(null), "");
+});
+
 test("how recently an item was checked is stated honestly", function () {
   var sw = function (s, at) { return { kind: "software", matchState: s, matchedAt: at }; };
   assert.strictEqual(V.matchText(sw("ok", NOW - 5 * 60000), NOW), "Checked 5 min ago");
