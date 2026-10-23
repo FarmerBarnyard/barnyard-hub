@@ -93,6 +93,37 @@ test("a name that ends with the version is recognised, so changing the version c
   assert.strictEqual(V.nameBase("PHP", ""), null);
 });
 
+test("the catalogue's headline numbers read in order, with thousands separators", function () {
+  var t = V.catalogTiles({ total: 413119, counts: { recent: 17172, archive: 395947 }, kev: 1754, enriched: 20000, withEpss: 300000 });
+  assert.deepStrictEqual(t.map(function (x) { return x.label + "=" + x.value; }), [
+    "CVEs in all=413,119", "Published in the last 30 days=17,172", "Older, in the archive=395,947", "Exploited in the wild=1,754",
+    "With a score=20,000", "With an exploit likelihood=300,000"]);
+  assert.strictEqual(V.catalogTiles(null)[0].value, "0", "an unreadable status shows zeros, not a crash");
+});
+
+test("each feed the catalogue is built from says when it last worked, or what went wrong", function () {
+  var now = Date.UTC(2026, 9, 23, 12, 0, 0);
+  var rows = V.sourceRows({
+    cve_list: { ok: true, lastRun: "x", lastOk: new Date(now - 30 * 60000).toISOString() },
+    kev: { ok: false, error: "HTTPError 503", lastOk: new Date(now - 3 * 86400000).toISOString() },
+    epss: { ok: false }
+  }, now);
+  assert.strictEqual(rows.length, 5);
+  assert.deepStrictEqual(rows[0], { title: "CVE.org list of every CVE", tone: "ok", text: "Updated 30 min ago" });
+  assert.strictEqual(rows[1].tone, "alert");
+  assert.strictEqual(rows[1].text, "Failed: HTTPError 503. Last worked 3 days ago.");
+  assert.strictEqual(rows[2].text, "Failed.", "no reason and no earlier success");
+  assert.deepStrictEqual([rows[3].tone, rows[3].text], ["", "Not run yet"]);
+  assert.strictEqual(V.sourceRows(null, now).every(function (r) { return r.text === "Not run yet"; }), true);
+  assert.ok(V.sourceRows({ kev: { ok: false, error: new Array(400).join("x") } }, now)[1].text.length < 200, "a long error is cut");
+});
+
+test("while the first full load is running the catalogue says it is incomplete", function () {
+  assert.match(V.loadBanner({ loaded: null, total: 112000 }), /still running \(112,000 CVEs so far\).*not complete/);
+  assert.strictEqual(V.loadBanner({ loaded: { tag: "x" }, total: 413119 }), null);
+  assert.strictEqual(V.loadBanner(null), null);
+});
+
 test("how recently an item was checked is stated honestly", function () {
   var sw = function (s, at) { return { kind: "software", matchState: s, matchedAt: at }; };
   assert.strictEqual(V.matchText(sw("ok", NOW - 5 * 60000), NOW), "Checked 5 min ago");
