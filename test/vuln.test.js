@@ -352,7 +352,7 @@ test("every route the page calls exists on the Worker", function () {
   var worker = path.join(root, "..", "ClaudeRepo-vulnstore", "cloudflare-worker", "src", "vuln-routes.js");
   var calls = (js.match(/request\("(GET|POST|PATCH|DELETE)", "([^"]*)"/g) || []).map(function (c) { return /request\("(\w+)", "([^"]*)"/.exec(c).slice(1); });
   assert.ok(calls.length >= 15, "found the calls");
-  var known = { "/me": 1, "/environment": 1, "/refresh": 1, "/findings": 1, "/history/summary": 1, "/catalog/status": 1, "/catalog/archive/months": 1, "/catalog/products": 1, "/catalog/search": 1, "/catalog/cve/": 1 };
+  var known = { "/me": 1, "/environment": 1, "/refresh": 1, "/findings": 1, "/findings/approve": 1, "/history/summary": 1, "/catalog/status": 1, "/catalog/archive/months": 1, "/catalog/products": 1, "/catalog/search": 1, "/catalog/cve/": 1 };
   calls.forEach(function (c) {
     var p = c[1].replace(/\?.*/, "");
     var ok = known[p] || /^\/environment\/$/.test(p) || /^\/findings\/$/.test(p) || /^\/findings\/$/.test(p);
@@ -360,7 +360,7 @@ test("every route the page calls exists on the Worker", function () {
   });
   if (fs.existsSync(worker)) {
     var src = fs.readFileSync(worker, "utf8");
-    ["/vuln/me", "/vuln/environment", "/vuln/refresh", "/vuln/findings", "/vuln/history/summary", "/vuln/catalog/"].forEach(function (r) { assert.ok(src.indexOf(r) !== -1, r + " is served"); });
+    ["/vuln/me", "/vuln/environment", "/vuln/refresh", "/vuln/findings", "/vuln/findings/approve", "/vuln/history/summary", "/vuln/catalog/"].forEach(function (r) { assert.ok(src.indexOf(r) !== -1, r + " is served"); });
     ["state", "plan", "approve"].forEach(function (a) { assert.ok(src.indexOf(a) !== -1); assert.ok(js.indexOf("/findings/\" + id + \"/" + a) !== -1, a + " is called"); });
   }
 });
@@ -386,6 +386,66 @@ test("the stylesheet is built on the shell's tokens, with a focus state and no h
   assert.ok(/focus-visible/.test(css));
   assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(css), "colours come from the shell's tokens");
   assert.ok(/var\(--alert\)/.test(css) && /var\(--ok\)/.test(css));
+});
+
+test("approving many: the request names the findings by id or by the list's own filters", function () {
+  assert.deepStrictEqual(V.bulkBody({ ids: { vf_aaaaaaaa: true, vf_bbbbbbbb: true } }, {}, "", false), { ids: ["vf_aaaaaaaa", "vf_bbbbbbbb"] });
+  assert.deepStrictEqual(V.bulkIds({ ids: { vf_aaaaaaaa: true } }), ["vf_aaaaaaaa"]);
+  assert.deepStrictEqual(V.bulkIds({}), []);
+  var F = { q: " ", priority: "P1", state: "", item: "vi_abcdefgh", all: true, page: 4 };
+  assert.deepStrictEqual(V.bulkFilter(F), { view: "current", priority: "P1", item: "vi_abcdefgh", all: true }, "empty filters and the page number are left out");
+  assert.deepStrictEqual(V.bulkBody({ all: true, ids: { vf_aaaaaaaa: true } }, { priority: "P2" }, "Tonight", true), { filter: { view: "current", priority: "P2" }, note: "Tonight", dryRun: true }, "all matching wins over ticked ids");
+  assert.ok(!("note" in V.bulkBody({ all: true }, {}, "", false)) && !("dryRun" in V.bulkBody({ all: true }, {}, "", false)));
+  assert.strictEqual(V.BULK_MAX_IDS, 1000);
+});
+
+test("approving many: the preview says what will be created, in plain words", function () {
+  assert.match(V.bulkSummaryText({ findings: 0, groups: [], skipped: {} }), /Nothing here can be approved/);
+  assert.strictEqual(V.bulkSummaryText({ findings: 1, groups: [{}], skipped: {} }), "1 finding in 1 software item. This creates 1 Ops item, already approved, for Claude to carry out.");
+  var s = V.bulkSummaryText({ findings: 14, groups: [{}, {}, {}], skipped: { approved: 2, fixed: 1, inProgress: 0, noPlan: 0 } });
+  assert.match(s, /^14 findings in 3 software items\. This creates 3 Ops items/);
+  assert.match(s, /3 other findings picked can't be approved .* and are left alone\./);
+  assert.match(V.bulkSummaryText({ findings: 2, groups: [{}], skipped: { approved: 1 } }), /1 other finding picked can't be approved .* and is left alone\./);
+  assert.strictEqual(V.bulkGroupLine({ name: "Google Chrome 155.0.8059.85", host: "barnyardpc01", count: 500, kev: 10, possible: 179, fixedIn: "156.0.8087.47" }),
+    "Google Chrome 155.0.8059.85 on barnyardpc01: 500 findings, 10 exploited, 179 might apply, update to 156.0.8087.47");
+  assert.strictEqual(V.bulkGroupLine({ name: "Caddy", host: null, count: 1 }), "Caddy: 1 finding");
+});
+
+test("approving many: totals, failures and when to ask again", function () {
+  var t = V.bulkTotals();
+  V.bulkAdd(t, { approved: 40, items: [{}, {}], failed: [] });
+  V.bulkAdd(t, { approved: 5, items: [{}], failed: [{ item: "Chrome", count: 4, error: "board_full" }] });
+  V.bulkAdd(t, null);
+  assert.deepStrictEqual([t.approved, t.items, t.failed.length], [45, 3, 1]);
+  assert.strictEqual(V.bulkResultText(t), "Approved 45 findings in 3 Ops items. Claude will pick them up from your Ops board.");
+  assert.strictEqual(V.bulkResultText(V.bulkTotals()), "Nothing was approved.");
+  assert.strictEqual(V.bulkResultText({ approved: 1, items: 1, failed: [] }), "Approved 1 finding in 1 Ops item. Claude will pick them up from your Ops board.");
+  assert.strictEqual(V.bulkFailText({ item: "Chrome", count: 4, error: "board_full" }), "Chrome (4 findings): your Ops board is full");
+  assert.strictEqual(V.bulkFailText({ item: "Caddy", count: 1, error: "weird" }), "Caddy (1 finding): not approved");
+  assert.strictEqual(V.bulkShouldContinue({ remaining: 5, approved: 40, failed: [] }), true);
+  assert.strictEqual(V.bulkShouldContinue({ remaining: 0, approved: 40, failed: [] }), false, "nothing left");
+  assert.strictEqual(V.bulkShouldContinue({ remaining: 5, approved: 0, failed: [] }), false, "no progress stops it");
+  assert.strictEqual(V.bulkShouldContinue({ remaining: 5, approved: 10, failed: [{ item: "x", count: 1, error: "board_full" }] }), false, "a failure stops it instead of retrying forever");
+  assert.strictEqual(V.bulkShouldContinue(null), false);
+});
+
+test("approving many: the new refusals have plain messages", function () {
+  assert.match(V.errorMessage({ code: "ids_invalid" }), /1,000/);
+  assert.match(V.errorMessage({ code: "filter_invalid" }), /Clear them/);
+  assert.match(V.errorMessage({ code: "selection_required" }), /Pick some findings/);
+  assert.ok(V.needsSignIn({ code: "recent_sign_in_required" }), "a stale sign-in offers the sign-in link, as for a single Approve");
+});
+
+test("approving many: the page asks the Worker for it, checks the plan first, and builds everything from text", function () {
+  assert.ok(/approveBulk: function \(body\) \{ return request\("POST", "\/findings\/approve", body\); \}/.test(js));
+  assert.ok(/api\.approveBulk\(bulkBody\(sel, F, "", true\)\)/.test(js), "the preview is a dry run");
+  assert.ok(/api\.approveBulk\(bulkBody\(P\.sel, P\.filter, \(P\.note \|\| ""\)\.trim\(\), false\)\)/.test(js), "the real run uses what was previewed, not what the list shows now");
+  assert.ok(/Approve and create " \+ plural\(p\.groups\.length, "Ops item"\)/.test(js), "the button says how many items it will create");
+  assert.ok(/Keep this page open/.test(js));
+  assert.ok(/box\.setAttribute\("aria-label", "Select "/.test(js), "each tick box is labelled for a screen reader");
+  assert.ok(/S\.bulk\.all = false; load\(\)/.test(js), "changing a filter drops an all-matching selection");
+  assert.ok(!/innerHTML/.test(js));
+  assert.ok(/\.vn-pickrow/.test(css) && /\.vn-bulk-groups/.test(css));
 });
 
 console.log("\n" + passed + " passed");

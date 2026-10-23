@@ -143,6 +143,60 @@
     return !!f && !f.opsItem && f.state !== "approved" && f.state !== "fixed" && !!(f.plan && f.plan.steps && f.plan.steps.length);
   }
 
+  // ---- approving many at once
+  // `sel` is { all: true } (every finding the current filters match) or { ids: { vf_xxxxxxxx: true } }.
+  var BULK_MAX_IDS = 1000;
+  function bulkFilter(F) {
+    var out = { view: "current" };
+    ["q", "priority", "state", "item"].forEach(function (k) { var v = F && F[k] ? String(F[k]).trim() : ""; if (v) out[k] = v; });
+    if (F && F.all) out.all = true;
+    return out;
+  }
+  function bulkIds(sel) { return Object.keys((sel && sel.ids) || {}); }
+  function bulkBody(sel, F, note, dryRun) {
+    var b = sel && sel.all ? { filter: bulkFilter(F) } : { ids: bulkIds(sel) };
+    if (note) b.note = note;
+    if (dryRun) b.dryRun = true;
+    return b;
+  }
+  function plural(n, one, many) { return n + " " + (n === 1 ? one : many || one + "s"); }
+  // "14 findings in 3 software items. This creates 3 Ops items, already approved. 2 already approved are left alone."
+  function bulkSummaryText(p) {
+    p = p || {};
+    var n = p.findings || 0, g = (p.groups || []).length;
+    if (!n) return "Nothing here can be approved. Everything picked is already approved, fixed, or has no plan.";
+    var s = plural(n, "finding") + " in " + plural(g, "software item") + ". This creates " + plural(g, "Ops item") + ", already approved, for Claude to carry out.";
+    var k = p.skipped || {};
+    var skipped = (k.approved || 0) + (k.fixed || 0) + (k.inProgress || 0) + (k.noPlan || 0);
+    if (skipped) s += " " + plural(skipped, "other finding") + " picked can't be approved (already approved, fixed, or still being approved) and " + (skipped === 1 ? "is" : "are") + " left alone.";
+    return s;
+  }
+  function bulkGroupLine(g) {
+    var bits = [plural(g.count || 0, "finding")];
+    if (g.kev) bits.push(g.kev + " exploited");
+    if (g.possible) bits.push(g.possible + " might apply");
+    if (g.fixedIn) bits.push("update to " + g.fixedIn);
+    return String(g.name || "Software") + (g.host ? " on " + g.host : "") + ": " + bits.join(", ");
+  }
+  var BULK_FAIL_TEXT = {
+    board_full: "your Ops board is full", log_full: "your Ops board's change log is full", rate_limited: "too many changes too quickly",
+    ops_unavailable: "the Ops board couldn't be reached", secret_detected: "the note looks like it holds a password or key", internal_error: "something went wrong"
+  };
+  function bulkFailText(f) { return (f && f.item ? f.item : "Software") + " (" + plural((f && f.count) || 0, "finding") + "): " + (BULK_FAIL_TEXT[f && f.error] || "not approved"); }
+  function bulkTotals() { return { approved: 0, items: 0, failed: [] }; }
+  function bulkAdd(t, r) {
+    t.approved += (r && r.approved) || 0;
+    t.items += ((r && r.items) || []).length;
+    t.failed = t.failed.concat((r && r.failed) || []);
+    return t;
+  }
+  function bulkResultText(t) {
+    if (!t.approved) return "Nothing was approved.";
+    return "Approved " + plural(t.approved, "finding") + " in " + plural(t.items, "Ops item") + ". Claude will pick them up from your Ops board.";
+  }
+  // Keep going while a request made progress and left some behind without failing; a failure or no progress stops it.
+  function bulkShouldContinue(r) { return !!r && r.remaining > 0 && r.approved > 0 && !(r.failed && r.failed.length); }
+
   // A copy of a plan the person can edit, and the body to send back (empty steps dropped, everything trimmed).
   function planDraft(plan) {
     plan = plan || {};
@@ -181,6 +235,9 @@
     finding_fixed: "This is already fixed, so there is nothing to approve.",
     approval_in_progress: "An approval is already being made for this. Give it a moment.",
     plan_empty: "Add at least one step to the plan before approving it.",
+    ids_invalid: "Pick between 1 and 1,000 findings at a time, or use Select all matching.",
+    filter_invalid: "Those filters weren't understood. Clear them and try again.",
+    selection_required: "Pick some findings first.",
     environment_full: "Your register is full. Remove something you no longer run first.",
     infra_full: "You have reached the limit of servers. Remove one you no longer run first.",
     software_full: "You have reached the limit of software items. Remove one you no longer run first.",
@@ -387,6 +444,8 @@
     agoText: agoText, thousands: thousands, scoreText: scoreText, scoreTone: scoreTone, epssText: epssText, confidenceText: confidenceText,
     safeUrl: safeUrl, itemLabel: itemLabel, softwareLabel: softwareLabel, autoName: autoName, nameBase: nameBase, matchText: matchText, itemTree: itemTree, queryString: queryString,
     pageCount: pageCount, barPercent: barPercent, planBadge: planBadge, canEditPlan: canEditPlan, canApprove: canApprove, planDraft: planDraft,
+    bulkBody: bulkBody, bulkFilter: bulkFilter, bulkIds: bulkIds, bulkSummaryText: bulkSummaryText, bulkGroupLine: bulkGroupLine, bulkFailText: bulkFailText,
+    bulkTotals: bulkTotals, bulkAdd: bulkAdd, bulkResultText: bulkResultText, bulkShouldContinue: bulkShouldContinue, BULK_MAX_IDS: BULK_MAX_IDS,
     planPayload: planPayload, eventTitle: eventTitle, actorText: actorText, errorMessage: errorMessage, needsSignIn: needsSignIn, PERSON_STATES: PERSON_STATES
   };
 
@@ -427,6 +486,7 @@
     setState: function (id, b) { return request("POST", "/findings/" + id + "/state", b); },
     setPlan: function (id, b) { return request("POST", "/findings/" + id + "/plan", b); },
     approve: function (id, note) { return request("POST", "/findings/" + id + "/approve", note ? { note: note } : {}); },
+    approveBulk: function (body) { return request("POST", "/findings/approve", body); },
     history: function () { return request("GET", "/history/summary"); },
     catalogStatus: function () { return request("GET", "/catalog/status"); },
     archiveMonths: function () { return request("GET", "/catalog/archive/months"); },
@@ -489,7 +549,8 @@
       current: { q: "", priority: "", state: "", all: false, item: "", page: 1 },
       history: { q: "", priority: "", state: "", item: "", page: 1 },
       catalogue: { q: "", zone: "", month: "", kev: false, page: 1, months: null, open: "" },
-      historySummary: null
+      historySummary: null,
+      bulk: { ids: {}, all: false, panel: null }
     };
     var body = null;
 
@@ -557,7 +618,7 @@
         b.type = "button";
         b.appendChild(el("b", null, String(n)));
         b.appendChild(el("span", null, p + " " + priorityHint(p)));
-        b.addEventListener("click", function () { S.detail = null; S.view = "current"; S.current.priority = S.current.priority === p ? "" : p; S.current.page = 1; render(); });
+        b.addEventListener("click", function () { S.detail = null; S.view = "current"; S.current.priority = S.current.priority === p ? "" : p; S.current.page = 1; S.bulk.all = false; if (!(S.bulk.panel && S.bulk.panel.running)) S.bulk.panel = null; render(); });
         strip.appendChild(b);
       });
       host.appendChild(strip);
@@ -584,7 +645,7 @@
         b.type = "button";
         b.setAttribute("role", "tab");
         b.setAttribute("aria-selected", String(S.view === t[0] && !S.detail));
-        b.addEventListener("click", function () { S.detail = null; S.view = t[0]; S.banner = null; render(); });
+        b.addEventListener("click", function () { S.detail = null; S.view = t[0]; S.banner = null; if (!(S.bulk.panel && S.bulk.panel.running)) S.bulk.panel = null; render(); });
         tabs.appendChild(b);
       });
       host.appendChild(tabs);
@@ -609,24 +670,24 @@
       q.placeholder = "Search CVE, product or text";
       q.setAttribute("aria-label", "Search findings");
       var timer = null;
-      q.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(function () { F.q = q.value.trim(); F.page = 1; load(); }, 300); });
+      q.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(function () { F.q = q.value.trim(); F.page = 1; S.bulk.all = false; load(); }, 300); });
       var pri = select([["", "Any priority"], ["P1", "P1"], ["P2", "P2"], ["P3", "P3"], ["P4", "P4"]], F.priority);
       pri.setAttribute("aria-label", "Priority");
-      pri.addEventListener("change", function () { F.priority = pri.value; F.page = 1; load(); });
+      pri.addEventListener("change", function () { F.priority = pri.value; F.page = 1; S.bulk.all = false; load(); });
       var st = select([["", "Any status"]].concat(["new", "affects", "not_affected", "accepted", "approved", "fixed"].map(function (s) { return [s, stateText(s)]; })), F.state);
       st.setAttribute("aria-label", "Status");
-      st.addEventListener("change", function () { F.state = st.value; F.page = 1; load(); });
+      st.addEventListener("change", function () { F.state = st.value; F.page = 1; S.bulk.all = false; load(); });
       bar.appendChild(q); bar.appendChild(pri); bar.appendChild(st);
       var itemLabel = null;
       if (F.item && S.env) {
         var it = S.env.items.filter(function (i) { return i.id === F.item; })[0];
-        itemLabel = button("Only " + (it ? it.name : "one item") + " ✕", "btn btn-sm", function () { F.item = ""; F.page = 1; load(); });
+        itemLabel = button("Only " + (it ? it.name : "one item") + " ✕", "btn btn-sm", function () { F.item = ""; F.page = 1; S.bulk.all = false; load(); });
         bar.appendChild(itemLabel);
       }
       var hiddenBox = el("label", "vn-check");
       var all = input("checkbox");
       all.checked = !!F.all;
-      all.addEventListener("change", function () { F.all = all.checked; F.page = 1; load(); });
+      all.addEventListener("change", function () { F.all = all.checked; F.page = 1; S.bulk.all = false; load(); });
       var hiddenText = el("span", null, "Show everything");
       if (view === "current") { hiddenBox.appendChild(all); hiddenBox.appendChild(hiddenText); bar.appendChild(hiddenBox); }
       bar.appendChild(el("span", "grow"));
@@ -636,29 +697,156 @@
       var listHost = el("div");
       host.appendChild(listHost);
 
+      var lastRes = null;
       function load() {
         var query = { view: view, q: F.q, priority: F.priority, state: F.state, item: F.item, page: F.page, per: 25 };
         if (view === "current" && F.all) query.all = true;
-        api.findings(query).then(function (res) {
-          clear(listHost);
-          if (view === "current") hiddenText.textContent = res.hidden && !F.all ? "Show everything (" + res.hidden + " lower-risk hidden)" : "Show everything";
-          if (!res.items.length) {
-            var none = S.env && !S.env.items.length;
-            if (none) listHost.appendChild(emptyBox("Add your first item", "Tell this what you run, such as a server or a piece of software with its version, and it will keep a record of the known vulnerabilities that apply.", "Add what I run", function () { S.view = "env"; S.envForm = { kind: "infra" }; render(); }));
-            else if (F.q || F.priority || F.state || F.item) listHost.appendChild(emptyBox("Nothing matches", "No findings match those filters.", "Clear filters", function () { F.q = ""; F.priority = ""; F.state = ""; F.item = ""; F.page = 1; render(); }));
-            else listHost.appendChild(emptyBox(view === "current" ? "Nothing needs attention" : "No findings yet", view === "current" ? "No known vulnerability that is worth acting on applies to what you run right now. Lower-risk ones are under “Show everything”." : "Once something you run matches a known CVE it is kept here for good.", null));
-            return;
-          }
-          var list = el("div", "vn-list");
-          res.items.forEach(function (f) { list.appendChild(findingRow(f)); });
-          listHost.appendChild(list);
-          listHost.appendChild(pager(res, F, load));
-        }, function (err) {
+        api.findings(query).then(function (res) { lastRes = res; paint(); }, function (err) {
           clear(listHost);
           listHost.appendChild(message(errorMessage(err), "alert", err));
         });
       }
+
+      // The row, with a tick box beside it when it can be approved (Current only).
+      function pickRow(f) {
+        var row = findingRow(f);
+        if (view !== "current" || !canApprove(f)) return row;
+        var wrap = el("div", "vn-pickrow");
+        var lab = el("label", "vn-pick");
+        var box = input("checkbox");
+        box.checked = S.bulk.all || !!S.bulk.ids[f.id];
+        box.disabled = S.bulk.all;
+        box.setAttribute("aria-label", "Select " + f.cveId + " in " + f.itemName);
+        box.addEventListener("change", function () { if (box.checked) S.bulk.ids[f.id] = true; else delete S.bulk.ids[f.id]; paint(); });
+        lab.appendChild(box);
+        wrap.appendChild(lab);
+        wrap.appendChild(row);
+        return wrap;
+      }
+
+      // "Select this page · 3 selected · Select all 686 matching · Clear · Approve selected…"
+      function selectionBar(res) {
+        var pickable = res.items.filter(canApprove);
+        var count = bulkIds(S.bulk).length;
+        var bar2 = el("div", "vn-bar vn-selbar");
+        var pageBox = el("label", "vn-check");
+        var pb = input("checkbox");
+        pb.disabled = S.bulk.all || !pickable.length;
+        pb.checked = S.bulk.all || (pickable.length > 0 && pickable.every(function (f) { return S.bulk.ids[f.id]; }));
+        pb.addEventListener("change", function () { pickable.forEach(function (f) { if (pb.checked) S.bulk.ids[f.id] = true; else delete S.bulk.ids[f.id]; }); paint(); });
+        pageBox.appendChild(pb);
+        pageBox.appendChild(el("span", null, "Select this page"));
+        bar2.appendChild(pageBox);
+        if (S.bulk.all) bar2.appendChild(el("span", null, "All " + thousands(res.total) + " matching are selected"));
+        else if (count) bar2.appendChild(el("span", null, count + " selected"));
+        if (!S.bulk.all && res.total > res.items.length) bar2.appendChild(button("Select all " + thousands(res.total) + " matching", "btn btn-sm", function () { S.bulk.all = true; S.bulk.ids = {}; paint(); }));
+        if (S.bulk.all || count) bar2.appendChild(button("Clear", "btn btn-sm", function () { S.bulk.all = false; S.bulk.ids = {}; paint(); }));
+        bar2.appendChild(el("span", "grow"));
+        var go = button("Approve selected…", "btn btn-primary btn-sm", function () { openBulk(); });
+        go.disabled = !S.bulk.all && !count;
+        bar2.appendChild(go);
+        return bar2;
+      }
+
+      function openBulk() {
+        var sel = { all: S.bulk.all, ids: Object.assign({}, S.bulk.ids) };
+        if (!sel.all && bulkIds(sel).length > BULK_MAX_IDS) { S.banner = { text: errorMessage({ code: "ids_invalid" }), tone: "alert" }; render(); return; }
+        var P = { sel: sel, filter: Object.assign({}, F), loading: true, preview: null, error: null, note: "", running: false, totals: null, done: false };
+        S.bulk.panel = P;
+        render();
+        api.approveBulk(bulkBody(sel, F, "", true)).then(function (p) { P.loading = false; P.preview = p; render(); }, function (err) { P.loading = false; P.error = err; render(); });
+      }
+
+      function paint() {
+        var res = lastRes;
+        if (!res) return;
+        {
+          clear(listHost);
+          if (view === "current") hiddenText.textContent = res.hidden && !F.all ? "Show everything (" + res.hidden + " lower-risk hidden)" : "Show everything";
+          if (view === "current" && (res.items.some(canApprove) || S.bulk.all || bulkIds(S.bulk).length)) listHost.appendChild(selectionBar(res));
+          if (!res.items.length) {
+            var none = S.env && !S.env.items.length;
+            if (none) listHost.appendChild(emptyBox("Add your first item", "Tell this what you run, such as a server or a piece of software with its version, and it will keep a record of the known vulnerabilities that apply.", "Add what I run", function () { S.view = "env"; S.envForm = { kind: "infra" }; render(); }));
+            else if (F.q || F.priority || F.state || F.item) listHost.appendChild(emptyBox("Nothing matches", "No findings match those filters.", "Clear filters", function () { F.q = ""; F.priority = ""; F.state = ""; F.item = ""; F.page = 1; S.bulk.all = false; render(); }));
+            else listHost.appendChild(emptyBox(view === "current" ? "Nothing needs attention" : "No findings yet", view === "current" ? "No known vulnerability that is worth acting on applies to what you run right now. Lower-risk ones are under “Show everything”." : "Once something you run matches a known CVE it is kept here for good.", null));
+            return;
+          }
+          var list = el("div", "vn-list");
+          res.items.forEach(function (f) { list.appendChild(pickRow(f)); });
+          listHost.appendChild(list);
+          listHost.appendChild(pager(res, F, load));
+        }
+      }
       load();
+    }
+
+    // The panel that replaces the list while several findings are being approved: what would happen, a note, the button,
+    // then progress and the result.
+    function drawBulkPanel(host) {
+      var P = S.bulk.panel;
+      var card = el("div", "vn-card vn-bulk");
+      card.appendChild(el("h3", null, "Approve several findings"));
+      function back() { S.bulk.panel = null; render(); }
+      if (P.loading) {
+        card.appendChild(el("p", "vn-note", "Working out what would be approved…"));
+      } else if (P.error && !P.running && !P.done) {
+        card.appendChild(message(errorMessage(P.error), "alert", P.error));
+        card.appendChild(button("Back to the list", "btn", back));
+      } else if (P.done) {
+        card.appendChild(message(bulkResultText(P.totals), P.totals.approved ? "ok" : "alert"));
+        P.totals.failed.forEach(function (f) { card.appendChild(message("Not approved: " + bulkFailText(f) + ".", "alert")); });
+        if (P.error) card.appendChild(message(errorMessage(P.error), "alert", P.error));
+        var row = el("div", "vn-bar");
+        row.appendChild(button("Back to the list", "btn btn-primary", back));
+        var a = el("a", "btn", "Open the Ops board");
+        a.href = "ops.html";
+        row.appendChild(a);
+        card.appendChild(row);
+      } else if (P.running) {
+        card.appendChild(el("p", "vn-note", "Approving… " + plural(P.totals.approved, "finding") + " so far. Keep this page open."));
+      } else {
+        var p = P.preview || {};
+        card.appendChild(el("p", null, bulkSummaryText(p)));
+        if ((p.groups || []).length) {
+          var ul = el("ul", "vn-bulk-groups");
+          p.groups.forEach(function (g) { ul.appendChild(el("li", null, bulkGroupLine(g))); });
+          card.appendChild(ul);
+          card.appendChild(el("p", "vn-note", "Each plan is locked once approved. You can still tick steps and follow progress on the Ops board."));
+          var note = el("textarea");
+          note.maxLength = 600;
+          note.rows = 3;
+          note.value = P.note || "";
+          note.placeholder = "Anything Claude should know, such as the time that suits you";
+          note.addEventListener("input", function () { P.note = note.value; });
+          card.appendChild(field("Note for Claude (optional, goes on every item)", note));
+        }
+        var actions = el("div", "vn-bar");
+        if ((p.groups || []).length) actions.appendChild(button("Approve and create " + plural(p.groups.length, "Ops item"), "btn btn-primary", function () { runBulk(P); }));
+        actions.appendChild(button(p.groups && p.groups.length ? "Cancel" : "Back to the list", "btn", back));
+        card.appendChild(actions);
+      }
+      host.appendChild(card);
+    }
+
+    // One request approves up to 15 software items; the answer says how many findings are left, so ask again until none are.
+    function runBulk(P) {
+      P.running = true;
+      P.totals = bulkTotals();
+      render();
+      function finish(err) {
+        P.running = false;
+        P.done = true;
+        P.error = err || null;
+        S.bulk = { ids: {}, all: false, panel: P };
+        toast(bulkResultText(P.totals));
+        Promise.all([reloadSummary(), api.environment().then(function (e) { S.env = e; }, function () {})]).then(render);
+      }
+      (function step() {
+        api.approveBulk(bulkBody(P.sel, P.filter, (P.note || "").trim(), false)).then(function (r) {
+          bulkAdd(P.totals, r);
+          if (bulkShouldContinue(r)) { render(); step(); } else finish(null);
+        }, function (err) { finish(err); });
+      })();
     }
 
     function drawHistory(host) {
@@ -1341,7 +1529,7 @@
       body = el("div");
       body.style.display = "grid"; body.style.gap = "14px";
       root.appendChild(body);
-      if (S.view === "current") drawFindings("current", body);
+      if (S.view === "current") { if (S.bulk.panel) drawBulkPanel(body); else drawFindings("current", body); }
       else if (S.view === "history") drawHistory(body);
       else if (S.view === "catalogue") drawCatalogue(body);
       else drawEnv(body);
