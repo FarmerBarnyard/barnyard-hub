@@ -289,7 +289,98 @@
     return name + " (all versions)";
   }
 
+  // ---- importing a list of servers and software in one go
+
+  var IMPORT_LIMITS = { servers: 50, software: 200, name: 80, vendor: 80, product: 80, version: 60, notes: 600 };
+  var IMPORTANCE = ["low", "normal", "high"];
+
+  // Checks one server or software entry; returns the payload for the Worker, or pushes what is wrong onto `problems`.
+  function importEntry(raw, where, kind, problems) {
+    var allowed = kind === "infra" ? ["name", "internet", "importance", "notes", "software"] : ["product", "vendor", "version", "name", "importance", "notes"];
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) { problems.push(where + ": should be an object"); return null; }
+    var bad = Object.keys(raw).filter(function (k) { return allowed.indexOf(k) === -1; });
+    if (bad.length) problems.push(where + ": unknown field " + bad[0]);
+    var out = { kind: kind };
+    function str(field, max, required) {
+      var v = raw[field];
+      if (v === undefined || v === null || v === "") { if (required) problems.push(where + ": " + field + " is missing"); return; }
+      if (typeof v !== "string") { problems.push(where + ": " + field + " should be text (put it in quotes)"); return; }
+      v = v.trim();
+      if (v.length > max) { problems.push(where + ": " + field + " is longer than " + max + " characters"); return; }
+      if (v) out[field] = v;
+    }
+    if (kind === "infra") {
+      str("name", IMPORT_LIMITS.name, true);
+      if (raw.internet !== undefined) { if (typeof raw.internet !== "boolean") problems.push(where + ": internet should be true or false"); else out.internet = raw.internet; }
+    } else {
+      str("product", IMPORT_LIMITS.product, true);
+      str("vendor", IMPORT_LIMITS.vendor, false);
+      str("version", IMPORT_LIMITS.version, false);
+      str("name", IMPORT_LIMITS.name, false);
+    }
+    if (raw.importance !== undefined) { if (IMPORTANCE.indexOf(raw.importance) === -1) problems.push(where + ": importance should be low, normal or high"); else out.importance = raw.importance; }
+    str("notes", IMPORT_LIMITS.notes, false);
+    return out;
+  }
+
+  // Pasted JSON -> { problems: [], servers: [{ payload, software: [payload] }], loose: [payload] }. Nothing is sent from here.
+  function parseImport(text) {
+    var problems = [], servers = [], loose = [], root;
+    try { root = JSON.parse(String(text || "")); } catch (e) { return { problems: ["That isn't valid JSON. Check the brackets, commas and quotes."], servers: [], loose: [] }; }
+    if (!root || typeof root !== "object" || Array.isArray(root)) return { problems: ["The list should be an object with \"servers\" and/or \"software\"."], servers: [], loose: [] };
+    Object.keys(root).forEach(function (k) { if (k !== "servers" && k !== "software") problems.push("Unknown top-level field " + k); });
+    if (root.servers !== undefined && !Array.isArray(root.servers)) problems.push("servers should be a list");
+    if (root.software !== undefined && !Array.isArray(root.software)) problems.push("software should be a list");
+    var total = 0;
+    (Array.isArray(root.servers) ? root.servers : []).forEach(function (s, i) {
+      var where = "servers[" + i + "]";
+      var p = importEntry(s, where, "infra", problems);
+      if (!p) return;
+      var sw = [];
+      if (s.software !== undefined && !Array.isArray(s.software)) problems.push(where + ": software should be a list");
+      (Array.isArray(s.software) ? s.software : []).forEach(function (x, j) { var q = importEntry(x, where + ".software[" + j + "]", "software", problems); if (q) sw.push(q); });
+      total += sw.length;
+      servers.push({ payload: p, software: sw });
+    });
+    (Array.isArray(root.software) ? root.software : []).forEach(function (x, j) { var q = importEntry(x, "software[" + j + "]", "software", problems); if (q) { loose.push(q); total++; } });
+    if (servers.length > IMPORT_LIMITS.servers) problems.push("At most " + IMPORT_LIMITS.servers + " servers can be added.");
+    if (total > IMPORT_LIMITS.software) problems.push("At most " + IMPORT_LIMITS.software + " software items can be added.");
+    if (!servers.length && !loose.length && !problems.length) problems.push("The list is empty.");
+    return { problems: problems, servers: servers, loose: loose };
+  }
+
+  // What importing would do given what is already listed: servers with the same name are reused, software already under
+  // that server (same product and version) is skipped, so running the same import twice adds nothing the second time.
+  // -> { steps: [{ type: "server"|"software", payload, hostKey?, existingId? }], add: n, skip: n }
+  function planImport(parsed, items) {
+    items = items || [];
+    var steps = [], add = 0, skip = 0;
+    var lower = function (s) { return String(s || "").toLowerCase(); };
+    var swKey = function (p, v) { return lower(p) + "|" + lower(v); };
+    function have(parentId, payload) {
+      return items.some(function (i) { return i.kind === "software" && (i.parentId || null) === parentId && swKey(i.product, i.version) === swKey(payload.product, payload.version); });
+    }
+    parsed.servers.forEach(function (s, idx) {
+      var existing = items.filter(function (i) { return i.kind === "infra" && lower(i.name) === lower(s.payload.name); })[0];
+      var key = "h" + idx;
+      steps.push({ type: "server", payload: s.payload, hostKey: key, existingId: existing ? existing.id : null });
+      if (existing) skip++; else add++;
+      s.software.forEach(function (x) {
+        if (existing && have(existing.id, x)) { skip++; return; }
+        steps.push({ type: "software", payload: x, hostKey: key });
+        add++;
+      });
+    });
+    parsed.loose.forEach(function (x) {
+      if (have(null, x)) { skip++; return; }
+      steps.push({ type: "software", payload: x, hostKey: null });
+      add++;
+    });
+    return { steps: steps, add: add, skip: skip };
+  }
+
   var helpers = {
+    parseImport: parseImport, planImport: planImport, IMPORT_LIMITS: IMPORT_LIMITS,
     vectorText: vectorText, cvssRows: cvssRows, rangeText: rangeText,
     catalogTiles: catalogTiles, sourceRows: sourceRows, loadBanner: loadBanner,
     stateText: stateText, stateTone: stateTone, priorityTone: priorityTone, priorityHint: priorityHint, fmtDate: fmtDate, monthLabel: monthLabel,
@@ -394,7 +485,7 @@
 
   function mount(root) {
     var S = {
-      view: "current", summary: null, env: null, catalog: null, detail: null, envForm: null, busy: false, banner: null,
+      view: "current", summary: null, env: null, catalog: null, detail: null, envForm: null, importOpen: false, busy: false, banner: null,
       current: { q: "", priority: "", state: "", all: false, item: "", page: 1 },
       history: { q: "", priority: "", state: "", item: "", page: 1 },
       catalogue: { q: "", zone: "", month: "", kev: false, page: 1, months: null, open: "" },
@@ -748,15 +839,97 @@
 
     // ---- My environment
 
+    // Adds a checked import plan one item at a time (servers first, then the software on them), gently, because the Worker
+    // allows 60 writes a minute. Resolves to how many were added; rejects with what was done so far on the first refusal.
+    function runImport(plan, onProgress) {
+      var ids = {}, added = 0;
+      function pause(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+      function next(i) {
+        if (i >= plan.steps.length) return Promise.resolve(added);
+        var st = plan.steps[i], p;
+        onProgress(i, plan.steps.length);
+        if (st.type === "server") {
+          if (st.existingId) { ids[st.hostKey] = st.existingId; p = Promise.resolve(false); }
+          else p = api.addItem(st.payload).then(function (r) { ids[st.hostKey] = r.item.id; added++; return true; });
+        } else {
+          var body = {};
+          Object.keys(st.payload).forEach(function (k) { body[k] = st.payload[k]; });
+          if (st.hostKey && ids[st.hostKey]) body.parentId = ids[st.hostKey];
+          p = api.addItem(body).then(function () { added++; return true; });
+        }
+        return p.then(function (wrote) { return wrote ? pause(1100) : null; }).then(function () { return next(i + 1); });
+      }
+      return next(0).catch(function (err) { err.added = added; throw err; });
+    }
+
+    function drawImport(host) {
+      var card = el("div", "vn-card");
+      card.appendChild(el("h3", null, "Import a list"));
+      card.appendChild(el("p", "vn-note", "Paste servers and the software on each as JSON, for example {\"servers\":[{\"name\":\"web01\",\"internet\":true,\"software\":[{\"product\":\"caddy\",\"vendor\":\"caddyserver\",\"version\":\"2.11.7\"}]}]}. Use the catalogue's own product names (the suggestions when you add software show them). A server already listed is reused and software already on it is skipped, so the same list can be pasted twice safely."));
+      var ta = el("textarea", "vn-import-text");
+      ta.rows = 12;
+      ta.spellcheck = false;
+      ta.setAttribute("aria-label", "The list to import");
+      card.appendChild(ta);
+      var out = el("div");
+      var plan = null;
+      var go = button("Add them", "btn btn-primary");
+      go.disabled = true;
+      var check = button("Check the list", "btn", function () {
+        clear(out);
+        plan = null;
+        go.disabled = true;
+        var parsed = parseImport(ta.value);
+        if (parsed.problems.length) {
+          var box = message("Fix these first:", "alert", null);
+          var ul = el("ul", "vn-refs");
+          parsed.problems.slice(0, 12).forEach(function (t) { ul.appendChild(el("li", null, t)); });
+          box.appendChild(ul);
+          out.appendChild(box);
+          return;
+        }
+        plan = planImport(parsed, (S.env && S.env.items) || []);
+        out.appendChild(message("Ready: " + plan.add + " to add" + (plan.skip ? ", " + plan.skip + " already listed and skipped" : "") + "." + (plan.add ? " Adding takes about a second each." : " Nothing new to add."), "ok", null));
+        go.disabled = !plan.add;
+      });
+      go.addEventListener("click", function () {
+        if (!plan || !plan.add) return;
+        go.disabled = true; check.disabled = true; ta.disabled = true;
+        clear(out);
+        var prog = el("div", "vn-msg", "Adding…");
+        prog.setAttribute("role", "status");
+        out.appendChild(prog);
+        runImport(plan, function (i, n) { prog.textContent = "Adding " + (i + 1) + " of " + n + "…"; }).then(function (added) {
+          S.importOpen = false;
+          toast("Added " + added + ". Looking for known vulnerabilities…");
+          return Promise.all([api.environment().then(function (e) { S.env = e; }), reloadSummary()]);
+        }, function (err) {
+          clear(out);
+          out.appendChild(message("Stopped after adding " + (err.added || 0) + ". " + errorMessage(err) + " Paste the same list again to carry on; what is already added is skipped.", "alert", err));
+          go.disabled = false; check.disabled = false; ta.disabled = false;
+          return Promise.all([api.environment().then(function (e) { S.env = e; }, function () {}), reloadSummary()]).then(function () { throw err; });
+        }).then(render, function () { /* the message above stays */ });
+      });
+      var row = el("div", "vn-bar");
+      row.appendChild(check);
+      row.appendChild(go);
+      row.appendChild(button("Close", "btn", function () { S.importOpen = false; render(); }));
+      card.appendChild(row);
+      card.appendChild(out);
+      host.appendChild(card);
+    }
+
     function drawEnv(host) {
       var bar = el("div", "vn-bar");
       bar.appendChild(button("Add a server or device", "btn", function () { S.envForm = { kind: "infra" }; render(); }));
       bar.appendChild(button("Add software", "btn btn-primary", function () { S.envForm = { kind: "software" }; render(); }));
+      bar.appendChild(button("Import a list", "btn", function () { S.importOpen = !S.importOpen; render(); }));
       bar.appendChild(el("span", "grow"));
       var chk = button("Check now", "btn btn-sm", function () { checkNow(chk); });
       bar.appendChild(chk);
       host.appendChild(bar);
       host.appendChild(el("p", "vn-note", "Only product names and versions are used to look things up. Your server names and notes stay in your own record."));
+      if (S.importOpen) drawImport(host);
       if (S.envForm) host.appendChild(itemForm(S.envForm));
       var items = (S.env && S.env.items) || [];
       if (!items.length && !S.envForm) {

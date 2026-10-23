@@ -118,3 +118,7 @@
 .vn-sources li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 .vn-source-name { color: var(--fg-strong); min-width: 15em; }
 .vn-cat-body { display: grid; gap: 12px; }
+
+/* import a list */
+.vn-import-text { width: 100%; font: 13px var(--font-mono); color: var(--fg-strong); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; resize: vertical; min-height: 140px; }
+.vn-import-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
