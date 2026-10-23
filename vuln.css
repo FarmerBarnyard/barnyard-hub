@@ -122,3 +122,10 @@
 /* import a list */
 .vn-import-text { width: 100%; font: 13px var(--font-mono); color: var(--fg-strong); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; resize: vertical; min-height: 140px; }
 .vn-import-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.vn-pickrow { display: flex; align-items: stretch; border-top: 1px solid var(--line); }
+.vn-pickrow:first-child { border-top: 0; }
+.vn-pickrow .vn-row { flex: 1 1 auto; min-width: 0; border-top: 0; }
+.vn-pick { display: flex; align-items: center; padding: 0 2px 0 14px; cursor: pointer; }
+.vn-selbar { padding: 2px 2px; font-size: 13px; color: var(--fg); }
+.vn-bulk-groups { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; }
