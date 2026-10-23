@@ -203,7 +203,48 @@
   }
   function needsSignIn(err) { return !!err && (err.code === "recent_sign_in_required" || err.status === 401 || err.code === "session_revoked"); }
 
+  // ---- the catalogue's own status (what the catalogue service reports about itself)
+
+  var SOURCE_NAMES = [
+    ["cve_list", "CVE.org list of every CVE"], ["kev", "CISA exploited list"], ["epss", "Exploit-likelihood scores (EPSS)"],
+    ["nvd", "NVD scores and affected versions"], ["archive", "Move of older CVEs to the archive"]
+  ];
+
+  // The headline numbers, as { label, value } in reading order.
+  function catalogTiles(s) {
+    s = s || {};
+    var c = s.counts || {};
+    return [
+      { label: "CVEs in all", value: thousands(s.total) },
+      { label: "Published in the last 30 days", value: thousands(c.recent) },
+      { label: "Older, in the archive", value: thousands(c.archive) },
+      { label: "Exploited in the wild", value: thousands(s.kev) },
+      { label: "With a score", value: thousands(s.enriched) },
+      { label: "With an exploit likelihood", value: thousands(s.withEpss) }
+    ];
+  }
+
+  // One row per feed the catalogue is built from: { title, tone, text }. A feed that has never run says so; one that
+  // failed says what went wrong and when it last worked.
+  function sourceRows(sources, now) {
+    sources = sources || {};
+    return SOURCE_NAMES.map(function (n) {
+      var s = sources[n[0]];
+      if (!s) return { title: n[1], tone: "", text: "Not run yet" };
+      var when = agoText(s.lastOk, now);
+      if (s.ok === false) return { title: n[1], tone: "alert", text: "Failed" + (s.error ? ": " + String(s.error).slice(0, 160) : "") + (when ? ". Last worked " + when + "." : ".") };
+      return { title: n[1], tone: "ok", text: when ? "Updated " + when : "Updated" };
+    });
+  }
+
+  // A notice while the first full load of the list is still running (the catalogue is then incomplete), else null.
+  function loadBanner(s) {
+    if (!s || s.loaded) return null;
+    return "The first full load of the CVE list is still running (" + thousands(s.total) + " CVEs so far), so the catalogue is not complete yet. It fills in by itself.";
+  }
+
   var helpers = {
+    catalogTiles: catalogTiles, sourceRows: sourceRows, loadBanner: loadBanner,
     stateText: stateText, stateTone: stateTone, priorityTone: priorityTone, priorityHint: priorityHint, fmtDate: fmtDate, monthLabel: monthLabel,
     agoText: agoText, thousands: thousands, scoreText: scoreText, scoreTone: scoreTone, epssText: epssText, confidenceText: confidenceText,
     safeUrl: safeUrl, itemLabel: itemLabel, softwareLabel: softwareLabel, autoName: autoName, nameBase: nameBase, matchText: matchText, itemTree: itemTree, queryString: queryString,
@@ -309,7 +350,7 @@
       view: "current", summary: null, env: null, catalog: null, detail: null, envForm: null, busy: false, banner: null,
       current: { q: "", priority: "", state: "", all: false, item: "", page: 1 },
       history: { q: "", priority: "", state: "", item: "", page: 1 },
-      archive: { q: "", zone: "archive", month: "", kev: false, page: 1, months: null, open: "" },
+      catalogue: { q: "", zone: "", month: "", kev: false, page: 1, months: null, open: "" },
       historySummary: null
     };
     var body = null;
@@ -393,7 +434,7 @@
     function drawTabs(host) {
       var tabs = el("div", "vn-tabs");
       tabs.setAttribute("role", "tablist");
-      [["current", "Current"], ["history", "History"], ["archive", "Archive"], ["env", "My environment"]].forEach(function (t) {
+      [["current", "Current"], ["history", "History"], ["catalogue", "Catalogue"], ["env", "My environment"]].forEach(function (t) {
         var b = el("button", null, t[1]);
         b.type = "button";
         b.setAttribute("role", "tab");
@@ -513,20 +554,57 @@
       drawFindings("history", listCard);
     }
 
-    // ---- Archive (the catalog itself)
+    // ---- Catalogue (every CVE the catalogue holds, and how it is kept up to date)
 
-    function drawArchive(host) {
-      var A = S.archive;
+    // The catalogue's own numbers and the state of each feed it is built from, read fresh each time the tab opens.
+    function drawCatalogueStatus(host) {
+      var card = el("div", "vn-card");
+      card.appendChild(el("h3", null, "The catalogue"));
+      var body = el("div", "vn-cat-body");
+      body.appendChild(el("p", "dim", "Loading…"));
+      card.appendChild(body);
+      host.appendChild(card);
+      api.catalogStatus().then(function (s) {
+        S.catalog = s;
+        clear(body);
+        var tiles = el("div", "vn-tiles");
+        catalogTiles(s).forEach(function (t) {
+          var tile = el("div", "vn-tile");
+          tile.appendChild(el("b", null, t.value));
+          tile.appendChild(el("span", null, t.label));
+          tiles.appendChild(tile);
+        });
+        body.appendChild(tiles);
+        var banner = loadBanner(s);
+        if (banner) body.appendChild(message(banner, "", null));
+        var list = el("ul", "vn-sources");
+        sourceRows(s.sources, Date.now()).forEach(function (r) {
+          var li = el("li");
+          li.appendChild(el("span", "vn-source-name", r.title));
+          li.appendChild(chip(r.text, r.tone));
+          list.appendChild(li);
+        });
+        body.appendChild(list);
+        if (s.newestPublished) body.appendChild(el("p", "vn-note", "Newest CVE published " + fmtDate(s.newestPublished) + ". The list is checked for new and changed CVEs every hour; scores and exploited flags are refreshed daily."));
+      }, function (err) {
+        clear(body);
+        body.appendChild(message(errorMessage(err), "alert", err));
+      });
+    }
+
+    function drawCatalogue(host) {
+      var A = S.catalogue;
+      drawCatalogueStatus(host);
       var bar = el("div", "vn-bar");
       var q = input("search", A.q, 100);
       q.placeholder = "Search any CVE, product or text";
       q.setAttribute("aria-label", "Search the catalog");
       var timer = null;
       q.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(function () { A.q = q.value.trim(); A.page = 1; load(); }, 350); });
-      var zone = select([["archive", "Older than a month"], ["recent", "Last 30 days"], ["", "All"]], A.zone);
+      var zone = select([["", "All CVEs"], ["recent", "Last 30 days"], ["archive", "Older than a month"]], A.zone);
       zone.setAttribute("aria-label", "Which CVEs");
       zone.addEventListener("change", function () { A.zone = zone.value; A.page = 1; load(); });
-      var monthSel = select([["", "Any month"]], A.month);
+      var monthSel = select([["", "Any month (older ones listed)"]], A.month);
       monthSel.setAttribute("aria-label", "Month published");
       monthSel.addEventListener("change", function () { A.month = monthSel.value; A.page = 1; load(); });
       var kevBox = el("label", "vn-check");
@@ -537,7 +615,7 @@
       kevBox.appendChild(el("span", null, "Exploited only"));
       bar.appendChild(q); bar.appendChild(zone); bar.appendChild(monthSel); bar.appendChild(kevBox);
       host.appendChild(bar);
-      host.appendChild(el("p", "vn-note", "Every public CVE, not only the ones that apply to you. CVEs older than a month are kept here, newest first."));
+      host.appendChild(el("p", "vn-note", "Every public CVE, not only the ones that apply to you, newest first. Open one to read its record."));
       var listHost = el("div");
       host.appendChild(listHost);
 
@@ -1030,7 +1108,7 @@
       root.appendChild(body);
       if (S.view === "current") drawFindings("current", body);
       else if (S.view === "history") drawHistory(body);
-      else if (S.view === "archive") drawArchive(body);
+      else if (S.view === "catalogue") drawCatalogue(body);
       else drawEnv(body);
     }
 
