@@ -571,12 +571,14 @@
 
   function mount(root, transport) {
     var Runs = window.OpsAgentRuns;
+    var Pending = window.OpsPending;
     var state = {
       dispatch: null,       // this board's agent-run settings, once loaded
       items: {},            // id -> item (open items, plus any done item that has been opened)
       version: 0,
       doneCount: 0,
-      tab: "work",          // work | proposals | done
+      pending: null,        // changes the chat proposed (ops-pending.js), or null when the tab isn't offered
+      tab: "work",          // work | proposals | pending | done
       filters: { category: [], target: [], status: [] },
       doneItems: null,      // loaded on demand
       selectedId: null,     // id, "new", or null
@@ -762,9 +764,10 @@
       clear(tabs);
       var defs = [
         { key: "work", label: "Work" },
-        { key: "proposals", label: "Proposals", count: proposalList().length },
-        { key: "done", label: "Completed", count: state.doneCount }
+        { key: "proposals", label: "Proposals", count: proposalList().length }
       ];
+      if (state.pending) defs.push({ key: "pending", label: "Pending commits", count: Pending.helpers.waitingCount(state.pending) });
+      defs.push({ key: "done", label: "Completed", count: state.doneCount });
       defs.forEach(function (d) {
         var b = el("button", "ops-tab", d.label);
         b.type = "button";
@@ -774,6 +777,7 @@
         b.addEventListener("click", function () {
           state.tab = d.key;
           if (d.key === "done" && state.doneItems === null) loadDone();
+          if (d.key === "pending") loadPending();
           render();
         });
         tabs.appendChild(b);
@@ -1138,6 +1142,11 @@
       if (!state.loaded) content.appendChild(el("p", "ops-empty", "Loading the board…"));
       else if (state.tab === "work") content.appendChild(renderWork(now, today));
       else if (state.tab === "proposals") content.appendChild(renderProposals(now, today));
+      else if (state.tab === "pending" && state.pending) {
+        var pendingBox = el("div");
+        Pending.render(pendingBox, state.pending, { toast: toast, reload: loadPending });
+        content.appendChild(pendingBox);
+      }
       else content.appendChild(renderDone(now, today));
       if (focusId) {
         var again = content.querySelector('[data-id="' + focusId + '"]');
@@ -1172,6 +1181,19 @@
     function loadDispatch() {
       if (!Runs) return;
       Runs.loadConfig({ request: request }).then(function (cfg) { state.dispatch = cfg; render(); });
+    }
+
+    // Changes the owner's chat proposed, waiting for a decision (ops-pending.js). The tab exists only
+    // when the list can be read (the chat is on and this is the owner); it is refreshed once a minute.
+    var pendingTimer = null;
+    function loadPending() {
+      if (!Pending) return;
+      Pending.load().then(function (list) {
+        state.pending = list;
+        if (list === null) { clearInterval(pendingTimer); pendingTimer = null; if (state.tab === "pending") state.tab = "work"; }
+        else if (!pendingTimer) pendingTimer = setInterval(loadPending, 60000);
+        render();
+      });
     }
 
     // Start (or try again) an agent run for an item from its drawer.
@@ -1703,6 +1725,7 @@
       applySnapshot(snap);
       render();
       loadDispatch();
+      loadPending();
       openFromHash();
     }).catch(function (err) {
       clear(content);
