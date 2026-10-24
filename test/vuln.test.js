@@ -325,7 +325,8 @@ test("a person can only choose the states the Worker lets a person set", functio
 // ---- how the page is wired ----
 
 var html = fs.readFileSync(path.join(root, "vulnerabilities.html"), "utf8");
-var js = fs.readFileSync(path.join(root, "vuln.js"), "utf8");
+// The start-up test below searches across lines, so a CRLF (Windows) checkout must read as LF.
+var js = fs.readFileSync(path.join(root, "vuln.js"), "utf8").replace(/\r\n/g, "\n");
 var css = fs.readFileSync(path.join(root, "vuln.css"), "utf8");
 var shell = fs.readFileSync(path.join(root, "shell.js"), "utf8");
 

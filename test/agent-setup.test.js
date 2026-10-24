@@ -152,7 +152,7 @@ var kit = { ps1: read("agent-kit/ops-board.ps1"), sh: read("agent-kit/ops-board.
 test("SHA256SUMS lists exactly the kit's files with their real hashes (regenerate it when a kit file changes)", function () {
   var crypto = require("crypto");
   var listed = {};
-  read("agent-kit/SHA256SUMS").split("\n").filter(Boolean).forEach(function (line) {
+  read("agent-kit/SHA256SUMS").split(/\r?\n/).filter(Boolean).forEach(function (line) {
     var m = /^([0-9a-f]{64})  (\S+)$/.exec(line);
     assert.ok(m, "well-formed line: " + line);
     listed[m[2]] = m[1];
