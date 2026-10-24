@@ -449,4 +449,69 @@ test("approving many: the page asks the Worker for it, checks the plan first, an
   assert.ok(/\.vn-pickrow/.test(css) && /\.vn-bulk-groups/.test(css));
 });
 
+test("a catalogue feed that has stopped is warned about in plain words, and a healthy one is not", function () {
+  var NOW = Date.UTC(2026, 9, 24, 12, 0, 0);
+  var ago = function (h) { return new Date(NOW - h * 3600000).toISOString(); };
+  var fresh = { cve_list: { ok: true, lastOk: ago(0.5) }, kev: { ok: true, lastOk: ago(2.3) }, epss: { ok: true, lastOk: ago(18) }, nvd: { ok: true, lastOk: ago(2) }, archive: { ok: true, lastOk: ago(18) } };
+  assert.strictEqual(V.staleWarning(fresh, NOW), "");
+  assert.deepStrictEqual(V.staleSources(fresh, NOW), []);
+  // what happened on 24 Oct 2026: the hourly feed failed for most of a day and nothing on the page said so
+  var stuck = Object.assign({}, fresh, { cve_list: { ok: false, lastOk: ago(11.9), error: "ValueError: this zip holds no CVE records and no inner zip" } });
+  assert.strictEqual(V.staleWarning(stuck, NOW), "The CVE catalogue has not taken new CVEs for 11 hours (the hourly feed is failing). Findings may be late.");
+  assert.deepStrictEqual(V.staleSources(stuck, NOW).map(function (s) { return s.key; }), ["cve_list"]);
+});
+
+test("each feed has its own limit, so one missed run does not raise a warning", function () {
+  var NOW = Date.UTC(2026, 9, 24, 12, 0, 0);
+  var one = function (key, ok, hours) { var s = {}; s[key] = { ok: ok, lastOk: new Date(NOW - hours * 3600000).toISOString() }; return s; };
+  // [feed, hours just inside the limit, hours just past it]
+  [["cve_list", 2.9, 3.1], ["kev", 8.9, 9.1], ["nvd", 8.9, 9.1], ["epss", 29, 31], ["archive", 29, 31]].forEach(function (c) {
+    assert.strictEqual(V.staleWarning(one(c[0], true, c[1]), NOW), "", c[0] + " is within its limit");
+    assert.notStrictEqual(V.staleWarning(one(c[0], true, c[2]), NOW), "", c[0] + " is past its limit");
+  });
+  assert.match(V.staleWarning(one("cve_list", true, 5), NOW), /for 5 hours \(it has not run\)/, "a feed that is old but not failing says it has not run");
+  assert.match(V.staleWarning(one("kev", false, 10), NOW), /exploited-in-the-wild list has not updated for 10 hours \(the update is failing\)/);
+  assert.match(V.staleWarning(one("epss", true, 50), NOW), /exploit-likelihood scores have not updated for 2 days/, "long gaps are in days");
+  assert.match(V.staleWarning(one("cve_list", true, 3.2), NOW), /for 3 hours/);
+});
+
+test("a feed that has never worked, or never run, and an empty status, are handled", function () {
+  var NOW = Date.UTC(2026, 9, 24, 12, 0, 0);
+  assert.strictEqual(V.staleWarning({ cve_list: { ok: false, error: "boom" } }, NOW), "The CVE.org list of every CVE has never worked (the hourly feed is failing). Findings may be late.");
+  assert.strictEqual(V.staleWarning({}, NOW), "", "nothing has run yet: the first-load notice covers that");
+  assert.strictEqual(V.staleWarning(null, NOW), "");
+  assert.strictEqual(V.staleWarning(undefined, NOW), "");
+  assert.strictEqual(V.staleWarning({ kev: { ok: true } }, NOW), "", "a feed with no time recorded is not guessed at");
+  var both = V.staleWarning({ cve_list: { ok: false, lastOk: new Date(NOW - 7 * 3600000).toISOString() }, kev: { ok: true, lastOk: new Date(NOW - 12 * 3600000).toISOString() } }, NOW);
+  assert.strictEqual((both.match(/Findings may be late\./g) || []).length, 1, "the closing sentence appears once");
+  assert.ok(/for 7 hours/.test(both) && /for 12 hours/.test(both));
+  assert.strictEqual(V.hoursText(0.2), "1 hour");
+  assert.strictEqual(V.hoursText(1.9), "1 hour");
+  assert.strictEqual(V.hoursText(47.9), "47 hours");
+  assert.strictEqual(V.hoursText(72), "3 days");
+});
+
+test("the Catalogue tab marks an overdue feed, not only a failed one", function () {
+  var NOW = Date.UTC(2026, 9, 24, 12, 0, 0);
+  var rows = V.sourceRows({
+    cve_list: { ok: true, lastOk: new Date(NOW - 6 * 3600000).toISOString() },
+    kev: { ok: true, lastOk: new Date(NOW - 2 * 3600000).toISOString() },
+    nvd: { ok: false, lastOk: new Date(NOW - 3 * 3600000).toISOString(), error: "timeout" }
+  }, NOW);
+  var by = {}; rows.forEach(function (r) { by[r.title] = r; });
+  assert.strictEqual(by["CVE.org list of every CVE"].tone, "alert");
+  assert.match(by["CVE.org list of every CVE"].text, /^Overdue: last updated 6 h ago \(it should be at least every 3 hours\)\./);
+  assert.strictEqual(by["CISA exploited list"].tone, "ok");
+  assert.match(by["NVD scores and affected versions"].text, /^Failed: timeout/);
+  assert.strictEqual(by["Exploit-likelihood scores (EPSS)"].text, "Not run yet");
+});
+
+test("the warning is part of the page, filled in when the status arrives, and built from text", function () {
+  assert.ok(/el\("div", "vn-stale"\)/.test(js), "the warning has a place under the catalogue line");
+  assert.ok(/var warn = root\.querySelector\("\.vn-stale"\);\s*if \(warn\) fillStale\(warn\);/.test(js), "it is filled in when the catalogue's status arrives");
+  assert.ok(/message\(text, "alert"\)/.test(js));
+  assert.ok(/\.vn-stale/.test(css));
+  assert.ok(!/innerHTML/.test(js));
+});
+
 console.log("\n" + passed + " passed");
