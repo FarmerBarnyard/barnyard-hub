@@ -262,10 +262,51 @@
 
   // ---- the catalogue's own status (what the catalogue service reports about itself)
 
+  // key, plain name, how many hours may pass without a success before the page warns, and how it reads in a warning.
+  // The hourly feed runs every hour, the exploited list and NVD four times a day, EPSS and the archive move once a day;
+  // each limit is a few runs' worth, so one missed run does not raise it. Change a limit here and nowhere else.
   var SOURCE_NAMES = [
-    ["cve_list", "CVE.org list of every CVE"], ["kev", "CISA exploited list"], ["epss", "Exploit-likelihood scores (EPSS)"],
-    ["nvd", "NVD scores and affected versions"], ["archive", "Move of older CVEs to the archive"]
+    ["cve_list", "CVE.org list of every CVE", 3, "The CVE catalogue has not taken new CVEs for"],
+    ["kev", "CISA exploited list", 9, "The exploited-in-the-wild list has not updated for"],
+    ["epss", "Exploit-likelihood scores (EPSS)", 30, "The exploit-likelihood scores have not updated for"],
+    ["nvd", "NVD scores and affected versions", 9, "The NVD scores and affected versions have not updated for"],
+    ["archive", "Move of older CVEs to the archive", 30, "The move of older CVEs to the archive has not run for"]
   ];
+
+  function hoursText(h) {
+    if (h >= 48) return Math.floor(h / 24) + " days";
+    h = Math.max(1, Math.floor(h));
+    return h + (h === 1 ? " hour" : " hours");
+  }
+
+  // Which feeds are too old for how often they should run: [{ key, title, hours (null when it has never worked), failing }].
+  // A feed that has not run yet at all is left out (a fresh catalogue says so elsewhere), and one slow run does not count.
+  function staleSources(sources, now) {
+    var out = [];
+    if (!sources) return out;
+    SOURCE_NAMES.forEach(function (n) {
+      var s = sources[n[0]];
+      if (!s) return;
+      var d = toDate(s.lastOk);
+      var hours = d ? (now - d.getTime()) / 3600000 : null;
+      if (hours === null ? s.ok === false : hours > n[2]) out.push({ key: n[0], title: n[1], hours: hours, failing: s.ok === false });
+    });
+    return out;
+  }
+
+  // The warning shown under "Checked against ... CVEs", in plain words, or "" when everything is current.
+  //   "The CVE catalogue has not taken new CVEs for 11 hours (the hourly feed is failing). Findings may be late."
+  function staleWarning(sources, now) {
+    var stale = staleSources(sources, now);
+    if (!stale.length) return "";
+    var parts = stale.map(function (st) {
+      var n = SOURCE_NAMES.filter(function (x) { return x[0] === st.key; })[0];
+      var why = st.failing ? " (" + (st.key === "cve_list" ? "the hourly feed" : "the update") + " is failing)" : " (it has not run)";
+      if (st.hours === null) return "The " + st.title + " has never worked" + why + ".";
+      return n[3] + " " + hoursText(st.hours) + why + ".";
+    });
+    return parts.join(" ") + " Findings may be late.";
+  }
 
   // The headline numbers, as { label, value } in reading order.
   function catalogTiles(s) {
@@ -290,6 +331,8 @@
       if (!s) return { title: n[1], tone: "", text: "Not run yet" };
       var when = agoText(s.lastOk, now);
       if (s.ok === false) return { title: n[1], tone: "alert", text: "Failed" + (s.error ? ": " + String(s.error).slice(0, 160) : "") + (when ? ". Last worked " + when + "." : ".") };
+      var d = toDate(s.lastOk);
+      if (d && (now - d.getTime()) / 3600000 > n[2]) return { title: n[1], tone: "alert", text: "Overdue: last updated " + when + " (it should be at least every " + hoursText(n[2]) + ")." };
       return { title: n[1], tone: "ok", text: when ? "Updated " + when : "Updated" };
     });
   }
@@ -444,6 +487,7 @@
     agoText: agoText, thousands: thousands, scoreText: scoreText, scoreTone: scoreTone, epssText: epssText, confidenceText: confidenceText,
     safeUrl: safeUrl, itemLabel: itemLabel, softwareLabel: softwareLabel, autoName: autoName, nameBase: nameBase, matchText: matchText, itemTree: itemTree, queryString: queryString,
     pageCount: pageCount, barPercent: barPercent, planBadge: planBadge, canEditPlan: canEditPlan, canApprove: canApprove, planDraft: planDraft,
+    staleSources: staleSources, staleWarning: staleWarning, hoursText: hoursText, SOURCE_NAMES: SOURCE_NAMES,
     bulkBody: bulkBody, bulkFilter: bulkFilter, bulkIds: bulkIds, bulkSummaryText: bulkSummaryText, bulkGroupLine: bulkGroupLine, bulkFailText: bulkFailText,
     bulkTotals: bulkTotals, bulkAdd: bulkAdd, bulkResultText: bulkResultText, bulkShouldContinue: bulkShouldContinue, BULK_MAX_IDS: BULK_MAX_IDS,
     planPayload: planPayload, eventTitle: eventTitle, actorText: actorText, errorMessage: errorMessage, needsSignIn: needsSignIn, PERSON_STATES: PERSON_STATES
@@ -623,6 +667,17 @@
       });
       host.appendChild(strip);
       host.appendChild(el("div", "vn-catalog", catalogLine()));
+      var stale = el("div", "vn-stale");
+      host.appendChild(stale);
+      fillStale(stale);
+    }
+
+    // The warning when a feed has stopped (see staleWarning). Filled in when the page is drawn and again when the
+    // catalogue's status arrives, since the page does not wait for it.
+    function fillStale(box) {
+      clear(box);
+      var text = staleWarning(S.catalog && S.catalog.sources, Date.now());
+      if (text) box.appendChild(message(text, "alert"));
     }
 
     // "4 open. Checked against 394,770 known CVEs, updated 3 min ago." The catalogue part is added when its status arrives, so
@@ -1556,6 +1611,8 @@
         S.catalog = c;
         var line = root.querySelector(".vn-catalog");
         if (line) line.textContent = catalogLine();
+        var warn = root.querySelector(".vn-stale");
+        if (warn) fillStale(warn);
       }, function () { S.catalog = null; });
     }, function (err) {
       if (err && err.status === 401) gate("Sign in to keep a record of the vulnerabilities that apply to what you run.", "Sign in", "https://api.barnyard.site/auth/login?return_to=" + encodeURIComponent(location.href));

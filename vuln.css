@@ -129,3 +129,6 @@
 .vn-pick { display: flex; align-items: center; padding: 0 2px 0 14px; cursor: pointer; }
 .vn-selbar { padding: 2px 2px; font-size: 13px; color: var(--fg); }
 .vn-bulk-groups { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; }
+
+.vn-stale { margin-top: 6px; }
+.vn-stale:empty { display: none; }
