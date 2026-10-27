@@ -132,7 +132,7 @@
       var di = daysBetween(today, entry.due);
       return di < 0 ? "alert" : di === 0 ? "attn" : "";
     }
-    if (entry.type === "event") return "";
+    if (entry.type === "event" || entry.type === "gcal") return "";
     if (!entry.due || entry.state === "needed" || entry.state === "auto") return "";
     var d = daysBetween(today, entry.due);
     return d <= 7 ? "alert" : d <= 30 ? "attn" : "ok";
@@ -159,11 +159,38 @@
         put(day.date, entryOf("event", { id: ev.id, label: ev.title, due: day.date, time: day.startTime, endTime: day.endTime, allDay: day.allDay, ref: { event: ev, day: day } }));
       });
     });
+    googleEntries(data.google, from, to).forEach(function (g) { put(g.due, g); });
     Object.keys(map).forEach(function (k) { map[k].sort(sortInDay); });
     return map;
   }
 
-  var TYPE_ORDER = { event: 0, task: 1, item: 2, renewal: 3 };
+  // The owner's Google Calendar events (read only, from GET /calendar: { title, allDay, date, start, end }) as entries.
+  // The Worker gives a timed event's start as an instant ("...Z") or as the owner's own wall clock (no "Z"); either way the day
+  // and time shown are the owner's local ones. The Worker sends about 8 days back and 10 days ahead.
+  function localParts(iso) {
+    if (typeof iso !== "string") return null;
+    if (iso.slice(-1) === "Z") {
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return null;
+      return { date: ymd(d), time: pad(d.getHours()) + ":" + pad(d.getMinutes()) };
+    }
+    var m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(iso);
+    return m ? { date: m[1], time: m[2] } : null;
+  }
+  function googleEntries(events, from, to) {
+    var out = [];
+    (events || []).forEach(function (g, i) {
+      if (!g || typeof g.title !== "string") return;
+      var s, e;
+      if (g.allDay) { if (!isYmd(g.date)) return; s = { date: g.date, time: "" }; e = null; }
+      else { s = localParts(g.start); if (!s) return; e = localParts(g.end); }
+      if (s.date < from || s.date > to) return;
+      out.push({ type: "gcal", id: "g" + i + ":" + s.date, label: g.title, kind: "", state: "known", due: s.date, time: g.allDay ? "" : s.time, endTime: !g.allDay && e && e.date === s.date ? e.time : "", allDay: !!g.allDay, ref: g });
+    });
+    return out;
+  }
+
+  var TYPE_ORDER = { event: 0, gcal: 0, task: 1, item: 2, renewal: 3 };
   // Within a day: all-day things first (events, then to-dos, Ops items, renewals), then timed ones by time.
   function sortInDay(a, b) {
     var at = !!a.time && !a.allDay, bt = !!b.time && !b.allDay;
@@ -183,7 +210,7 @@
     var out = { overdue: [], today: [], week: [] };
     var past = entriesByDate(data, addDays(today, -400), addDays(today, -1), kind);
     Object.keys(past).sort().forEach(function (date) {
-      past[date].forEach(function (e) { if (e.type !== "event") out.overdue.push(e); });   // an event that has happened is not overdue
+      past[date].forEach(function (e) { if (e.type !== "event" && e.type !== "gcal") out.overdue.push(e); });   // an event that has happened is not overdue
     });
     var now = entriesByDate(data, today, addDays(today, 7), kind);
     Object.keys(now).sort().forEach(function (date) {
@@ -251,6 +278,13 @@
     return out;
   }
 
+  // The Overview's small to-do list: open to-dos in the order overdue, today, later, then the undated Inbox; at most `max`, and how many more there are.
+  function widgetTasks(tasks, today, max) {
+    var g = groupTasks(tasks, today);
+    var open = g.overdue.concat(g.today, g.later, g.inbox);
+    return { rows: open.slice(0, max), more: Math.max(0, open.length - max) };
+  }
+
   // "Tue 27 Oct, 9:30 · overdue by 3 days" or "Inbox (no date)".
   function taskDueText(t, today) {
     if (!isYmd(t.due)) return "No date";
@@ -262,7 +296,7 @@
   function dueCount(data, today) {
     var a = agenda(data, today, "all");
     var n = a.overdue.length;
-    a.today.forEach(function (e) { if (e.type !== "event") n++; });
+    a.today.forEach(function (e) { if (e.type !== "event" && e.type !== "gcal") n++; });
     return n;
   }
 
@@ -391,7 +425,113 @@
     return lines.map(icsFold).join("\r\n") + "\r\n";
   }
 
-  // ---- the forms ---------------------------------------------------------------
+  // ---- quick add ----------------------------------------------------------------
+
+  var MONTH_WORDS = { jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7, sep: 8, sept: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11 };
+  var DAY_WORDS = { monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4, saturday: 5, sunday: 6, mon: 0, tue: 1, tues: 1, wed: 2, thu: 3, thur: 3, thurs: 3, fri: 4, sat: 5, sun: 6 };
+  var DAY_RE = "(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues|tue|wed|thurs|thur|thu|fri|sat|sun)";
+  var MONTH_RE = "(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)";
+
+  // "call the host tomorrow 9am", "renew domain 14 Mar", "pay rent every month on the 1st !high" -> what the to-do form would be.
+  // Understands: today, tomorrow, next week, in N days/weeks/months, a weekday (the next one), 14 Mar / March 14 / 14th March
+  // (with an optional year; a date already past this year means next year), 14/3, 2026-11-03; a time (9am, 9:30pm, 14:00,
+  // noon); "every day/weekday/week/month/year", daily, weekly, monthly, yearly, "every monday"; and !high or !low. What is left
+  // is the title. Dates are the owner's own day. -> { title, due, time, recur, priority, parts: [words about what was understood] }
+  function parseQuick(text, today) {
+    var original = String(text || "").replace(/\s+/g, " ").trim();
+    var s = " " + original + " ";
+    var out = { title: "", due: "", time: "", recur: "", priority: "normal", parts: [] };
+    function cut(re, fn) {
+      var m = re.exec(s);
+      if (!m) return false;
+      if (fn(m) === false) return false;
+      s = s.slice(0, m.index) + " " + s.slice(m.index + m[0].length);
+      return true;
+    }
+    // priority
+    cut(/\s!(high|low)\b/i, function (m) { out.priority = m[1].toLowerCase(); out.parts.push(out.priority + " priority"); });
+    cut(/\s!!+\s/, function () { out.priority = "high"; out.parts.push("high priority"); });
+    // repeats
+    var weekdayRepeat = null;
+    if (!cut(/\bevery\s+(day|weekday|weekdays|week|month|year)\b/i, function (m) {
+      var w = m[1].toLowerCase();
+      out.recur = w === "day" ? "daily" : w === "week" ? "weekly" : w === "month" ? "monthly" : w === "year" ? "yearly" : "weekdays";
+    })) {
+      if (!cut(/\bevery\s+(?:other\s+)?(?:on\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)s?\b/i, function (m) { out.recur = "weekly"; weekdayRepeat = DAY_WORDS[m[1].toLowerCase()]; })) {
+        cut(/\b(daily|weekdays|weekly|monthly|yearly|annually)\b/i, function (m) {
+          var w = m[1].toLowerCase();
+          out.recur = w === "daily" ? "daily" : w === "weekdays" ? "weekdays" : w === "weekly" ? "weekly" : w === "monthly" ? "monthly" : "yearly";
+        });
+      }
+    }
+    if (out.recur) out.parts.push(repeatText(out.recur).toLowerCase());
+    // time
+    if (!cut(/\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i, function (m) {
+      var h = +m[1], mi = m[2] ? +m[2] : 0;
+      if (h < 1 || h > 12 || mi > 59) return false;
+      if (m[3].toLowerCase() === "pm" && h < 12) h += 12;
+      if (m[3].toLowerCase() === "am" && h === 12) h = 0;
+      out.time = pad(h) + ":" + pad(mi);
+    })) {
+      if (!cut(/\b(?:at\s+)?([01]?\d|2[0-3]):([0-5]\d)\b/, function (m) { out.time = pad(+m[1]) + ":" + m[2]; })) {
+        cut(/\b(?:at\s+)?noon\b/i, function () { out.time = "12:00"; });
+      }
+    }
+    // date
+    var base = isYmd(today) ? today : ymd(new Date());
+    var lead = "(?:\\b(?:on|by|due|before|until)\\s+)?";
+    var dated = false;
+    function setDate(d) { if (isYmd(d)) { out.due = d; dated = true; } else return false; }
+    cut(new RegExp(lead + "\\b(\\d{4})-(\\d{2})-(\\d{2})\\b"), function (m) { return setDate(m[1] + "-" + m[2] + "-" + m[3]); });
+    if (!dated) cut(new RegExp(lead + "\\b(?:the\\s+)?(\\d{1,2})(?:st|nd|rd|th)?(?:\\s+of)?\\s+" + MONTH_RE + "(?:\\s+(\\d{4}))?\\b", "i"), function (m) { return setByMonth(+m[1], MONTH_WORDS[m[2].toLowerCase()], m[3]); });
+    if (!dated) cut(new RegExp(lead + "\\b" + MONTH_RE + "\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s+(\\d{4}))?\\b", "i"), function (m) { return setByMonth(+m[2], MONTH_WORDS[m[1].toLowerCase()], m[3]); });
+    if (!dated) cut(new RegExp(lead + "\\b(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?\\b"), function (m) { return setByMonth(+m[1], +m[2] - 1, m[3] ? (m[3].length === 2 ? "20" + m[3] : m[3]) : ""); });
+    function setByMonth(day, month, year) {
+      if (month === undefined || month < 0 || month > 11 || day < 1 || day > 31) return false;
+      var y = year ? +year : +base.slice(0, 4);
+      var d = y + "-" + pad(month + 1) + "-" + pad(day);
+      if (!isYmd(d)) return false;
+      if (!year && d < base) d = (y + 1) + "-" + pad(month + 1) + "-" + pad(day);
+      return setDate(d);
+    }
+    // "every month on the 1st": the next such day
+    if (!dated && out.recur === "monthly") cut(/\b(?:on\s+)?the\s+(\d{1,2})(?:st|nd|rd|th)\b/i, function (m) {
+      var dom = +m[1];
+      if (dom < 1 || dom > 31) return false;
+      var y = +base.slice(0, 4), mo = +base.slice(5, 7) - 1;
+      for (var k = 0; k < 2; k++) {
+        var last = new Date(Date.UTC(y, mo + k + 1, 0)).getUTCDate();
+        var c = addMonths(y + "-" + pad(mo + 1) + "-01", k).slice(0, 8) + pad(Math.min(dom, last));
+        if (c >= base) return setDate(c);
+      }
+      return false;
+    });
+    if (!dated) cut(/\b(?:on\s+|by\s+)?(?:today|tonight)\b/i, function () { return setDate(base); });
+    if (!dated) cut(/\b(?:on\s+|by\s+)?(?:tomorrow|tmrw|tmr)\b/i, function () { return setDate(addDays(base, 1)); });
+    if (!dated) cut(/\b(?:in\s+(\d{1,3})\s+(day|days|week|weeks|month|months))\b/i, function (m) {
+      var n = +m[1], u = m[2].toLowerCase();
+      return setDate(u.charAt(0) === "d" ? addDays(base, n) : u.charAt(0) === "w" ? addDays(base, 7 * n) : addMonths(base, n));
+    });
+    if (!dated) cut(/\bnext\s+week\b/i, function () { return setDate(addDays(base, 7)); });
+    if (!dated) cut(/\bnext\s+month\b/i, function () { return setDate(addMonths(base, 1)); });
+    if (!dated) cut(new RegExp("\\b(?:(on|next|this|by)\\s+)?" + DAY_RE + "\\b", "i"), function (m) {
+      var w = DAY_WORDS[m[2].toLowerCase()], full = m[2].length > 3 && !/^(tues|thurs|thur)$/i.test(m[2]);
+      if (!full && !m[1]) return false;   // "sat", "sun", "mon" on their own are more likely words in the title
+      var diff = (w - weekday(base) + 7) % 7;
+      if (diff === 0) diff = 7;
+      return setDate(addDays(base, diff));
+    });
+    if (!dated && weekdayRepeat !== null) { var df = (weekdayRepeat - weekday(base) + 7) % 7; setDate(addDays(base, df)); }
+    if (!dated && (out.recur || out.time)) setDate(base);   // a repeat or a time with no day starts today
+    if (out.due) out.parts.unshift(shortDate(out.due));
+    if (out.time) out.parts.push(timeText(out.time));
+    var title = s.replace(/\s+/g, " ").replace(/^[\s,;:.\-–—]+|[\s,;:.\-–—]+$/g, "").replace(/^(?:to|and|then)\s+/i, "").replace(/\s+(?:at|on|by|due|for|in|every)$/i, "").trim();
+    if (!title) title = original;
+    out.title = title.charAt(0).toUpperCase() + title.slice(1);
+    return out;
+  }
+
+  // ---- the forms---------------------------------------------------------------
 
   // The Details text for a renewal: whatever the owner already wrote, then the lines the Calendar reads.
   function buildDetails(extra, f) {
@@ -482,9 +622,9 @@
     longDate: longDate, shortDate: shortDate, timeText: timeText, relativeText: relativeText, kindTitle: kindTitle, recurTitle: recurTitle, repeatText: repeatText,
     nextOccurrence: nextOccurrence, startDates: startDates, eventDays: eventDays, eventTimeText: eventTimeText,
     urgency: urgency, entriesByDate: entriesByDate, sortInDay: sortInDay, filterKind: filterKind, agenda: agenda, upcoming: upcoming, renewalGroups: renewalGroups,
-    groupTasks: groupTasks, taskDueText: taskDueText, dueCount: dueCount, monthGrid: monthGrid, weekDays: weekDays,
+    groupTasks: groupTasks, widgetTasks: widgetTasks, taskDueText: taskDueText, dueCount: dueCount, monthGrid: monthGrid, weekDays: weekDays,
     icsEscape: icsEscape, icsFold: icsFold, buildIcs: buildIcs, buildDetails: buildDetails, renewalBody: renewalBody, parseRef: parseRef, refHref: refHref,
-    taskBody: taskBody, eventBody: eventBody
+    taskBody: taskBody, eventBody: eventBody, parseQuick: parseQuick, googleEntries: googleEntries
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

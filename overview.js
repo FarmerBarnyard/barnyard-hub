@@ -624,7 +624,9 @@
       return getJson("/status", HUB_API).then(function (s) { model.status = s && s.ok ? s : null; }, function () { model.status = null; });
     }).then(function () {
       if (!model.status) { model.bell = []; return; }
-      return getJson("/notifications", HUB_API).then(function (n) { model.bell = n && Array.isArray(n.events) ? n.events : []; }, function () { model.bell = []; });
+      // ?today= is this browser's own date, so "due today" in the bell means the owner's day (the Worker checks it is close to its own).
+      var d = new Date(), todayText = d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+      return getJson("/notifications?today=" + todayText, HUB_API).then(function (n) { model.bell = n && Array.isArray(n.events) ? n.events : []; }, function () { model.bell = []; });
     }).then(function () {
       renderAll();
     }, function (err) {

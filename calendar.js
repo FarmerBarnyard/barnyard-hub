@@ -26,11 +26,14 @@
   var POLL_MS = 120000;
   var PREF_KEY = "barnyard-calendar-prefs";
   var CACHE_KEY = "barnyard-calendar-cache";
-  var ACTIVE_VIEWS = L.VIEWS.filter(function (v) { return v[0] !== "week"; });
+  var GOOGLE_API = "https://api.barnyard.site/calendar";
+  var ACTIVE_VIEWS = L.VIEWS;
 
+  // `google` is the owner's Google Calendar (read only, from the Worker's /calendar; it sends about 8 days back and 10 ahead).
+  // It is never kept in this browser: it is fetched fresh each time.
   var model = {
-    state: "loading", planner: "loading", renewals: [], dueItems: [], tasks: [], events: [], partial: false, fromCache: false,
-    view: "today", kind: "all", month: null
+    state: "loading", planner: "loading", renewals: [], dueItems: [], tasks: [], events: [], google: [], googleState: "loading", partial: false, fromCache: false,
+    view: "today", kind: "all", month: null, weekOf: null
   };
   var lastFocus = null;
   var toastTimer = null;
@@ -77,8 +80,10 @@
   }
 
   function load() {
-    return Promise.all([getJson(HUB_API + "/renewals"), getJson(PLAN_API + "/all")]).then(function (res) {
-      var a = res[0], b = res[1];
+    return Promise.all([getJson(HUB_API + "/renewals"), getJson(PLAN_API + "/all"), getJson(GOOGLE_API)]).then(function (res) {
+      var a = res[0], b = res[1], g = res[2];
+      if (g.status === 200 && Array.isArray(g.data)) { model.google = g.data; model.googleState = "ok"; }
+      else model.googleState = g.status === 500 ? "off" : "error";   // 500 is the Worker saying no calendar feed is set up
       if (a.status === 401 || b.status === 401) { model.state = "guest"; return; }
       if (a.status === 403 || b.status === 403) { model.state = "forbidden"; return; }
       var haveData = model.renewals.length || model.tasks.length || model.events.length;
@@ -130,7 +135,7 @@
   }
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
   function today() { return L.ymd(new Date()); }
-  function data() { return { renewals: model.renewals, dueItems: model.dueItems, tasks: model.tasks, events: model.events }; }
+  function data() { return { renewals: model.renewals, dueItems: model.dueItems, tasks: model.tasks, events: model.events, google: model.google }; }
 
   function toast(text, undoLabel, onUndo) {
     var box = $("cal-toast");
@@ -183,6 +188,7 @@
     main.appendChild(h("b", null, e.label));
     el.appendChild(main);
     if (e.type === "event") el.appendChild(chip("Event"));
+    if (e.type === "gcal") el.appendChild(chip("Google Calendar"));
     if (e.type === "item") el.appendChild(chip("Ops item"));
     if (e.type === "renewal") { el.appendChild(chip(L.kindTitle(e.kind))); var bd = L.STATE_BADGE[e.state]; if (bd) el.appendChild(chip(bd)); }
     if (e.type === "task") {
@@ -193,6 +199,7 @@
     }
     var when;
     if (e.type === "event") when = L.shortDate(e.due) + ", " + L.eventTimeText(e.ref.day, e.ref.event);
+    else if (e.type === "gcal") when = L.shortDate(e.due) + ", " + (e.allDay ? "All day" : L.timeText(e.time) + (e.endTime ? " to " + L.timeText(e.endTime) : ""));
     else if (e.type === "task") when = L.taskDueText(e.ref, t);
     else when = L.longDate(e.due) + " · " + L.relativeText(L.daysBetween(t, e.due));
     el.appendChild(h("span", "dim cal-when" + (tone === "alert" && e.type !== "renewal" ? " late" : ""), when));
@@ -253,6 +260,53 @@
     }
   }
 
+  // The week (Monday to Sunday) as seven days, each with everything on it. On a phone the days stack.
+  function renderWeek(root, t) {
+    var w = L.weekDays(model.weekOf || t);
+    var map = L.entriesByDate(data(), w.days[0], w.days[6], model.kind);
+    var title = h("h2", "cal-month-title", w.label);
+    title.id = "cal-week-title";
+    root.appendChild(title);
+    var grid = h("div", "cal-week");
+    grid.setAttribute("aria-labelledby", "cal-week-title");
+    w.days.forEach(function (date) {
+      var col = h("section", "cal-wday" + (date === t ? " today" : "") + (date < t ? " past" : ""));
+      var head = h("button", "cal-wday-head");
+      head.type = "button";
+      head.appendChild(h("b", null, L.DAY_NAMES[L.weekday(date)]));
+      head.appendChild(h("span", "dim", " " + date.slice(8).replace(/^0/, "") + " " + L.MONTH_NAMES[+date.slice(5, 7) - 1].slice(0, 3)));
+      head.setAttribute("aria-label", "Open " + L.longDate(date));
+      head.addEventListener("click", function () { openDay(date); });
+      col.appendChild(head);
+      var es = map[date] || [];
+      if (!es.length) col.appendChild(h("p", "dim cal-wday-empty", "Nothing on."));
+      es.forEach(function (e) { col.appendChild(weekItem(e, t)); });
+      grid.appendChild(col);
+    });
+    root.appendChild(grid);
+  }
+
+  // One compact line in the week: the time, the title and (for to-dos) a tick box.
+  function weekItem(e, t) {
+    var tone = L.urgency(e, t);
+    var el = h("div", "cal-witem t-" + e.type + (tone ? " " + tone : "") + (e.type === "task" && e.ref.status === "done" ? " is-done" : ""));
+    if (e.type === "task") {
+      var cb = h("input", "cal-check");
+      cb.type = "checkbox";
+      cb.checked = e.ref.status === "done";
+      cb.setAttribute("aria-label", "Mark done: " + e.label);
+      cb.addEventListener("change", function () { tick(e.ref, cb.checked); });
+      el.appendChild(cb);
+    }
+    var main = h(e.type === "item" ? "a" : "button", "cal-main");
+    if (e.type === "item") main.href = e.ref.href || "ops.html"; else { main.type = "button"; main.addEventListener("click", function () { openEntry(e); }); }
+    if (e.time && !e.allDay) main.appendChild(h("span", "cal-wtime", L.timeText(e.time)));
+    main.appendChild(h("span", null, e.label));
+    main.setAttribute("title", typeName(e));
+    el.appendChild(main);
+    return el;
+  }
+
   function renderMonth(root, t) {
     var m = model.month;
     var grid = L.monthGrid(m.year, m.month);
@@ -302,7 +356,7 @@
     scroll.appendChild(table);
     root.appendChild(scroll);
   }
-  function typeName(e) { return e.type === "task" ? "to-do" : e.type === "item" ? "Ops item" : e.type === "event" ? "event" : L.kindTitle(e.kind).toLowerCase() + " renewal"; }
+  function typeName(e) { return e.type === "task" ? "to-do" : e.type === "item" ? "Ops item" : e.type === "event" ? "event" : e.type === "gcal" ? "Google Calendar event" : L.kindTitle(e.kind).toLowerCase() + " renewal"; }
 
   function renderUpcoming(root, t) {
     var groups = L.upcoming(data(), t, 120, model.kind);
@@ -387,7 +441,10 @@
       b.addEventListener("click", function () { setView(v[0]); });
       box.appendChild(b);
     });
-    $("cal-nav").hidden = model.view !== "month";
+    var nav = model.view === "month" || model.view === "week";
+    $("cal-nav").hidden = !nav;
+    $("cal-prev").setAttribute("aria-label", model.view === "week" ? "Previous week" : "Previous month");
+    $("cal-next").setAttribute("aria-label", model.view === "week" ? "Next week" : "Next month");
   }
 
   function renderFilter() {
@@ -412,7 +469,9 @@
     if (model.fromCache) root.appendChild(h("p", "cal-note", "Showing the copy saved on this device while the latest loads."));
     if (model.partial) root.appendChild(h("p", "cal-warn", "Some keys couldn’t be read just now, so the renewals list may be missing a few."));
     if (model.planner === "error") root.appendChild(h("p", "cal-warn", "Your to-dos and events couldn’t be loaded just now."));
+    if (model.googleState === "error") root.appendChild(h("p", "cal-warn", "Your Google Calendar couldn’t be loaded just now, so its events are missing."));
     if (model.view === "today") renderToday(root, t);
+    else if (model.view === "week") renderWeek(root, t);
     else if (model.view === "month") renderMonth(root, t);
     else if (model.view === "upcoming") renderUpcoming(root, t);
     else if (model.view === "todos") renderTodos(root, t);
@@ -467,6 +526,18 @@
     if (e.type === "renewal") openRenewal(e.ref);
     else if (e.type === "task") openTask(e.ref);
     else if (e.type === "event") openEvent(e.ref.event, e.ref.day);
+    else if (e.type === "gcal") openGoogle(e);
+  }
+
+  // A Google Calendar event: read only. It is changed in Google Calendar, not here.
+  function openGoogle(e) {
+    var body = openDrawer(e.label);
+    var top = h("div", "cal-chips");
+    top.appendChild(chip("Google Calendar"));
+    if (e.ref.recurring) top.appendChild(chip("Repeats"));
+    body.appendChild(top);
+    body.appendChild(h("p", "cal-date", L.longDate(e.due) + ", " + (e.allDay ? "all day" : L.timeText(e.time) + (e.endTime ? " to " + L.timeText(e.endTime) : ""))));
+    body.appendChild(h("p", "dim", "This comes from your Google Calendar and can’t be changed here."));
   }
 
   function openRenewal(r) {
@@ -745,15 +816,30 @@
   function quickAdd(ev) {
     ev.preventDefault();
     var title = $("cal-quick-title"), date = $("cal-quick-date");
-    var res = L.taskBody({ title: title.value, due: date.value, priority: "normal" });
+    var q = L.parseQuick(title.value, today());   // "call host tomorrow 9am" -> the title, the day, the time ...
+    var res = L.taskBody({ title: q.title, due: date.value || q.due, time: q.time, recur: q.recur, priority: q.priority });
     if (res.error) { toast(res.error); title.focus(); return; }
     plan("/task", res.body).then(function (r) {
       applyTask(r.task);
       title.value = ""; date.value = "";
+      showHint();
       render();
       toast(r.task.due ? "Added for " + L.shortDate(r.task.due) + "." : "Added to your Inbox.");
       title.focus();
     }, function (e) { toast(say(e)); });
+  }
+
+  // What the quick-add box understood, shown as you type so there are no surprises.
+  function showHint() {
+    var hint = $("cal-quick-hint"), text = $("cal-quick-title").value, date = $("cal-quick-date").value;
+    if (!text.trim()) { hint.textContent = ""; return; }
+    var q = L.parseQuick(text, today());
+    var bits = [], d = date || q.due;
+    if (d) bits.push(L.shortDate(d));
+    if (q.time) bits.push(L.timeText(q.time));
+    if (q.recur) bits.push(L.repeatText(q.recur).toLowerCase());
+    if (q.priority !== "normal") bits.push(q.priority + " priority");
+    hint.textContent = "Will add “" + q.title + "”" + (bits.length ? " · " + bits.join(" · ") : " to your Inbox");
   }
 
   // ---- events ------------------------------------------------------------------------------
@@ -764,7 +850,13 @@
     render();
   }
 
-  function stepMonth(n) {
+  // The arrows step a month in the Month view and a week in the Week view.
+  function stepPeriod(n) {
+    if (model.view === "week") {
+      model.weekOf = L.addDays(L.mondayOf(model.weekOf || today()), 7 * n);
+      render();
+      return;
+    }
     var m = model.month;
     var d = new Date(Date.UTC(m.year, m.month + n, 1));
     model.month = { year: d.getUTCFullYear(), month: d.getUTCMonth() };
@@ -774,7 +866,8 @@
   function goToday() {
     var d = new Date();
     model.month = { year: d.getFullYear(), month: d.getMonth() };
-    if (model.view === "month") render(); else setView("today");
+    model.weekOf = null;
+    if (model.view === "month" || model.view === "week") render(); else setView("today");
   }
 
   function downloadIcs() {
@@ -798,8 +891,9 @@
     else if (ev.key === "n" && model.planner === "ok") { ev.preventDefault(); $("cal-quick-title").focus(); }
     else if (ev.key === "e" && model.planner === "ok") openEventForm(null);
     else if (ev.key === "r") openRenewalForm(null);
-    else if (ev.key === "ArrowLeft" && model.view === "month") stepMonth(-1);
-    else if (ev.key === "ArrowRight" && model.view === "month") stepMonth(1);
+    else if (ev.key === "ArrowLeft" && (model.view === "month" || model.view === "week")) stepPeriod(-1);
+    else if (ev.key === "ArrowRight" && (model.view === "month" || model.view === "week")) stepPeriod(1);
+    else if (ev.key === "w") setView("week");
   }
 
   function boot() {
@@ -809,8 +903,10 @@
     $("cal-add-event").addEventListener("click", function () { openEventForm(null); });
     $("cal-add-renewal").addEventListener("click", function () { openRenewalForm(null); });
     $("cal-ics").addEventListener("click", downloadIcs);
-    $("cal-prev").addEventListener("click", function () { stepMonth(-1); });
-    $("cal-next").addEventListener("click", function () { stepMonth(1); });
+    $("cal-prev").addEventListener("click", function () { stepPeriod(-1); });
+    $("cal-next").addEventListener("click", function () { stepPeriod(1); });
+    $("cal-quick-title").addEventListener("input", showHint);
+    $("cal-quick-date").addEventListener("input", showHint);
     $("cal-today").addEventListener("click", goToday);
     $("cal-drawer-close").addEventListener("click", closeDrawer);
     $("cal-quick").addEventListener("submit", quickAdd);

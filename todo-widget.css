@@ -1,0 +1,8 @@
+/* Extra styling for the Overview to-do widget when it shows the owner's Calendar to-dos (todo-widget.js). The widget's own
+   styles are in shell.css, which is shared with the other sites, so these live here. */
+.todo-due { flex: 0 0 auto; font-size: 12px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+.todo-due.is-late { color: var(--alert); }
+.todo-import { margin: 8px 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); font-size: 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.todo-import[hidden] { display: none; }
+.todo-import p { flex-basis: 100%; margin: 0; color: var(--fg); }
+.todo-empty a { color: var(--accent); }

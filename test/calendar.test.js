@@ -272,6 +272,97 @@ test("the event form: all-day when ticked, a start time otherwise, and impossibl
   assert.strictEqual(bad({ endDate: "2028-01-01" }), "endDate");
 });
 
+test("quick add understands plain words for the day, the time, a repeat and the priority", function () {
+  var q = function (text) { return Cal.parseQuick(text, TODAY); };   // Tuesday 27 Oct 2026
+  var a = q("call host tomorrow 9am");
+  assert.deepStrictEqual([a.title, a.due, a.time, a.recur, a.priority], ["Call host", "2026-10-28", "09:00", "", "normal"]);
+  assert.deepStrictEqual(a.parts, ["Wed 28 Oct", "9:00"]);
+  var b = q("renew domain 14 Mar");
+  assert.deepStrictEqual([b.title, b.due], ["Renew domain", "2027-03-14"]);
+  assert.strictEqual(q("renew domain 14 March 2028").due, "2028-03-14");
+  assert.strictEqual(q("dentist on 3rd Nov").due, "2026-11-03");
+  assert.strictEqual(q("pay Nov 3").due, "2026-11-03");
+  assert.strictEqual(q("lodge BAS 28 Oct").due, "2026-10-28");
+  assert.strictEqual(q("lodge BAS 27 Oct").due, "2026-10-27", "today is today, not next year");
+  assert.strictEqual(q("file 14/3").due, "2027-03-14", "day then month, and a date already past means next year");
+  assert.strictEqual(q("file 2026-11-30").due, "2026-11-30");
+  assert.strictEqual(q("send minutes friday").due, "2026-10-30");
+  assert.strictEqual(q("send minutes tuesday").due, "2026-11-03", "a weekday is the next one, never today");
+  assert.strictEqual(q("send minutes next monday").due, "2026-11-02");
+  assert.strictEqual(q("call in 3 days").due, "2026-10-30");
+  assert.strictEqual(q("review in 2 weeks").due, "2026-11-10");
+  assert.strictEqual(q("review in 2 months").due, "2026-12-27");
+  assert.strictEqual(q("plan next week").due, "2026-11-03");
+  assert.strictEqual(q("lunch today at noon").time, "12:00");
+  var t = q("meeting 2:30pm today");
+  assert.deepStrictEqual([t.time, t.due, t.title], ["14:30", "2026-10-27", "Meeting"]);
+  assert.strictEqual(q("standup at 14:00 tomorrow").time, "14:00");
+  assert.strictEqual(q("late call 12am tomorrow").time, "00:00");
+  var r = q("water the plants every week");
+  assert.deepStrictEqual([r.title, r.recur, r.due], ["Water the plants", "weekly", "2026-10-27"]);
+  var m = q("pay rent every month on the 1st !high");
+  assert.deepStrictEqual([m.title, m.recur, m.due, m.priority], ["Pay rent", "monthly", "2026-11-01", "high"]);
+  var e = q("team meeting every monday");
+  assert.deepStrictEqual([e.title, e.recur, e.due], ["Team meeting", "weekly", "2026-11-02"]);
+  assert.strictEqual(q("check backups every weekday 8am").recur, "weekdays");
+  assert.strictEqual(q("renew licence yearly").recur, "yearly");
+  assert.strictEqual(q("tidy desk !low").priority, "low");
+});
+
+test("quick add leaves ordinary words alone and never loses the title", function () {
+  var q = function (text) { return Cal.parseQuick(text, TODAY); };
+  assert.deepStrictEqual([q("buy milk").title, q("buy milk").due], ["Buy milk", ""]);
+  assert.strictEqual(q("Sat nav update").due, "", "a short weekday on its own is probably a word in the title");
+  assert.strictEqual(q("pay by sat").due, "2026-10-31", "but with a preposition it is a day");
+  assert.strictEqual(q("read about monthly reports").recur, "monthly");
+  assert.strictEqual(q("tomorrow").title, "Tomorrow", "if nothing is left, the words you typed are the title");
+  assert.strictEqual(q("call 31 Feb").due, "", "not a date");
+  assert.strictEqual(q("call 13pm").time, "");
+  assert.strictEqual(q("  ").title, "");
+});
+
+test("Google Calendar events: all-day and timed, in the owner's own day, read only", function () {
+  var local = new Date(2026, 9, 28, 9, 30);   // 9:30 on 28 Oct in whatever zone this runs in
+  var g = Cal.googleEntries([
+    { title: "Board meeting", allDay: false, date: "x", start: local.toISOString(), end: new Date(2026, 9, 28, 10, 15).toISOString(), recurring: false },
+    { title: "Birthday", allDay: true, date: "2026-10-29", start: "2026-10-29", end: "2026-10-30" },
+    { title: "Floating", allDay: false, date: "2026-10-30", start: "2026-10-30T16:00:00", end: "2026-10-30T17:00:00" },
+    { title: "Too far", allDay: true, date: "2027-01-01", start: "2027-01-01", end: "2027-01-02" },
+    { title: 42 }, null, { title: "Broken", allDay: false, start: "nope" }
+  ], "2026-10-26", "2026-11-08");
+  assert.deepStrictEqual(g.map(function (x) { return [x.type, x.label, x.due, x.time, x.endTime, x.allDay]; }), [
+    ["gcal", "Board meeting", "2026-10-28", "09:30", "10:15", false],
+    ["gcal", "Birthday", "2026-10-29", "", "", true],
+    ["gcal", "Floating", "2026-10-30", "16:00", "17:00", false]
+  ]);
+  var map = Cal.entriesByDate({ google: [{ title: "Dentist", allDay: true, date: "2026-10-28" }], tasks: [t({ id: "z", due: "2026-10-28" })], events: [], renewals: [], dueItems: [] }, "2026-10-28", "2026-10-28", "all");
+  assert.deepStrictEqual(ids(map["2026-10-28"]), ["gcal:g0:2026-10-28", "task:z"], "an all-day Google event sorts with your own events");
+  assert.strictEqual(Cal.dueCount({ google: [{ title: "Today thing", allDay: true, date: TODAY }], tasks: [], events: [], renewals: [], dueItems: [] }, TODAY), 0, "an event is not something to do");
+  var ag = Cal.agenda({ google: [{ title: "Past", allDay: true, date: "2026-10-20" }], tasks: [], events: [], renewals: [], dueItems: [] }, TODAY, "all");
+  assert.strictEqual(ag.overdue.length, 0, "a Google event that has happened is not overdue");
+});
+
+test("the Overview's to-do widget shows the same to-dos in a sensible order, with a count of the rest", function () {
+  var tasks = [t({ id: "later", due: "2026-11-05" }), t({ id: "inbox", due: "" }), t({ id: "late", due: "2026-10-20" }), t({ id: "now", due: TODAY }), t({ id: "done", status: "done", due: TODAY })];
+  var w = Cal.widgetTasks(tasks, TODAY, 3);
+  assert.deepStrictEqual(w.rows.map(function (x) { return x.id; }), ["late", "now", "later"]);
+  assert.strictEqual(w.more, 1);
+  assert.deepStrictEqual(Cal.widgetTasks([], TODAY, 3), { rows: [], more: 0 });
+});
+
+test("the widget is owner-only on the server, leaves the browser's own list alone, and never imports without a click", function () {
+  var js = fs.readFileSync(path.join(root, "todo-widget.js"), "utf8");
+  var html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  assert.ok(/who\.onChange/.test(js) && /w\.owner === true/.test(js), "only the owner is switched to the server list");
+  assert.ok(!/removeItem|localStorage\.clear/.test(js), "nothing is ever removed from the browser");
+  assert.ok(/IMPORTED_KEY/.test(js) && /IMPORT_PROGRESS_KEY/.test(js), "a retry after a failure carries on from where it stopped");
+  var onImport = js.slice(js.indexOf("function offerImport"), js.indexOf("function runImport"));
+  assert.ok(/addEventListener\("click"/.test(onImport) && !/runImport\(local[^)]*\);\s*$/m.test(onImport.replace(/go\.addEventListener[^\n]*\n/, "")), "the import runs from a button, not on load");
+  assert.ok(/id="todo-sub"/.test(html) && /id="todo-import"/.test(html));
+  assert.ok(html.indexOf("calendar-logic.js") > 0 && html.indexOf("calendar-logic.js") < html.indexOf("todo-widget.js"), "the rules load before the widget");
+  assert.ok(!/innerHTML/.test(js.slice(js.indexOf("// ---- the owner's list"), js.indexOf("function initTodo"))), "the server-backed part builds the list the safe way");
+});
+
 test("the page: strict CSP, no inline script or style, no innerHTML, scripts in the right order, the menu has the item", function () {
   var html = fs.readFileSync(path.join(root, "calendar.html"), "utf8");
   assert.ok(/Content-Security-Policy[^>]*script-src 'self'/.test(html) && /style-src 'self'/.test(html));
