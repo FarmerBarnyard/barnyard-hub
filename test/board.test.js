@@ -121,4 +121,17 @@ test("every tile on the page is in the board's catalogue, and the owner-only one
   L.CATALOGUE.forEach(function (c) { assert.strictEqual(overview.WIDGET_TITLE[c.id], c.title, c.id + " has the same name on the page and in the catalogue"); });
 });
 
+test("a tile that names a permission is hidden only when the session lists permissions and lacks it", function () {
+  var overview = require(path.join(root, "overview.js"));
+  var tile = { id: "assets", permission: "assets.view" };
+  var who = function (extra) { return Object.assign({ authenticated: true, owner: true }, extra); };
+  assert.strictEqual(overview.tileNeedsPermission(tile, who({ permissions: ["assets.view"] })), false, "has it");
+  assert.strictEqual(overview.tileNeedsPermission(tile, who({ permissions: ["calendar.view"] })), true, "lacks it");
+  assert.strictEqual(overview.tileNeedsPermission(tile, who({ permissions: [] })), true, "an empty list lacks everything");
+  assert.strictEqual(overview.tileNeedsPermission(tile, who({})), false, "no list yet: shown, as before");
+  assert.strictEqual(overview.tileNeedsPermission(tile, { authenticated: false, permissions: [] }), false, "not signed in: the page's own sign-in notice decides");
+  assert.strictEqual(overview.tileNeedsPermission({ id: "x" }, who({ permissions: [] })), false, "a tile with no permission is always offered");
+  assert.strictEqual(overview.tileNeedsPermission(tile, null), false);
+});
+
 console.log("\n" + passed + " tests passed");

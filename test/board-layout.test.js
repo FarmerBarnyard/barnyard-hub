@@ -323,4 +323,11 @@ test("a page can register its own tile, with its limits checked and forced insid
   assertValid(tiles, 12, "with the registered tile");
 });
 
+test("a registered tile may carry a permission id, kept only when it is a plain id", function () {
+  assert.strictEqual(B.register({ id: "backups", permission: "backups.view" }).permission, "backups.view");
+  assert.strictEqual(B.spec("backups").permission, "backups.view");
+  assert.strictEqual(B.register({ id: "backups", permission: "Not Valid!" }).permission, undefined, "an odd value is dropped");
+  assert.strictEqual(B.register({ id: "backups" }).permission, undefined, "and so is a missing one");
+});
+
 console.log("\n" + passed + " passed");

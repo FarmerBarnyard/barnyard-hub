@@ -250,7 +250,16 @@
     return !!session && session.authenticated === true && session.owner === false && OWNER_ONLY.indexOf(id) !== -1;
   }
 
+  // A tile that names a permission is hidden when the session says which permissions the person has (the `permissions`
+  // list from /auth/session, once it exists) and the list does not include it. No list, or no permission on the tile:
+  // shown.
+  function tileNeedsPermission(tile, session) {
+    return !!(tile && typeof tile.permission === "string" && session && session.authenticated === true &&
+      Array.isArray(session.permissions) && session.permissions.indexOf(tile.permission) === -1);
+  }
+
   var helpers = {
+    tileNeedsPermission: tileNeedsPermission,
     heroHeadline: heroHeadline, heroSubline: heroSubline, openItems: openItems, waitingItems: waitingItems, flightItems: flightItems,
     statusChips: statusChips, statusIssues: statusIssues, expiryRows: expiryRows, buildCapture: buildCapture, safeNotifyHref: safeNotifyHref, unreadCount: unreadCount, bellRows: bellRows, backupChip: backupChip, exportFileName: exportFileName,
     changedItemCount: changedItemCount, describeFeed: describeFeed, feedFromItems: feedFromItems, agoText: agoText, dueChip: dueChip,
@@ -648,7 +657,9 @@
     if (widgetRestricted(id, session)) return true;
     // A tile a page registers for itself (tile-kit.js) says in its own description whether it is the owner's.
     var tile = window.BarnyardBoard && window.BarnyardBoard.spec(id);
-    return !!(tile && tile.ownerOnly && session && session.authenticated === true && session.owner === false);
+    if (!tile || !session) return false;
+    if (tile.ownerOnly && session.authenticated === true && session.owner === false) return true;
+    return tileNeedsPermission(tile, session);
   }
 
   // The board (board.js) places the tiles on its grid and handles Customise. If its scripts did not load, the page

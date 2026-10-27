@@ -68,6 +68,9 @@
       minW: minW, minH: minH, maxW: maxW, maxH: maxH
     };
     if (entry.ownerOnly) clean.ownerOnly = true;
+    // An optional permission id (from the user manager): the tile is hidden when the signed-in person's permissions
+    // are known and do not include it. No permission set means it is always offered.
+    if (typeof entry.permission === "string" && /^[a-z0-9][a-z0-9._:-]{0,47}$/.test(entry.permission)) clean.permission = entry.permission;
     for (var i = 0; i < CATALOGUE.length; i++) if (CATALOGUE[i].id === clean.id) { CATALOGUE[i] = clean; return clean; }
     CATALOGUE.push(clean);
     return clean;
