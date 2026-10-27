@@ -84,6 +84,24 @@ test("normalize: valid choices are kept", function () {
   assert.strictEqual(s.foldBacklog, false);
 });
 
+test("normalize: the Overview board is null or a checked list of places on a 12-column grid", function () {
+  assert.strictEqual(Theme.normalize({}).board, null, "never customised");
+  assert.strictEqual(Theme.defaults().board, null);
+  var t = function (o) { var base = { id: "need", x: 0, y: 0, w: 6, h: 8 }; Object.keys(o || {}).forEach(function (k) { base[k] = o[k]; }); return base; };
+  var good = { v: 1, tiles: [t(), t({ id: "feed", x: 6 })] };
+  assert.deepStrictEqual(Theme.normalize({ board: good }).board, good, "a good board is kept");
+  var messy = Theme.normalize({ board: { v: 1, tiles: [t(), t(), t({ id: "bogus" }), t({ id: "todo", x: 11, w: 3 }), null, t({ id: "week", x: 1.5 }), t({ id: "links", h: 0 }), Object.assign(t({ id: "market", x: 3, w: 3, h: 3 }), { junk: "x" })] } }).board;
+  assert.deepStrictEqual(messy.tiles.map(function (x) { return x.id; }), ["need", "market"], "unknown, repeated, off-grid and malformed tiles are dropped");
+  assert.deepStrictEqual(messy.tiles[1], { id: "market", x: 3, y: 0, w: 3, h: 3 }, "extra fields are dropped");
+  [null, "x", 3, [], { v: 2, tiles: [t()] }, { v: 1 }, { v: 1, tiles: "no" }, { v: 1, tiles: [] }, { v: 1, tiles: [t({ w: 13 })] }].forEach(function (bad) {
+    assert.strictEqual(Theme.normalize({ board: bad }).board, null, JSON.stringify(bad));
+  });
+  assert.ok(JSON.stringify(Theme.normalize({ board: good })).length < 8192, "well inside the profile's size cap");
+  var a = Theme.normalize({ board: good }), b = Theme.normalize({ board: good });
+  a.board.tiles[0].x = 5;
+  assert.strictEqual(b.board.tiles[0].x, 0, "two settings objects do not share tiles");
+});
+
 test("normalize: the widget list keeps order, drops unknown and repeated ids, and appends new widgets", function () {
   var s = Theme.normalize({ widgets: [{ id: "todo", visible: false, size: 4 }, { id: "bogus", visible: true, size: 1 }, { id: "need", visible: true, size: 3 }, { id: "todo", visible: true, size: 1 }, null, { id: "week" }] });
   assert.deepStrictEqual(s.widgets.slice(0, 3).map(function (w) { return w.id; }), ["todo", "need", "week"]);
@@ -114,7 +132,7 @@ test("cookie: anything that does not validate is ignored, and layout keys never 
   assert.deepStrictEqual(Theme.decodePrefs(null), {});
   assert.deepStrictEqual(Theme.decodePrefs(new Array(300).join("t=navy&")), {}, "an oversized value is refused outright");
   var encoded = Theme.encodePrefs(Theme.normalize({ opsLayout: "list", foldBacklog: true }));
-  assert.ok(encoded.indexOf("opsLayout") === -1 && encoded.indexOf("widgets") === -1, "layout keys stay out of the cookie");
+  assert.ok(encoded.indexOf("opsLayout") === -1 && encoded.indexOf("widgets") === -1 && encoded.indexOf("board") === -1, "layout keys stay out of the cookie");
 });
 
 test("the pages keep to the CSP: no inline scripts, handlers or styles, and nothing remote", function () {
