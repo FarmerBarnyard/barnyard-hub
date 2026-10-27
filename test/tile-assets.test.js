@@ -114,7 +114,7 @@ test("a bad cost or an empty name is caught before anything is sent, naming the 
 
 test("the tile is described for the Overview board with the same field names as its catalogue", function () {
   var d = A.descriptor;
-  assert.strictEqual(d.id, "assets"); assert.strictEqual(d.ownerOnly, true);
+  assert.strictEqual(d.id, "assets"); assert.strictEqual(d.ownerOnly, true); assert.strictEqual(d.permission, "tile.assets");
   ["title", "about", "w", "h", "minW", "minH", "maxW", "maxH"].forEach(function (k) { assert.ok(d[k] !== undefined, k); });
   assert.ok(d.minW <= d.w && d.w <= d.maxW && d.minH <= d.h && d.h <= d.maxH);
 });

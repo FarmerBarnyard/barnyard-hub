@@ -109,4 +109,16 @@ test("every tile file follows the page rules: no innerHTML, no inline style, no 
   assert.ok(!/@import/.test(css), "tiles.css imports nothing");
 });
 
+test("the Overview loads the toolkit and every tile file before the board adopts them, and the stylesheet", function () {
+  var html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  var pos = function (re) { var m = re.exec(html); return m ? m.index : -1; };
+  var kit = pos(/src="tile-kit\.js/), board = pos(/src="board\.js/), overview = pos(/src="overview\.js/);
+  assert.ok(kit > -1 && kit < board && board < overview, "tile-kit.js comes first");
+  fs.readdirSync(root).filter(function (f) { return /^tile-.*\.js$/.test(f) && f !== "tile-kit.js"; }).forEach(function (f) {
+    var at = pos(new RegExp('src="' + f.replace(".", "\\.") + "[?\"]"));
+    assert.ok(at > kit && at < board, f + " is loaded on the Overview before the board");
+  });
+  assert.ok(/href="tiles\.css/.test(html), "the tiles' stylesheet is linked");
+});
+
 console.log("\n" + passed + " passed");
