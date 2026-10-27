@@ -1,0 +1,65 @@
+/* Monitoring page (monitoring.html). Colours come from the shell's tokens so every theme works. */
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.mo-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+#mon-root { max-width: 980px; display: grid; gap: 30px; margin-top: 8px; }
+.dim { color: var(--fg-dim); }
+
+.mo-strip { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); font-size: 15px; }
+.mo-strip b { font: 600 18px var(--font-display); color: var(--fg-strong); }
+.mo-strip.ok { background: var(--ok-soft); border-color: transparent; }
+.mo-strip.ok b { color: var(--ok); }
+.mo-strip.attn { background: var(--attn-soft); border-color: transparent; }
+.mo-strip.alert { background: var(--alert-soft); border-color: transparent; }
+.mo-strip.alert b { color: var(--alert); }
+
+.mo-flash { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; font-size: 14px; }
+.mo-flash[hidden] { display: none; }
+.mo-flash.ok { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+.mo-flash.alert { background: var(--alert-soft); border-color: transparent; color: var(--alert); }
+.mo-off { padding: 14px 16px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); }
+
+.mo-section .sec-head h2 { font: 600 17px var(--font-display); color: var(--fg-strong); }
+.mo-section p { color: var(--fg); font-size: 14px; }
+.mo-sub { font: 600 12px var(--font-body, inherit); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-dim); margin: 20px 0 6px; }
+
+.mo-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.mo-tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 13px 14px; display: grid; gap: 6px; align-content: start; border-left-width: 4px; }
+.mo-tile.ok { border-left-color: var(--ok); }
+.mo-tile.attn { border-left-color: var(--attn); }
+.mo-tile.alert { border-left-color: var(--alert); background: var(--alert-soft); }
+.mo-tile-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.mo-tile-top b { color: var(--fg-strong); font-weight: 600; }
+.mo-tile p { font-size: 13px; }
+.mo-why { color: var(--fg); }
+.mo-tile-foot a { font-size: 13px; }
+
+.mo-list { list-style: none; margin: 0; padding: 0; }
+.mo-list li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.mo-list li:first-child { border-top: 0; }
+.mo-list b { color: var(--fg-strong); font-weight: 600; }
+.mo-list li .btn { margin-left: auto; }
+.mo-links { margin-top: 10px; }
+
+.mo-email { display: grid; gap: 4px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; margin-bottom: 8px; }
+.mo-email.ok { background: var(--ok-soft); border-color: transparent; }
+.mo-email.attn { background: var(--attn-soft); border-color: transparent; }
+.mo-email b { color: var(--fg-strong); }
+.mo-note { margin-top: 6px; font-size: 13px; color: var(--fg); }
+
+.mo-row { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.mo-field { display: grid; gap: 4px; font-size: 13px; }
+.mo-input { font: inherit; font-size: 14px; color: var(--fg-strong); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; min-height: 34px; min-width: 0; }
+.mo-input:focus-visible, .mo-check input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mo-row .mo-input[type="email"] { width: min(320px, 100%); }
+.mo-hours { display: grid; gap: 10px; justify-items: start; }
+.mo-check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.mo-check input { width: 16px; height: 16px; accent-color: var(--accent); }
+.mo-days { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.mo-day { font-size: 13px; }
+
+@media (max-width: 640px) {
+  .content { padding-left: 16px; padding-right: 16px; }
+  .mo-input, .mo-hours .btn, .mo-row .btn { min-height: 44px; }
+  .mo-tiles { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .mo-tile, .mo-strip { transition: none; } }
