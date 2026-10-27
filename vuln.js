@@ -602,7 +602,7 @@
       view: "current", summary: null, env: null, catalog: null, detail: null, envForm: null, importOpen: false, busy: false, banner: null,
       current: { q: "", priority: "", severity: "", state: "", all: false, item: "", page: 1 },
       history: { q: "", priority: "", severity: "", state: "", item: "", page: 1 },
-      catalogue: { q: "", zone: "", month: "", kev: false, page: 1, months: null, open: "" },
+      catalogue: { q: "", zone: "", month: "", severity: "", kev: false, page: 1, months: null, open: "" },
       historySummary: null,
       bulk: { ids: {}, all: false, panel: null }
     };
@@ -1008,13 +1008,16 @@
       var monthSel = select([["", "Any month (older ones listed)"]], A.month);
       monthSel.setAttribute("aria-label", "Month published");
       monthSel.addEventListener("change", function () { A.month = monthSel.value; A.page = 1; load(); });
+      var sev = select(severityOptions(), A.severity);
+      sev.setAttribute("aria-label", "Severity");
+      sev.addEventListener("change", function () { A.severity = sev.value; A.page = 1; load(); });
       var kevBox = el("label", "vn-check");
       var kev = input("checkbox");
       kev.checked = A.kev;
       kev.addEventListener("change", function () { A.kev = kev.checked; A.page = 1; load(); });
       kevBox.appendChild(kev);
       kevBox.appendChild(el("span", null, "Exploited only"));
-      bar.appendChild(q); bar.appendChild(zone); bar.appendChild(monthSel); bar.appendChild(kevBox);
+      bar.appendChild(q); bar.appendChild(zone); bar.appendChild(monthSel); bar.appendChild(sev); bar.appendChild(kevBox);
       host.appendChild(bar);
       host.appendChild(el("p", "vn-note", "Every public CVE, not only the ones that apply to you, newest first. Open one to read its record."));
       var listHost = el("div");
@@ -1056,7 +1059,7 @@
       }
 
       function load() {
-        api.search({ q: A.q, zone: A.zone, month: A.month, kev: A.kev, page: A.page, per: 25 }).then(function (res) {
+        api.search({ q: A.q, zone: A.zone, month: A.month, severity: A.severity, kev: A.kev, page: A.page, per: 25 }).then(function (res) {
           clear(listHost);
           if (!res.items.length) { listHost.appendChild(emptyBox("Nothing found", "No CVE matches that search.", null)); return; }
           var list = el("div", "vn-list");

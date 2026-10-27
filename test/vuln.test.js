@@ -521,6 +521,7 @@ test("severity filter: the choices carry the open counts, the filter reaches the
   assert.strictEqual(V.severityName("nope"), "");
   assert.strictEqual(V.queryString({ view: "current", severity: "critical", priority: "", page: 1 }), "?view=current&severity=critical&page=1");
   assert.strictEqual(V.queryString({ view: "current", severity: "" }), "?view=current");
+  assert.strictEqual(V.queryString({ q: "php", zone: "", month: "", severity: "unrated", kev: true, page: 1, per: 25 }), "?q=php&severity=unrated&kev=1&page=1&per=25", "the Catalogue search sends the severity too");
   assert.deepStrictEqual(V.bulkFilter({ severity: "high", priority: "", q: "" }), { view: "current", severity: "high" });
   assert.deepStrictEqual(V.bulkBody({ all: true }, { severity: "critical", priority: "P1" }, "", true), { filter: { view: "current", priority: "P1", severity: "critical" }, dryRun: true });
 });
