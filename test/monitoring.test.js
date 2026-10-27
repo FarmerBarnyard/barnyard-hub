@@ -143,4 +143,77 @@ test("the page keeps the hub's rules: strict CSP, no inline code, no innerHTML, 
   assert.ok(!/\.style\.cssText|setAttribute\("style"/.test(js));
 });
 
+function rp(over) { return Object.assign({ id: "rp_0123456789ab", server: "app02", label: "", createdAt: Date.parse("2026-10-28T01:00:00Z"), expiresAt: Date.parse("2027-10-28T01:00:00Z"), revoked: false, expired: false, lastSeen: NOW - 2 * MIN, interval: 60, reports: 5, state: "reporting",
+  report: { load: { l1: 0.4, cores: 8 }, mem: { usedPct: 41.5 }, disks: [{ mount: "/", usedPct: 52 }, { mount: "/data", usedPct: 88 }], uptime: 100000, services: [{ name: "cloudflared", up: true }, { name: "docker", up: false }], peers: [{ id: "vtt", ok: true, ms: 80 }, { id: "cld01", ok: false, ms: null }, { id: "x", ok: null, ms: null }] } }, over || {}); }
+
+test("uptime and the report lines read like a person would say them", function () {
+  assert.strictEqual(Mon.uptimeText(100000), "1 d 3 h");
+  assert.strictEqual(Mon.uptimeText(5400), "1 h 30 min");
+  assert.strictEqual(Mon.uptimeText(30), "1 min");
+  assert.strictEqual(Mon.uptimeText(-1), "");
+  var lines = Mon.reportLines(rp().report);
+  assert.deepStrictEqual(lines, ["Load 0.4 on 8 cores", "Memory 42% used", "Disk / 52% full", "Disk /data 88% full", "Up 1 d 3 h", "Services: cloudflared running, docker NOT running", "Can reach: vtt yes (80 ms), cld01 NO, x (not tested)"]);
+  assert.deepStrictEqual(Mon.reportLines(null), []);
+  assert.deepStrictEqual(Mon.reportLines({ load: null, mem: null, disks: [], uptime: null, services: [], peers: [] }), []);
+});
+
+test("a card per server: reporting, silent, waiting, expired, or no key, and how many more keys can be made", function () {
+  var cards = Mon.reporterCards([rp(), rp({ id: "rp_aaaaaaaaaaaa", server: "cld01", state: "silent", lastSeen: NOW - 10 * MIN }), rp({ id: "rp_bbbbbbbbbbbb", server: "vtt", state: "waiting", lastSeen: null, report: null })], NOW);
+  assert.deepStrictEqual(cards.map(function (c) { return c.id; }), ["app02", "cld01", "vtt"]);
+  assert.deepStrictEqual([cards[0].tone, cards[0].label], ["ok", "Reporting"]);
+  assert.ok(/Last report 2 min ago/.test(cards[0].line)); assert.strictEqual(cards[0].lines.length, 7);
+  assert.deepStrictEqual([cards[1].tone, cards[1].label], ["attn", "Silent"]); assert.ok(/may have stopped/.test(cards[1].line));
+  assert.strictEqual(cards[2].label, "Waiting for its first report"); assert.deepStrictEqual(cards[2].lines, []);
+  assert.deepStrictEqual(cards[0].keys, [{ id: "rp_0123456789ab", tail: "89ab", state: "reporting", text: "made 2026-10-28, expires 2027-10-28", canRevoke: true }]);
+  var none = Mon.reporterCards([], NOW);
+  assert.ok(none.every(function (c) { return c.label === "No key yet" && c.canMake && c.keys.length === 0; }));
+  var expired = Mon.reporterCards([rp({ state: "expired", expired: true })], NOW)[0];
+  assert.deepStrictEqual([expired.tone, expired.label, expired.canMake, expired.keys[0].canRevoke], ["alert", "Key expired", true, false]);
+  var revoked = Mon.reporterCards([rp({ state: "revoked", revoked: true })], NOW)[0];
+  assert.strictEqual(revoked.label, "No key yet"); assert.strictEqual(revoked.keys[0].text, "revoked");
+  var three = Mon.reporterCards([rp({ id: "rp_000000000001" }), rp({ id: "rp_000000000002" }), rp({ id: "rp_000000000003" })], NOW)[0];
+  assert.strictEqual(three.canMake, false, "three keys is the most");
+  var best = Mon.reporterCards([rp({ id: "rp_000000000001", lastSeen: NOW - 50 * MIN, state: "silent" }), rp({ id: "rp_000000000002", lastSeen: NOW - MIN })], NOW)[0];
+  assert.strictEqual(best.label, "Reporting", "the key that reported most recently decides");
+  assert.strictEqual(Mon.reporterCards(null, NOW).length, 3);
+});
+
+test("the key is shown as the two lines for the env file", function () {
+  assert.strictEqual(Mon.envLines("app02", "mr_0123456789ab_" + "A".repeat(32)), "BR_SERVER=app02\nBR_KEY=mr_0123456789ab_" + "A".repeat(32) + "\n");
+});
+
+test("what the reports are saying: only what is not fine, notices apart from alerts, in words", function () {
+  var rows = Mon.derivedRows([
+    { id: "rep-app02", name: "app02 reporter", grade: "notice", status: "down", detail: "silent", downSince: NOW - 20 * MIN },
+    { id: "res-cld01", name: "BARNYARDCLD01 disk or service", grade: "outage", status: "down", detail: "disk95|/|97", downSince: NOW - 5 * MIN },
+    { id: "power", name: "power", grade: "outage", status: "up", detail: "" },
+    { id: "warn-vtt", name: "vtt busy", grade: "notice", status: "unknown", detail: "" }
+  ], NOW);
+  assert.strictEqual(rows.length, 2);
+  assert.deepStrictEqual([rows[0].label, rows[0].tone], ["Notice", "attn"]);
+  assert.ok(/reporter service may have stopped/.test(rows[0].text) && /20 min/.test(rows[0].text));
+  assert.deepStrictEqual([rows[1].label, rows[1].tone], ["Alert", "alert"]);
+  assert.ok(/The disk \/ is 97% full\./.test(rows[1].text));
+  assert.deepStrictEqual(Mon.derivedRows(null, NOW), []);
+  assert.ok(/lost power or internet/.test(Mon.reasonText("power")));
+  assert.strictEqual(Mon.reasonText("svc|nginx|"), "The service nginx is not running.");
+  assert.strictEqual(Mon.reasonText("mem|-|97"), "Memory is 97% used.");
+  assert.strictEqual(Mon.reasonText("load|-|2.1"), "The load is 2.1 per core.");
+  assert.ok(/Cloudflare cannot reach it/.test(Mon.reasonText("server_up")));
+  assert.strictEqual(Mon.reasonText("nonsense"), "");
+});
+
+test("making or revoking a key fails in words", function () {
+  assert.ok(/already has three keys/.test(Mon.keyErrorText({ error: "too_many_keys" })));
+  assert.ok(/no longer exists/.test(Mon.keyErrorText({ error: "reporter_unknown" })));
+  assert.ok(/Sign in again/i.test(Mon.keyErrorText({ error: "recent_sign_in_required" })));
+  assert.ok(/not one of the servers/.test(Mon.keyErrorText({ error: "server_unknown" })));
+});
+
+test("the page never keeps the key: it is built into a read-only box, not stored", function () {
+  var js = fs.readFileSync(path.join(root, "monitoring.js"), "utf8");
+  assert.ok(!/localStorage|sessionStorage|indexedDB|document\.cookie/.test(js), "nothing is written to browser storage");
+  assert.ok(/delete r\.body\.key/.test(js), "the status copy kept in the page drops the key");
+});
+
 console.log("\n" + passed + " tests passed");
