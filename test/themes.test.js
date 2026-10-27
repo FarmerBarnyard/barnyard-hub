@@ -172,4 +172,27 @@ test("the bundled fonts exist and are woff2", function () {
   });
 });
 
+test("the free-limit banner is raised only by a 503 daily_limit_reached from the API", function () {
+  // A promise that settles at once, so this plain-Node test can stay synchronous.
+  function now(v) { return { then: function (ok) { var r = ok ? ok(v) : v; return r && typeof r.then === "function" ? r : now(r); } }; }
+  function reply(status, url, body) { return { status: status, url: url, clone: function () { return { json: function () { return now(body); } }; } }; }
+  var raised = 0, answers = [];
+  var saved = globalThis.fetch;
+  globalThis.fetch = function () { return now(answers.shift()); };
+  try {
+    Theme._limit.watch(function () { raised++; });
+    var wrapped = globalThis.fetch;
+    Theme._limit.watch(function () { raised += 100; });
+    assert.strictEqual(globalThis.fetch, wrapped, "watching twice does not wrap it twice");
+    var API = "https://api.barnyard.site/ops/board";
+    answers = [reply(503, API, { error: "daily_limit_reached" })]; globalThis.fetch(API);
+    assert.strictEqual(raised, 1);
+    answers = [reply(503, API, { error: "something_else" })]; globalThis.fetch(API);
+    answers = [reply(200, API, { error: "daily_limit_reached" })]; globalThis.fetch(API);
+    answers = [reply(503, "https://example.org/x", { error: "daily_limit_reached" })]; globalThis.fetch("https://example.org/x");
+    assert.strictEqual(raised, 1, "another error, a 200, or another site does not raise it");
+  } finally { globalThis.fetch = saved; }
+  assert.ok(/barnyard-limit-banner/.test(read("themes.js")) && !/innerHTML/.test(read("themes.js")));
+});
+
 console.log("\n" + passed + " tests passed");
