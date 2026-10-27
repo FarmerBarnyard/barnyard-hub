@@ -1,9 +1,14 @@
-// A purely client-side to-do list widget shown in the glance row alongside
-// weather/calendar/quick-links (see index.html). This project has no
-// backend for user-specific data (see glance-widgets.js/live-prices.js's
-// own file headers) -- the full list (text + done state) is persisted to
-// the browser's own localStorage under a namespaced key, and never leaves
-// the device. No network calls, no accounts.
+// The to-do list widget shown in the glance row alongside weather/calendar/quick-links (see index.html).
+//
+// Two modes:
+//   - For anyone but the hub owner (and for the owner until the page knows they are the owner) it is purely client-side:
+//     the full list (text + done state) is persisted to the browser's own localStorage under a namespaced key, and never
+//     leaves the device. No network calls, no accounts.
+//   - For the hub owner it shows the SAME to-dos as the Calendar page (the Planner on the server, GET /planner/all), so
+//     they follow the owner across devices and are part of the hub backup. The first time, if the browser still holds
+//     to-dos of its own, the widget offers a clearly labelled one-time import; the browser copy is left exactly as it was,
+//     nothing is deleted, and nothing is imported without a click.
+// Dates are the owner's own day. The widget text is rendered with textContent, never innerHTML.
 (function () {
   "use strict";
 
@@ -282,6 +287,200 @@
     }
   }
 
+  // ---- the owner's list: the Planner on the server ------------------------------------------
+
+  var PLAN_API = "https://api.barnyard.site/planner";
+  var IMPORTED_KEY = "barnyard-todos-imported";            // "1" once the browser's own list has been brought in
+  var IMPORT_PROGRESS_KEY = "barnyard-todos-import-count";  // how many were brought in so far (so a retry never duplicates)
+  var WIDGET_MAX = 12;
+  var serverMode = false;
+  var serverTasks = [];
+
+  function logic() { return typeof window !== "undefined" ? window.BarnyardCalendarLogic : null; }
+  function localToday() {
+    var d = new Date();
+    return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+  }
+  function subEl() { return document.getElementById("todo-sub"); }
+  function importEl() { return document.getElementById("todo-import"); }
+  function readKey(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+  function writeKey(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { /* the import just asks again */ } }
+
+  function plannerCall(path, body) {
+    var opts = { method: body === undefined ? "GET" : "POST", credentials: "include", referrerPolicy: "no-referrer", headers: {} };
+    if (body !== undefined) {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(Object.assign({ today: localToday() }, body));
+    }
+    return fetch(PLAN_API + path, opts).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (data) {
+        if (!res.ok) {
+          var err = new Error((data && data.error) || "request_failed");
+          err.code = data && data.error;
+          throw err;
+        }
+        return data;
+      });
+    });
+  }
+
+  function srvMessage(text) {
+    var status = statusEl();
+    if (status) status.textContent = text || "";
+  }
+
+  function buildServerItemEl(task) {
+    var L = logic();
+    var li = document.createElement("li");
+    li.className = "todo-item";
+    li.dataset.todoId = task.id;
+    var checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "todo-checkbox";
+    checkbox.id = "todo-cb-" + task.id;
+    checkbox.addEventListener("change", function () { srvTick(task); });
+    var label = document.createElement("label");
+    label.setAttribute("for", checkbox.id);
+    label.className = "todo-text";
+    label.textContent = task.title;
+    li.appendChild(checkbox);
+    li.appendChild(label);
+    if (task.due && L) {
+      var late = task.due < localToday();
+      var due = document.createElement("span");
+      due.className = "todo-due" + (late ? " is-late" : "");
+      due.textContent = L.shortDate(task.due) + (task.time ? ", " + L.timeText(task.time) : "") + (late ? " (overdue)" : "");
+      li.appendChild(due);
+    }
+    var removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "todo-remove-btn";
+    removeBtn.setAttribute("aria-label", "Remove \"" + task.title + "\"");
+    removeBtn.textContent = "×";
+    removeBtn.addEventListener("click", function () { srvRemove(task); });
+    li.appendChild(removeBtn);
+    return li;
+  }
+
+  function srvRender() {
+    var list = listEl(), empty = emptyEl(), L = logic();
+    if (!list || !L) return;
+    var shown = L.widgetTasks(serverTasks, localToday(), WIDGET_MAX);
+    while (list.firstChild) list.removeChild(list.firstChild);
+    shown.rows.forEach(function (t) { list.appendChild(buildServerItemEl(t)); });
+    if (empty) {
+      empty.textContent = shown.rows.length ? "" : "No tasks yet";
+      if (shown.more) {
+        empty.textContent = shown.more + " more on the Calendar. ";
+        var a = document.createElement("a");
+        a.href = "calendar.html#todos";
+        a.textContent = "Open the Calendar";
+        empty.appendChild(a);
+      }
+    }
+  }
+
+  function srvLoad() {
+    return plannerCall("/all").then(function (r) {
+      serverTasks = Array.isArray(r.tasks) ? r.tasks : [];
+      srvMessage("");
+      srvRender();
+    }, function () { srvMessage("Couldn’t load your to-dos just now."); });
+  }
+
+  function srvPut(task) {
+    var i = serverTasks.findIndex(function (x) { return x.id === task.id; });
+    if (i >= 0) serverTasks[i] = task; else serverTasks.push(task);
+  }
+
+  function srvAdd(text) {
+    var L = logic();
+    var q = L ? L.parseQuick(text, localToday()) : { title: String(text || "").trim(), due: "", time: "", recur: "", priority: "normal" };
+    if (!q.title) return;
+    plannerCall("/task", { title: q.title.slice(0, MAX_TEXT_LENGTH), due: q.due, time: q.time, recur: q.recur, priority: q.priority }).then(function (r) {
+      srvPut(r.task);
+      srvMessage("");
+      srvRender();
+    }, function (e) { srvMessage(e.code === "secret_detected" ? "That looks like a secret, so it wasn’t saved." : "Couldn’t save that just now."); });
+  }
+
+  function srvTick(task) {
+    plannerCall("/task/done", { id: task.id, done: true }).then(function (r) {
+      srvPut(r.task);
+      srvMessage(r.advanced ? "Done. It comes back on its next date." : "");
+      srvRender();
+    }, function () { srvMessage("Couldn’t tick that just now."); srvRender(); });
+  }
+
+  function srvRemove(task) {
+    plannerCall("/task/delete", { id: task.id }).then(function () {
+      serverTasks = serverTasks.filter(function (x) { return x.id !== task.id; });
+      srvRender();
+      var input = inputEl();
+      if (input) input.focus();
+    }, function () { srvMessage("Couldn’t remove that just now."); });
+  }
+
+  // The one-time, clearly labelled import of this browser's own list. Nothing is deleted from the browser, and it is only
+  // done when asked. The count of those already brought in is kept, so a retry after a failure never duplicates.
+  function offerImport() {
+    var box = importEl();
+    if (!box) return;
+    while (box.firstChild) box.removeChild(box.firstChild);
+    var local = loadTodos();
+    if (!local.length || readKey(IMPORTED_KEY) === "1") { box.hidden = true; return; }
+    box.hidden = false;
+    var p = document.createElement("p");
+    p.textContent = "You have " + local.length + (local.length === 1 ? " to-do" : " to-dos") + " saved only in this browser. Bring " + (local.length === 1 ? "it" : "them") + " into your calendar to-dos so they follow you to other devices. Your browser copy is left as it is.";
+    var go = document.createElement("button");
+    go.type = "button";
+    go.className = "todo-add-btn";
+    go.textContent = "Import them";
+    var later = document.createElement("button");
+    later.type = "button";
+    later.className = "todo-remove-btn";
+    later.textContent = "Not now";
+    later.addEventListener("click", function () { box.hidden = true; });
+    go.addEventListener("click", function () { runImport(local, go, later); });
+    box.appendChild(p);
+    box.appendChild(go);
+    box.appendChild(later);
+  }
+
+  function runImport(local, goBtn, laterBtn) {
+    goBtn.disabled = laterBtn.disabled = true;
+    var start = Math.min(local.length, Math.max(0, parseInt(readKey(IMPORT_PROGRESS_KEY) || "0", 10) || 0));
+    var i = start;
+    function next() {
+      if (i >= local.length) {
+        writeKey(IMPORTED_KEY, "1");
+        srvMessage("Imported " + local.length + (local.length === 1 ? " to-do" : " to-dos") + ". Your browser copy is unchanged.");
+        importEl().hidden = true;
+        return srvLoad();
+      }
+      var item = local[i];
+      return plannerCall("/task", { title: item.text }).then(function (r) {
+        return item.done ? plannerCall("/task/done", { id: r.task.id, done: true }) : null;
+      }).then(function () { i++; writeKey(IMPORT_PROGRESS_KEY, String(i)); return next(); });
+    }
+    next().catch(function () {
+      srvMessage("Imported " + i + " of " + local.length + " before something went wrong. Press Import again to carry on from there.");
+      goBtn.disabled = laterBtn.disabled = false;
+      srvLoad();
+    });
+  }
+
+  function enterServerMode() {
+    if (serverMode || !logic()) return;
+    serverMode = true;
+    var sub = subEl();
+    if (sub) sub.textContent = "Saved on your account, same as the Calendar";
+    var list = listEl();
+    if (list) while (list.firstChild) list.removeChild(list.firstChild);
+    srvLoad().then(offerImport);
+    setInterval(function () { if (serverMode && !document.hidden) srvLoad(); }, 120000);
+  }
+
   function initTodo() {
     var form = document.getElementById("todo-form");
     if (!form || !listEl()) return;
@@ -293,10 +492,17 @@
       e.preventDefault();
       var input = inputEl();
       if (!input) return;
-      addTodo(input.value);
+      if (serverMode) srvAdd(input.value); else addTodo(input.value);
       input.value = "";
       input.focus();
     });
+
+    // The owner sees the Calendar's to-dos instead (and is offered the one-time import). Anyone else, and the owner until the
+    // page knows who they are, keeps the browser-only list above.
+    var T = window.BarnyardTheme;
+    if (T && T.who && typeof T.who.onChange === "function") {
+      T.who.onChange(function (w) { if (w && w.owner === true) enterServerMode(); });
+    }
 
     // Without this, two open tabs silently clobber each other: Tab A holds
     // a stale in-memory `todos` array, and if Tab B adds/changes a task,
@@ -309,6 +515,7 @@
       // e.key is null when storage was cleared entirely (e.g. devtools
       // "Clear site data"), which should also resync us to an empty list.
       if (e.key !== STORAGE_KEY && e.key !== null) return;
+      if (serverMode) return;   // the owner's list is on the server, not in storage
       todos = loadTodos();
       renderTodos();
     });
