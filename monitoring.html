@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Monitoring &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=61714599">
+<link rel="stylesheet" href="monitoring.css?v=440f8243">
+<script src="themes.js?v=70f6889a"></script>
+</head>
+<body data-shell="monitor" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Monitoring</h1>
+      <p>Whether the servers and sites are up, who gets told when they are not, and where to look when something needs fixing. Checks run every 5 minutes from the Worker.</p>
+    </div>
+    <div class="mo-tools">
+      <button type="button" class="btn btn-sm" id="mon-check">Check now</button>
+      <button type="button" class="btn btn-sm btn-quiet" id="mon-refresh">Refresh</button>
+      <span class="dim" id="mon-stamp"></span>
+    </div>
+  </div>
+  <div id="mon-root" aria-live="polite">
+    <p class="dim">Loading&hellip;</p>
+  </div>
+</main>
+
+<script src="shell.js?v=76399d82"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="monitoring.js?v=01f88ea6"></script>
+</body>
+</html>
