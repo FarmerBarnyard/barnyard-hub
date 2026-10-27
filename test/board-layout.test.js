@@ -65,7 +65,7 @@ test("an uncustomised viewer gets the page's arrangement: tiles in order, wrappi
   assertValid(tiles, 12, "default"); assertCompact(tiles, 12, "default");
   assert.strictEqual(boxes(tiles), [
     "need@0,0 6x8", "feed@6,0 6x8",
-    "flight@0,8 3x7", "market@3,8 3x3", "weather@6,8 3x5", "week@9,8 3x5",
+    "flight@0,8 3x7", "market@3,8 3x4", "weather@6,8 3x5", "week@9,8 3x5",
     "todo@0,15 3x6", "links@0,21 12x3"
   ].join(" | "), "same order, same widths");
   assert.deepStrictEqual(B.readingOrder(tiles), DEFAULT_LIST.map(function (e) { return e.id; }), "reading order is the list's order");
@@ -145,7 +145,7 @@ test("a hidden tile leaves a gap that closes; a shown one goes in the first free
   assertValid(back, 12, "added"); assertCompact(back, 12, "added");
   assert.ok(B.find(back, "need"), "it is back");
   assert.strictEqual(B.add(back, "need").length, back.length, "adding what is there changes nothing");
-  assert.strictEqual(B.add(back, "bogus").length, back.length, "an unknown tile is ignored");
+  assert.strictEqual(B.add(back, "Not A Tile!").length, back.length, "an unknown tile is ignored");
 });
 
 test("fitting a tile to its content sets its height inside its limits", function () {
@@ -182,7 +182,7 @@ test("a saved board is checked: unknown tiles, repeats, bad numbers and bad shap
   assert.strictEqual(B.normalizeBoard({ v: 1, tiles: "no" }), null);
   assert.strictEqual(B.normalizeBoard({ v: 1, tiles: [] }), null, "nothing usable");
   var n = B.normalizeBoard({ v: 1, tiles: [
-    { id: "need", x: 0, y: 0, w: 99, h: 99 }, { id: "need", x: 1, y: 1, w: 3, h: 3 }, { id: "bogus", x: 0, y: 0, w: 1, h: 1 },
+    { id: "need", x: 0, y: 0, w: 99, h: 99 }, { id: "need", x: 1, y: 1, w: 3, h: 3 }, { id: "Not A Tile!", x: 0, y: 0, w: 1, h: 1 },
     { id: "feed", x: "a", y: 0, w: 6, h: 6 }, null, { id: "todo", x: 11, y: 0, w: 3, h: 6 }
   ] });
   assertValid(n, 12, "normalised");
@@ -210,6 +210,18 @@ test("the layout to show: saved places for shown tiles, new tiles in free space,
   assertValid(eff2, 12);
   assert.strictEqual(boxes(B.effective(null, DEFAULT_LIST)), boxes(B.fromWidgets(DEFAULT_LIST)), "no saved board: the default");
   assert.strictEqual(boxes(B.effective({ junk: 1 }, DEFAULT_LIST)), boxes(B.fromWidgets(DEFAULT_LIST)), "a bad saved board: the default");
+});
+
+test("a tile a page registers itself (not in the widgets list) shows only when the saved board has it, and never goes into the list", function () {
+  var base = B.fromWidgets(DEFAULT_LIST);
+  var withExtra = B.add(base, "side-tile");
+  var board = B.toBoard(withExtra);
+  assert.strictEqual(B.find(B.effective(board, DEFAULT_LIST), "side-tile"), null, "not shown unless the page allows it");
+  var eff = B.effective(board, DEFAULT_LIST, null, ["side-tile"]);
+  assert.ok(B.find(eff, "side-tile"), "shown when allowed and saved");
+  assertValid(eff, 12, "with the extra tile");
+  assert.strictEqual(B.find(B.effective(B.toBoard(base), DEFAULT_LIST, null, ["side-tile"]), "side-tile"), null, "and it is never added by itself");
+  assert.ok(!B.toWidgets(withExtra, DEFAULT_LIST).some(function (e) { return e.id === "side-tile"; }), "it is saved in the board only");
 });
 
 test("the widgets list that matches a layout: shown tiles in reading order, hidden ones after, widths mapped to 1, 2 or 4", function () {
@@ -282,6 +294,40 @@ test("a move to a place and then back is stable: dropping a tile where it alread
     var a = B.find(tiles, s.id);
     assert.strictEqual(boxes(B.compact(B.move(tiles, s.id, a.x, a.y))), boxes(tiles), "dropping " + s.id + " in place");
   });
+});
+
+// These two add to the catalogue, so they run last.
+test("a tile the catalogue does not list still gets a middling size, so it never vanishes from the page", function () {
+  var list = DEFAULT_LIST.concat([{ id: "brand-new", visible: true, size: 1 }]);
+  var tiles = B.fromWidgets(list);
+  var added = B.find(tiles, "brand-new");
+  assert.ok(added, "it is on the board");
+  assert.ok(added.w >= 2 && added.h >= 3);
+  assertValid(B.compact(tiles), 12, "with a tile the catalogue has not heard of");
+  assert.strictEqual(B.spec("Not A Tile!"), null, "but something that is not a tile id is still refused");
+  assert.strictEqual(B.spec("brand-new").generic, true);
+});
+
+test("a page can register its own tile, with its limits checked and forced inside the grid", function () {
+  assert.strictEqual(B.register(null), null);
+  assert.strictEqual(B.register({ id: "Bad Id" }), null);
+  var r = B.register({ id: "backups", title: "Backups", about: "How the last backups went.", w: 99, h: 0, minW: 4, minH: 3, maxW: 99, maxH: 99, ownerOnly: true });
+  assert.deepStrictEqual([r.w, r.h, r.minW, r.maxW, r.minH, r.maxH, r.ownerOnly], [12, 3, 4, 12, 3, 40, true]);
+  assert.strictEqual(B.spec("backups").title, "Backups");
+  assert.ok(B.CATALOGUE.some(function (c) { return c.id === "backups"; }), "it is in the catalogue");
+  var again = B.register({ id: "backups", title: "Backups (new)", w: 4, h: 4 });
+  assert.strictEqual(B.CATALOGUE.filter(function (c) { return c.id === "backups"; }).length, 1, "registering again replaces it");
+  assert.strictEqual(B.spec("backups").title, "Backups (new)");
+  assert.ok(again.minW >= 1 && again.w >= again.minW);
+  var tiles = B.add(B.fromWidgets(DEFAULT_LIST), "backups");
+  assertValid(tiles, 12, "with the registered tile");
+});
+
+test("a registered tile may carry a permission id, kept only when it is a plain id", function () {
+  assert.strictEqual(B.register({ id: "backups", permission: "backups.view" }).permission, "backups.view");
+  assert.strictEqual(B.spec("backups").permission, "backups.view");
+  assert.strictEqual(B.register({ id: "backups", permission: "Not Valid!" }).permission, undefined, "an odd value is dropped");
+  assert.strictEqual(B.register({ id: "backups" }).permission, undefined, "and so is a missing one");
 });
 
 console.log("\n" + passed + " passed");
