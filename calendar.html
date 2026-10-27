@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex">
 <title>Calendar &middot; Barnyard</title>
 <link rel="stylesheet" href="shell.css?v=61714599">
-<link rel="stylesheet" href="calendar.css?v=54563178">
+<link rel="stylesheet" href="calendar.css?v=ecb7576c">
 <script src="themes.js?v=01f63350"></script>
 </head>
 <body data-shell="calendar" data-wide>
@@ -17,13 +17,21 @@
   <div class="page-head">
     <div>
       <h1>Calendar</h1>
-      <p>Everything that runs out or comes due, in one place: secrets, keys, tokens, the domain, licences and the Ops items with a date. <a href="index.html">Back to the overview</a></p>
+      <p>Your to-dos, your own events, and everything that runs out or comes due: secrets, keys, the domain, licences and the Ops items with a date. Microsoft 365 and Outlook calendars are not connected. <a href="index.html">Back to the overview</a></p>
     </div>
     <div class="cal-tools">
-      <button type="button" class="btn btn-primary btn-sm" id="cal-add">Add a renewal</button>
+      <button type="button" class="btn btn-sm" id="cal-add-event">Add an event</button>
+      <button type="button" class="btn btn-sm" id="cal-add-renewal">Add a renewal</button>
       <button type="button" class="btn btn-sm" id="cal-ics">Download calendar (.ics)</button>
     </div>
   </div>
+
+  <form class="cal-quick" id="cal-quick" hidden>
+    <label class="cal-quick-l" for="cal-quick-title">Add a to-do</label>
+    <input type="text" class="cal-input" id="cal-quick-title" maxlength="200" autocomplete="off" placeholder="What needs doing?">
+    <input type="date" class="cal-input cal-quick-date" id="cal-quick-date" aria-label="Date (optional)">
+    <button type="submit" class="btn btn-primary btn-sm">Add</button>
+  </form>
 
   <div class="cal-bar">
     <div class="cal-tabs" role="tablist" aria-label="Calendar views" id="cal-tabs"></div>
@@ -32,8 +40,8 @@
       <button type="button" class="btn btn-sm" id="cal-today">Today</button>
       <button type="button" class="btn btn-sm" id="cal-next" aria-label="Next month">&rarr;</button>
     </div>
-    <label class="cal-filter">Show
-      <select id="cal-kind" aria-label="Filter by kind"></select>
+    <label class="cal-filter">Renewals
+      <select id="cal-kind" aria-label="Show renewals of one kind"></select>
     </label>
   </div>
 
@@ -41,7 +49,12 @@
     <p class="dim">Loading&hellip;</p>
   </div>
 
-  <p class="cal-foot dim" id="cal-foot"></p>
+  <div class="cal-toast" id="cal-toast" role="status" hidden></div>
+
+  <div class="cal-foot dim">
+    <p><b>Where this lives.</b> Your to-dos and events are kept on the server (a Durable Object in your Cloudflare account), and renewals are Ops board items. Clearing this browser loses nothing, and all of it is in the hub&rsquo;s backup (Settings, Your data).</p>
+    <p><b>Only in this browser:</b> the view and renewal filter you last used, and a copy of the lists that lets this page open at once while the latest loads. Keys: <kbd>t</kbd> today, <kbd>n</kbd> new to-do, <kbd>e</kbd> new event, <kbd>r</kbd> new renewal, &larr; &rarr; change month, <kbd>Esc</kbd> closes details.</p>
+  </div>
 
   <aside class="cal-drawer" id="cal-drawer" role="dialog" aria-modal="false" aria-labelledby="cal-drawer-title" hidden>
     <div class="cal-drawer-head">
@@ -54,6 +67,7 @@
 
 <script src="shell.js?v=76399d82"></script>
 <script src="auth-gate.js?v=a1b7693a"></script>
-<script src="calendar.js?v=36d79984"></script>
+<script src="calendar-logic.js?v=ad34a0f0"></script>
+<script src="calendar.js?v=09e29314"></script>
 </body>
 </html>

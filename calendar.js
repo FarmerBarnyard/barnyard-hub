@@ -1,304 +1,125 @@
-// The Calendar page (calendar.html): everything that runs out or comes due, in one place.
+// The Calendar page (calendar.html): the owner's daily planner. To-dos, their own events, renewals (secrets, keys, tokens,
+// the domain ...) and the Ops items with a Due date, on one calendar.
 //
-// Reads GET /hub/renewals (owner only; see ClaudeRepo's cloudflare-worker/src/hub-routes.js):
-//   renewals   every Ops board item with the target "renewal" (secrets, keys, tokens, the domain, licences ...) and the
-//              keys that expire, soonest first, then the ones that still need a date
-//   dueItems   the other open Ops items that have a Due date
+// Reads (all owner only; see ClaudeRepo's cloudflare-worker README):
+//   GET /hub/renewals   renewals (Ops board items with the target "renewal", and keys that expire) and dueItems (other dated Ops items)
+//   GET /planner/all    the owner's to-dos and own events
+// Writes: /planner/* for to-dos and events; a renewal is an Ops board item, written through the Ops board's own API (/ops/items).
 //
-// Where the data lives: renewals are Ops board items, kept on the server in the board's Durable Object, so clearing this
-// browser loses nothing, and they are part of the hub's backup (GET /hub/export). This page keeps only two small
-// preferences in this browser (the last view and the kind filter), and says so at the foot of the page.
-// Adding or editing a renewal talks to the Ops board's own API (POST/PATCH /ops/items), the same one the Ops board uses.
+// Where the data lives: to-dos and events in the Planner Durable Object on Cloudflare, renewals in the Ops board's Durable
+// Object; both are server-side, so clearing this browser loses nothing, and both are in the hub's backup (GET /hub/export).
+// Browser-only, and said so on the page: the last view and renewal filter (barnyard-calendar-prefs) and a copy of the lists
+// (barnyard-calendar-cache) that lets the page open at once while the server answers.
 //
 // Everything from the server reaches the page through textContent, never innerHTML. The page's CSP has no
-// 'unsafe-inline' for scripts or styles.
-//
-// Layout of this file: 1. pure helpers (exported for test/calendar.test.js; no DOM, no network)
-//                      2. data   3. rendering   4. events
+// 'unsafe-inline' for scripts or styles. The rules (dates, repeats, grouping, the .ics file, form checks) are in
+// calendar-logic.js, which test/calendar.test.js covers.
 
 (function () {
   "use strict";
+  if (typeof document === "undefined" || !window.BarnyardCalendarLogic) return;
+  var L = window.BarnyardCalendarLogic;
 
-  var API = "https://api.barnyard.site/hub";
-  var OPS = "https://api.barnyard.site/ops";
-  var POLL_MS = 300000;
+  var HUB_API = "https://api.barnyard.site/hub";
+  var PLAN_API = "https://api.barnyard.site/planner";
+  var OPS_API = "https://api.barnyard.site/ops";
+  var POLL_MS = 120000;
   var PREF_KEY = "barnyard-calendar-prefs";
+  var CACHE_KEY = "barnyard-calendar-cache";
+  var ACTIVE_VIEWS = L.VIEWS.filter(function (v) { return v[0] !== "week"; });
 
-  // ---- 1. pure helpers ------------------------------------------------------
-
-  var KINDS = [["secret", "Secret"], ["key", "Key"], ["token", "Token"], ["certificate", "Certificate"], ["domain", "Domain"], ["licence", "Licence"], ["account", "Account"], ["other", "Other"]];
-  var STATES = [["known", "Date is known"], ["estimated", "Date is an estimate"], ["planned", "Planned rotation date"], ["needed", "Date still needed"], ["auto", "Renews itself"]];
-  var STATE_BADGE = { known: "", estimated: "Estimated", planned: "Planned", needed: "Date needed", auto: "Renews itself" };
-  var VIEWS = [["today", "Today"], ["month", "Month"], ["next", "Next up"], ["nodate", "No date yet"]];
-  var DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  var MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-  function pad(n) { return (n < 10 ? "0" : "") + n; }
-  function kindTitle(k) { for (var i = 0; i < KINDS.length; i++) if (KINDS[i][0] === k) return KINDS[i][1]; return "Other"; }
-
-  // Local date parts as YYYY-MM-DD (the person's own day, not UTC).
-  function ymd(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
-  // A real calendar date (2026-02-30 is not one, even though Date.UTC would roll it over).
-  function isYmd(s) {
-    if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-    var d = new Date(utc(s));
-    return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()) === s;
-  }
-  function utc(s) { var p = s.split("-"); return Date.UTC(+p[0], +p[1] - 1, +p[2]); }
-  function daysBetween(fromYmd, toYmd) { return Math.round((utc(toYmd) - utc(fromYmd)) / 86400000); }
-  function addDays(s, n) { var d = new Date(utc(s) + n * 86400000); return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()); }
-
-  // "overdue by 3 days", "today", "tomorrow", "in 12 days", "in about 11 months".
-  function relativeText(days) {
-    if (days === null || days === undefined || isNaN(days)) return "";
-    if (days < -1) return "overdue by " + (-days) + " days";
-    if (days === -1) return "overdue by 1 day";
-    if (days === 0) return "today";
-    if (days === 1) return "tomorrow";
-    if (days <= 60) return "in " + days + " days";
-    if (days < 700) return "in about " + Math.round(days / 30.4) + " months";
-    return "in about " + (Math.round(days / 36.5) / 10) + " years";
-  }
-
-  // How loud a renewal is today: red inside a week or overdue, amber inside a month, otherwise calm. A date still
-  // needed, or one that renews itself, has no urgency to show.
-  function urgency(entry, today) {
-    if (entry.type === "item") {
-      var di = daysBetween(today, entry.due);
-      return di < 0 ? "alert" : di <= 3 ? "attn" : "";
-    }
-    if (!entry.due || entry.state === "needed" || entry.state === "auto") return "";
-    var d = daysBetween(today, entry.due);
-    return d <= 7 ? "alert" : d <= 30 ? "attn" : "ok";
-  }
-
-  // Renewals and the other dated Ops items as calendar entries, keyed by date.
-  function entriesByDate(renewals, dueItems) {
-    var map = {};
-    function put(date, e) { (map[date] = map[date] || []).push(e); }
-    (renewals || []).forEach(function (r) { if (isYmd(r.due)) put(r.due, { type: "renewal", id: r.id, label: r.label, kind: r.kind, state: r.state, due: r.due, ref: r }); });
-    (dueItems || []).forEach(function (d) { if (isYmd(d.due)) put(d.due, { type: "item", id: d.id, label: d.title, kind: "", state: "known", due: d.due, ref: d }); });
-    return map;
-  }
-
-  function filterKind(renewals, kind) {
-    if (!kind || kind === "all") return renewals || [];
-    return (renewals || []).filter(function (r) { return r.kind === kind; });
-  }
-
-  // The Today view's groups: what is overdue, what is due today, what falls in the next week.
-  function agenda(renewals, dueItems, today) {
-    var out = { overdue: [], today: [], week: [] };
-    var map = entriesByDate(renewals, dueItems);
-    Object.keys(map).sort().forEach(function (date) {
-      var d = daysBetween(today, date);
-      var bucket = d < 0 ? "overdue" : d === 0 ? "today" : d <= 7 ? "week" : null;
-      if (!bucket) return;
-      map[date].forEach(function (e) {
-        if (e.type === "renewal" && (e.state === "auto")) return;
-        out[bucket].push(e);
-      });
-    });
-    return out;
-  }
-
-  // The "Next up" list: dated renewals soonest first (overdue first of all), grouped under month headings.
-  function nextUp(renewals, today) {
-    var dated = (renewals || []).filter(function (r) { return isYmd(r.due) && r.state !== "auto"; });
-    dated.sort(function (a, b) { return a.due < b.due ? -1 : a.due > b.due ? 1 : a.label.localeCompare(b.label); });
-    var groups = [], last = null;
-    dated.forEach(function (r) {
-      var key = daysBetween(today, r.due) < 0 ? "Overdue" : MONTH_NAMES[+r.due.slice(5, 7) - 1] + " " + r.due.slice(0, 4);
-      if (!last || last.title !== key) { last = { title: key, items: [] }; groups.push(last); }
-      last.items.push(r);
-    });
-    return groups;
-  }
-
-  // Renewals with no date to act on: still needed, and the ones that renew themselves.
-  function noDate(renewals) {
-    var needed = [], auto = [];
-    (renewals || []).forEach(function (r) {
-      if (r.state === "auto") auto.push(r);
-      else if (!isYmd(r.due) || r.state === "needed") needed.push(r);
-    });
-    return { needed: needed, auto: auto };
-  }
-
-  // A month as weeks of seven days, Monday first. month is 0-11.
-  function monthGrid(year, month) {
-    var first = new Date(Date.UTC(year, month, 1));
-    var lead = (first.getUTCDay() + 6) % 7;
-    var start = Date.UTC(year, month, 1 - lead);
-    var weeks = [];
-    for (var w = 0; w < 6; w++) {
-      var row = [];
-      for (var i = 0; i < 7; i++) {
-        var d = new Date(start + (w * 7 + i) * 86400000);
-        row.push({ date: d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()), day: d.getUTCDate(), inMonth: d.getUTCMonth() === month });
-      }
-      if (w >= 4 && !row.some(function (c) { return c.inMonth; })) break;
-      weeks.push(row);
-    }
-    return { label: MONTH_NAMES[month] + " " + year, year: year, month: month, weeks: weeks };
-  }
-
-  // How many things need looking at now (overdue or due today), for the page title.
-  function dueCount(renewals, dueItems, today) {
-    var a = agenda(renewals, dueItems, today);
-    return a.overdue.length + a.today.length;
-  }
-
-  // ---- the .ics file ---------------------------------------------------------------------------
-
-  function icsEscape(t) { return String(t === undefined || t === null ? "" : t).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n"); }
-  function utf8Len(ch) { var c = ch.charCodeAt(0); return c < 0x80 ? 1 : c < 0x800 ? 2 : (c >= 0xd800 && c <= 0xdbff) ? 4 : 3; }
-
-  // Lines over 75 bytes are folded onto a continuation line that starts with one space.
-  function icsFold(line) {
-    var out = [], cur = "", bytes = 0, limit = 75;
-    for (var i = 0; i < line.length; i++) {
-      var ch = line[i];
-      if (ch.charCodeAt(0) >= 0xd800 && ch.charCodeAt(0) <= 0xdbff) { ch += line[++i] || ""; }
-      var n = utf8Len(ch);
-      if (bytes + n > limit) { out.push(cur); cur = " "; bytes = 1; limit = 75; }
-      cur += ch; bytes += n;
-    }
-    out.push(cur);
-    return out.join("\r\n");
-  }
-
-  function icsStamp(nowMs) { var d = new Date(nowMs); return d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + "T" + pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds()) + "Z"; }
-  function icsDate(s) { return s.replace(/-/g, ""); }
-
-  // One all-day event for each dated renewal, each with a reminder 30 days and 7 days ahead (at 9 in the morning).
-  function buildIcs(renewals, nowMs, hubUrl) {
-    var lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Barnyard//Calendar//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:Barnyard renewals"];
-    (renewals || []).forEach(function (r) {
-      if (!isYmd(r.due) || r.state === "auto") return;
-      var desc = [kindTitle(r.kind)];
-      if (r.state === "estimated") desc.push("The date is an estimate: confirm it at the source.");
-      if (r.state === "planned") desc.push("A planned rotation date, not a hard expiry.");
-      if (r.where) desc.push("How to renew: " + r.where);
-      if (r.breaks) desc.push("If it lapses: " + r.breaks);
-      if (r.link) desc.push("Portal: " + r.link);
-      if (hubUrl) desc.push("Details: " + hubUrl);
-      lines.push("BEGIN:VEVENT");
-      lines.push("UID:renewal-" + String(r.id).replace(/[^A-Za-z0-9_-]/g, "-") + "@barnyard.site");
-      lines.push("DTSTAMP:" + icsStamp(nowMs));
-      lines.push("DTSTART;VALUE=DATE:" + icsDate(r.due));
-      lines.push("DTEND;VALUE=DATE:" + icsDate(addDays(r.due, 1)));
-      lines.push("SUMMARY:" + icsEscape("Renew: " + r.label + (r.state === "estimated" ? " (estimated)" : "")));
-      lines.push("DESCRIPTION:" + icsEscape(desc.join("\n")));
-      lines.push("CATEGORIES:Renewal");
-      lines.push("TRANSP:TRANSPARENT");
-      [["P29DT15H", "30 days"], ["P6DT15H", "7 days"]].forEach(function (a) {
-        lines.push("BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + icsEscape(r.label + " runs out in " + a[1]), "TRIGGER:-" + a[0], "END:VALARM");
-      });
-      lines.push("END:VEVENT");
-    });
-    lines.push("END:VCALENDAR");
-    return lines.map(icsFold).join("\r\n") + "\r\n";
-  }
-
-  // ---- the add / edit form -----------------------------------------------------------------------
-
-  // The Details text for an item: whatever the owner already wrote, then the lines the Calendar reads.
-  function buildDetails(extra, f) {
-    var lines = [];
-    if (extra && String(extra).trim()) lines.push(String(extra).trim(), "");
-    lines.push("Date: " + f.state);
-    if (f.where) lines.push("Where: " + f.where);
-    if (f.link) lines.push("Link: " + f.link);
-    if (f.breaks) lines.push("Breaks: " + f.breaks);
-    if (f.leadDays !== "" && f.leadDays !== null && f.leadDays !== undefined) lines.push("Lead: " + f.leadDays);
-    if (f.renewed) lines.push("Renewed: " + f.renewed);
-    return lines.join("\n");
-  }
-
-  // Checks the form and builds the body for the Ops board. -> { error, field } or { body }
-  function renewalBody(f, extra, isNew) {
-    var title = String(f.title || "").trim();
-    if (!title) return { error: "Give the renewal a name.", field: "title" };
-    if (title.length > 120) return { error: "Keep the name under 120 characters.", field: "title" };
-    if (f.due && !isYmd(f.due)) return { error: "That date doesn’t look right.", field: "due" };
-    if (f.state === "needed" && f.due) f = Object.assign({}, f, { state: "estimated" });
-    if (!f.due && f.state !== "auto") f = Object.assign({}, f, { state: "needed" });
-    if (f.link && !/^https:\/\/[^\s"'<>]{4,300}$/.test(f.link)) return { error: "The link needs to start with https://", field: "link" };
-    if (f.renewed && !isYmd(f.renewed)) return { error: "The “last renewed” date doesn’t look right.", field: "renewed" };
-    if (f.leadDays !== "" && f.leadDays !== null && f.leadDays !== undefined && !(+f.leadDays >= 0 && +f.leadDays <= 365 && Math.floor(+f.leadDays) === +f.leadDays)) return { error: "Lead time is a whole number of days, 0 to 365.", field: "leadDays" };
-    var kind = KINDS.some(function (k) { return k[0] === f.kind; }) ? f.kind : "other";
-    var details = buildDetails(extra, f);
-    if (details.length > 6000) return { error: "That is too much text for one renewal.", field: "where" };
-    var body = { title: title, targets: ["renewal", kind], due: f.due || "", details: details };
-    if (isNew) { body.category = "security"; body.lane = "backlog"; body.status = "scheduled"; body.owner = "you"; body.next = f.where ? "Renew: " + f.where : "Renew before it runs out."; }
-    return { body: body };
-  }
-
-  var helpers = {
-    KINDS: KINDS, STATES: STATES, VIEWS: VIEWS, pad: pad, ymd: ymd, isYmd: isYmd, daysBetween: daysBetween, addDays: addDays, relativeText: relativeText,
-    urgency: urgency, entriesByDate: entriesByDate, filterKind: filterKind, agenda: agenda, nextUp: nextUp, noDate: noDate, monthGrid: monthGrid,
-    dueCount: dueCount, icsEscape: icsEscape, icsFold: icsFold, buildIcs: buildIcs, buildDetails: buildDetails, renewalBody: renewalBody, kindTitle: kindTitle
+  var model = {
+    state: "loading", planner: "loading", renewals: [], dueItems: [], tasks: [], events: [], partial: false, fromCache: false,
+    view: "today", kind: "all", month: null
   };
-
-  if (typeof document === "undefined") {
-    if (typeof module !== "undefined" && module.exports) module.exports = helpers;
-    return;
-  }
-
-  // ---- 2. data --------------------------------------------------------------
-
-  var model = { state: "loading", renewals: [], dueItems: [], partial: false, view: "today", kind: "all", month: null, open: null };
   var lastFocus = null;
+  var toastTimer = null;
+
+  // ---- storage in this browser (only a speed copy and two preferences) -------------------
 
   function readPrefs() {
     try {
       var p = JSON.parse(window.localStorage.getItem(PREF_KEY) || "{}");
-      if (VIEWS.some(function (v) { return v[0] === p.view; })) model.view = p.view;
-      if (p.kind === "all" || KINDS.some(function (k) { return k[0] === p.kind; })) model.kind = p.kind;
+      var map = { next: "upcoming", nodate: "renewals" };
+      var v = map[p.view] || p.view;
+      if (ACTIVE_VIEWS.some(function (x) { return x[0] === v; })) model.view = v;
+      if (p.kind === "all" || L.KINDS.some(function (k) { return k[0] === p.kind; })) model.kind = p.kind;
     } catch (e) { /* no stored preference, or storage is off: the defaults are fine */ }
   }
   function savePrefs() {
     try { window.localStorage.setItem(PREF_KEY, JSON.stringify({ view: model.view, kind: model.kind })); } catch (e) { /* fine without it */ }
   }
-
-  function load() {
-    var controller = new AbortController();
-    var timer = setTimeout(function () { controller.abort(); }, 15000);
-    return fetch(API + "/renewals", { credentials: "include", referrerPolicy: "no-referrer", signal: controller.signal })
-      .then(function (r) {
-        clearTimeout(timer);
-        if (r.status === 401) { model.state = "guest"; return; }
-        if (r.status === 403) { model.state = "forbidden"; return; }
-        if (!r.ok) { model.state = model.renewals.length || model.dueItems.length ? "ok" : "error"; return; }
-        return r.json().then(function (d) {
-          model.renewals = Array.isArray(d.renewals) ? d.renewals : [];
-          model.dueItems = Array.isArray(d.dueItems) ? d.dueItems : [];
-          model.partial = !!d.partial;
-          model.state = "ok";
-        });
-      }, function () { clearTimeout(timer); model.state = model.renewals.length || model.dueItems.length ? "ok" : "error"; })
-      .then(render);
+  function readCache() {
+    try {
+      var c = JSON.parse(window.localStorage.getItem(CACHE_KEY) || "null");
+      if (!c || !Array.isArray(c.renewals) || !Array.isArray(c.tasks)) return false;
+      model.renewals = c.renewals; model.dueItems = c.dueItems || []; model.tasks = c.tasks; model.events = c.events || [];
+      model.fromCache = true;
+      return true;
+    } catch (e) { return false; }
+  }
+  function writeCache() {
+    try {
+      window.localStorage.setItem(CACHE_KEY, JSON.stringify({ renewals: model.renewals, dueItems: model.dueItems, tasks: model.tasks, events: model.events, at: Date.now() }));
+    } catch (e) { /* too big or storage off: the server copy is the real one */ }
   }
 
-  function opsRequest(method, path, body) {
-    var opts = { method: method, credentials: "include", referrerPolicy: "no-referrer", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
-    return fetch(OPS + path, opts).then(function (res) {
+  // ---- data from the server ---------------------------------------------------------------
+
+  function getJson(url) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 15000);
+    return fetch(url, { credentials: "include", referrerPolicy: "no-referrer", signal: controller.signal }).then(function (r) {
+      clearTimeout(timer);
+      if (!r.ok) return { status: r.status };
+      return r.json().then(function (d) { return { status: 200, data: d }; });
+    }, function () { clearTimeout(timer); return { status: 0 }; });
+  }
+
+  function load() {
+    return Promise.all([getJson(HUB_API + "/renewals"), getJson(PLAN_API + "/all")]).then(function (res) {
+      var a = res[0], b = res[1];
+      if (a.status === 401 || b.status === 401) { model.state = "guest"; return; }
+      if (a.status === 403 || b.status === 403) { model.state = "forbidden"; return; }
+      var haveData = model.renewals.length || model.tasks.length || model.events.length;
+      if (a.status === 200) {
+        model.renewals = Array.isArray(a.data.renewals) ? a.data.renewals : [];
+        model.dueItems = Array.isArray(a.data.dueItems) ? a.data.dueItems : [];
+        model.partial = !!a.data.partial;
+      }
+      if (b.status === 200) {
+        model.tasks = Array.isArray(b.data.tasks) ? b.data.tasks : [];
+        model.events = Array.isArray(b.data.events) ? b.data.events : [];
+        model.planner = "ok";
+      } else model.planner = b.status === 503 || b.status === 404 ? "unavailable" : "error";
+      if (a.status !== 200 && b.status !== 200) { model.state = haveData ? "ok" : "error"; return; }
+      model.state = "ok";
+      model.fromCache = false;
+      writeCache();
+    }).then(render);
+  }
+
+  function request(base, method, path, body) {
+    var opts = { method: method, credentials: "include", referrerPolicy: "no-referrer", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) };
+    return fetch(base + path, opts).then(function (res) {
       return res.json().catch(function () { return null; }).then(function (data) {
-        if (!res.ok) { var err = new Error((data && data.error) || "request_failed"); err.code = (data && data.error) || null; err.field = (data && data.field) || null; throw err; }
+        if (!res.ok) { var err = new Error((data && data.error) || "request_failed"); err.code = (data && data.error) || null; err.field = (data && data.field) || null; err.kind = (data && data.kind) || null; throw err; }
         return data;
       });
     });
   }
+  function plan(path, body) { return request(PLAN_API, "POST", path, Object.assign({ today: today() }, body)); }
 
-  function saveMessage(err) {
-    if (err.code === "secret_detected") return "That looks like a secret or a key, and the Ops board won’t store it. Describe where it lives instead of pasting it.";
-    if (err.code === "recent_sign_in_required") return "Sign in again to save changes, then try once more.";
-    if (err.code === "unauthenticated" || err.code === "forbidden") return "You’re not signed in as the owner, so the change wasn’t saved.";
-    return "Couldn’t save that just now. Nothing was changed.";
-  }
+  var MESSAGES = {
+    secret_detected: "That looks like a secret or a key, and it won’t be stored. Describe where it lives instead of pasting it.",
+    recent_sign_in_required: "Sign in again to do that, then try once more.",
+    unauthenticated: "You’re not signed in, so nothing was changed.", forbidden: "You’re not signed in as the owner, so nothing was changed.",
+    tasks_full: "The to-do list is full (3,000). Clear the ticked ones first.", events_full: "There are too many events stored (1,500).",
+    not_found: "That has already gone. Refresh the page.", today_invalid: "This computer’s date is far from the server’s, so the change wasn’t made."
+  };
+  function say(err) { return MESSAGES[err.code] || "Couldn’t save that just now. Nothing was changed."; }
 
-  // ---- 3. rendering ---------------------------------------------------------
+  // ---- little DOM helpers -----------------------------------------------------------------
 
   var $ = function (id) { return document.getElementById(id); };
   function h(tag, cls, text) {
@@ -308,7 +129,23 @@
     return e;
   }
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
-  function today() { return ymd(new Date()); }
+  function today() { return L.ymd(new Date()); }
+  function data() { return { renewals: model.renewals, dueItems: model.dueItems, tasks: model.tasks, events: model.events }; }
+
+  function toast(text, undoLabel, onUndo) {
+    var box = $("cal-toast");
+    clear(box);
+    box.hidden = false;
+    box.appendChild(h("span", null, text));
+    if (onUndo) {
+      var b = h("button", "btn btn-sm", undoLabel || "Undo");
+      b.type = "button";
+      b.addEventListener("click", function () { box.hidden = true; onUndo(); });
+      box.appendChild(b);
+    }
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { box.hidden = true; }, 9000);
+  }
 
   function message(text, linkText, href) {
     var box = $("cal-root");
@@ -317,31 +154,60 @@
     if (href) { var a = h("a", "btn btn-sm", linkText); a.href = href; box.appendChild(a); }
   }
 
-  function longDate(s) {
-    var d = new Date(utc(s));
-    return DAY_NAMES[(d.getUTCDay() + 6) % 7] + " " + d.getUTCDate() + " " + MONTH_NAMES[d.getUTCMonth()].slice(0, 3) + " " + d.getUTCFullYear();
+  function chip(text, cls) { return h("span", "chip" + (cls ? " " + cls : ""), text); }
+
+  // ---- rows -------------------------------------------------------------------------------
+
+  function refChip(ref) {
+    if (!ref) return null;
+    var a = h("a", "chip cal-ref", ref.kind === "ops" ? "Ops item" : "Article");
+    a.href = L.refHref(ref);
+    if (ref.kind === "kb") { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+    return a;
   }
 
-  function stateChip(state) {
-    var t = STATE_BADGE[state];
-    return t ? h("span", "chip", t) : null;
-  }
-
-  // One clickable row for a renewal or an Ops item.
+  // One row for an entry of any kind. A to-do has its tick box, an event its time, a renewal its kind and how sure the date is.
   function row(e, t) {
-    var days = daysBetween(t, e.due);
-    var tone = urgency(e, t);
-    var el = e.type === "item" ? h("a", "cal-row") : h("button", "cal-row");
-    if (e.type === "item") el.href = e.ref.href || "ops.html"; else el.type = "button";
-    el.appendChild(h("span", "cal-dot" + (tone ? " " + tone : "")));
-    el.appendChild(h("b", null, e.label));
-    el.appendChild(h("span", "chip", e.type === "item" ? "Ops item" : kindTitle(e.kind)));
-    var sc = e.type === "renewal" ? stateChip(e.state) : null;
-    if (sc) el.appendChild(sc);
-    el.appendChild(h("span", "dim cal-when", longDate(e.due) + " · " + relativeText(days)));
-    if (e.type === "renewal") el.addEventListener("click", function () { openRenewal(e.ref); });
+    var tone = L.urgency(e, t);
+    var el = h("div", "cal-row t-" + e.type + (e.type === "task" && e.ref.status === "done" ? " is-done" : ""));
+    if (e.type === "task") {
+      var cb = h("input", "cal-check");
+      cb.type = "checkbox";
+      cb.checked = e.ref.status === "done";
+      cb.setAttribute("aria-label", (cb.checked ? "Mark not done: " : "Mark done: ") + e.label);
+      cb.addEventListener("change", function () { tick(e.ref, cb.checked); });
+      el.appendChild(cb);
+    } else el.appendChild(h("span", "cal-dot" + (tone ? " " + tone : "")));
+    var main = h(e.type === "item" ? "a" : "button", "cal-main");
+    if (e.type === "item") main.href = e.ref.href || "ops.html"; else main.type = "button";
+    main.appendChild(h("b", null, e.label));
+    el.appendChild(main);
+    if (e.type === "event") el.appendChild(chip("Event"));
+    if (e.type === "item") el.appendChild(chip("Ops item"));
+    if (e.type === "renewal") { el.appendChild(chip(L.kindTitle(e.kind))); var bd = L.STATE_BADGE[e.state]; if (bd) el.appendChild(chip(bd)); }
+    if (e.type === "task") {
+      if (e.ref.priority === "high") el.appendChild(chip("High", "alert"));
+      if (e.ref.recur) el.appendChild(chip(L.repeatText(e.ref.recur)));
+      var rc = refChip(e.ref.ref);
+      if (rc) el.appendChild(rc);
+    }
+    var when;
+    if (e.type === "event") when = L.shortDate(e.due) + ", " + L.eventTimeText(e.ref.day, e.ref.event);
+    else if (e.type === "task") when = L.taskDueText(e.ref, t);
+    else when = L.longDate(e.due) + " · " + L.relativeText(L.daysBetween(t, e.due));
+    el.appendChild(h("span", "dim cal-when" + (tone === "alert" && e.type !== "renewal" ? " late" : ""), when));
+    if (e.type === "task" && e.ref.status === "open" && isYmd(e.ref.due) && e.ref.due <= t) {
+      var sn = h("button", "btn btn-sm btn-quiet", e.ref.due < t ? "To today" : "Tomorrow");
+      sn.type = "button";
+      sn.addEventListener("click", function () { snooze(e.ref, e.ref.due < t ? "today" : "tomorrow"); });
+      el.appendChild(sn);
+    }
+    if (e.type !== "item") main.addEventListener("click", function () { openEntry(e); });
     return el;
   }
+  function isYmd(s) { return L.isYmd(s); }
+
+  function taskEntry(t) { return { type: "task", id: t.id, label: t.title, due: t.due, time: t.time, ref: t, kind: "", state: "known" }; }
 
   function section(title, note) {
     var s = h("section", "cal-section");
@@ -351,43 +217,47 @@
     s.appendChild(head);
     return s;
   }
-
   function list(entries, t) {
-    var ul = h("div", "cal-list");
-    entries.forEach(function (e) { ul.appendChild(row(e, t)); });
-    return ul;
+    var box = h("div", "cal-list");
+    entries.forEach(function (e) { box.appendChild(row(e, t)); });
+    return box;
   }
 
-  function renderToday(root, renewals, t) {
-    var a = agenda(renewals, model.dueItems, t);
-    var nothing = !a.overdue.length && !a.today.length && !a.week.length;
-    root.appendChild(h("p", "cal-lead", "Today is " + longDate(t) + "."));
-    if (a.overdue.length) { var o = section("Overdue", "these are past their date"); o.appendChild(list(a.overdue, t)); root.appendChild(o); }
-    var td = section("Due today");
-    if (a.today.length) td.appendChild(list(a.today, t)); else td.appendChild(h("p", "dim", "Nothing is due today."));
+  // ---- views ------------------------------------------------------------------------------
+
+  function renderToday(root, t) {
+    var a = L.agenda(data(), t, model.kind);
+    var inbox = model.tasks.filter(function (x) { return x.status === "open" && !x.due; });
+    root.appendChild(h("p", "cal-lead", "Today is " + L.longDate(t) + "."));
+    if (a.overdue.length) { var o = section("Overdue", "past their date; nothing moves unless you move it"); o.appendChild(list(a.overdue, t)); root.appendChild(o); }
+    var td = section("Today");
+    if (a.today.length) td.appendChild(list(a.today, t)); else td.appendChild(h("p", "dim", "Nothing is on for today."));
     root.appendChild(td);
     var wk = section("The next 7 days");
     if (a.week.length) wk.appendChild(list(a.week, t)); else wk.appendChild(h("p", "dim", "Nothing falls in the next week."));
     root.appendChild(wk);
-    var up = nextUp(renewals, t);
-    var first = null;
-    up.forEach(function (g) { g.items.forEach(function (r) { if (!first && daysBetween(t, r.due) > 7) first = r; }); });
-    if (nothing && first) root.appendChild(h("p", "dim", "Next renewal: " + first.label + ", " + relativeText(daysBetween(t, first.due)) + " (" + longDate(first.due) + ")."));
-    var nd = noDate(renewals).needed.length;
+    if (inbox.length && model.planner === "ok") {
+      var ib = section("Inbox", inbox.length + (inbox.length === 1 ? " to-do with no date" : " to-dos with no date"));
+      ib.appendChild(list(inbox.slice(0, 5).map(taskEntry), t));
+      if (inbox.length > 5) { var all = h("button", "btn btn-sm", "See all " + inbox.length); all.type = "button"; all.addEventListener("click", function () { setView("todos"); }); ib.appendChild(all); }
+      root.appendChild(ib);
+    }
+    var nd = model.renewals.filter(function (r) { return r.state === "needed"; }).length;
     if (nd) {
       var p = h("p", "dim", nd + (nd === 1 ? " renewal still needs a date. " : " renewals still need a date. "));
       var b = h("button", "btn btn-sm", "See them");
       b.type = "button";
-      b.addEventListener("click", function () { setView("nodate"); });
+      b.addEventListener("click", function () { setView("renewals"); });
       p.appendChild(b);
       root.appendChild(p);
     }
   }
 
-  function renderMonth(root, renewals, t) {
+  function renderMonth(root, t) {
     var m = model.month;
-    var grid = monthGrid(m.year, m.month);
-    var map = entriesByDate(renewals, model.dueItems);
+    var grid = L.monthGrid(m.year, m.month);
+    var first = grid.weeks[0][0].date, last = grid.weeks[grid.weeks.length - 1][6].date;
+    var map = L.entriesByDate(data(), first, last, model.kind);
     var title = h("h2", "cal-month-title", grid.label);
     title.id = "cal-month-title";
     root.appendChild(title);
@@ -395,7 +265,7 @@
     var table = h("table", "cal-month");
     table.setAttribute("aria-labelledby", "cal-month-title");
     var thead = h("thead"), hr = h("tr");
-    DAY_NAMES.forEach(function (n) { var th = h("th", null, n); th.scope = "col"; hr.appendChild(th); });
+    L.DAY_NAMES.forEach(function (n) { var th = h("th", null, n); th.scope = "col"; hr.appendChild(th); });
     thead.appendChild(hr);
     table.appendChild(thead);
     var tbody = h("tbody");
@@ -403,22 +273,25 @@
       var tr = h("tr");
       week.forEach(function (c) {
         var td = h("td", "cal-day" + (c.inMonth ? "" : " out") + (c.date === t ? " today" : ""));
-        var num = h("span", "cal-num", String(c.day));
+        var num = h("button", "cal-num", String(c.day));
+        num.type = "button";
+        num.setAttribute("aria-label", "Open " + L.longDate(c.date));
+        num.addEventListener("click", function () { openDay(c.date); });
         td.appendChild(num);
         var es = map[c.date] || [];
         es.slice(0, 3).forEach(function (e) {
-          var tone = urgency(e, t);
-          var el = e.type === "item" ? h("a", "cal-ev item") : h("button", "cal-ev" + (tone ? " " + tone : ""));
+          var tone = L.urgency(e, t);
+          var el = e.type === "item" ? h("a", "cal-ev t-item") : h("button", "cal-ev t-" + e.type + (tone ? " " + tone : "") + (e.type === "task" && e.ref.status === "done" ? " is-done" : ""));
           if (e.type === "item") el.href = e.ref.href || "ops.html"; else el.type = "button";
-          el.textContent = e.label;
-          el.setAttribute("aria-label", longDate(c.date) + ": " + e.label + (e.type === "item" ? " (Ops item)" : ", " + kindTitle(e.kind)));
-          if (e.type === "renewal") el.addEventListener("click", function () { openRenewal(e.ref); });
+          el.textContent = (e.time && !e.allDay ? L.timeText(e.time) + " " : "") + e.label;
+          el.setAttribute("aria-label", L.longDate(c.date) + ": " + e.label + " (" + typeName(e) + ")");
+          if (e.type !== "item") el.addEventListener("click", function () { openEntry(e); });
           td.appendChild(el);
         });
         if (es.length > 3) {
           var more = h("button", "cal-more", "+" + (es.length - 3) + " more");
           more.type = "button";
-          more.addEventListener("click", function () { openDay(c.date, es); });
+          more.addEventListener("click", function () { openDay(c.date); });
           td.appendChild(more);
         }
         tr.appendChild(td);
@@ -428,44 +301,75 @@
     table.appendChild(tbody);
     scroll.appendChild(table);
     root.appendChild(scroll);
-    root.appendChild(h("p", "dim cal-keys", "Keys: t is today, ← and → change month, n adds a renewal, Esc closes the details."));
   }
+  function typeName(e) { return e.type === "task" ? "to-do" : e.type === "item" ? "Ops item" : e.type === "event" ? "event" : L.kindTitle(e.kind).toLowerCase() + " renewal"; }
 
-  function renderNext(root, renewals, t) {
-    var groups = nextUp(renewals, t);
-    if (!groups.length) { root.appendChild(h("p", "dim", "No renewals with a date yet.")); return; }
+  function renderUpcoming(root, t) {
+    var groups = L.upcoming(data(), t, 120, model.kind);
+    var over = L.agenda(data(), t, model.kind).overdue;
+    if (over.length) { var o = section("Overdue"); o.appendChild(list(over, t)); root.appendChild(o); }
+    if (!groups.length && !over.length) { root.appendChild(h("p", "dim", "Nothing is coming up in the next four months.")); return; }
     groups.forEach(function (g) {
       var s = section(g.title);
-      s.appendChild(list(g.items.map(function (r) { return { type: "renewal", id: r.id, label: r.label, kind: r.kind, state: r.state, due: r.due, ref: r }; }), t));
+      s.appendChild(list(g.entries, t));
       root.appendChild(s);
     });
+    root.appendChild(h("p", "dim", "This shows the next four months. The Renewals view shows every renewal, however far off."));
   }
 
-  function renderNoDate(root, renewals) {
-    var nd = noDate(renewals);
-    var s = section("Date still needed", "add the date from the portal and it moves onto the calendar");
-    if (!nd.needed.length) s.appendChild(h("p", "dim", "Every renewal has a date."));
-    nd.needed.forEach(function (r) {
-      var el = h("button", "cal-row");
-      el.type = "button";
-      el.appendChild(h("span", "cal-dot"));
-      el.appendChild(h("b", null, r.label));
-      el.appendChild(h("span", "chip", kindTitle(r.kind)));
-      if (r.where) el.appendChild(h("span", "dim cal-when", r.where));
-      el.addEventListener("click", function () { openRenewal(r); });
-      s.appendChild(el);
+  function renderTodos(root, t) {
+    if (model.planner === "unavailable") { root.appendChild(h("p", "dim", "To-dos aren’t switched on yet on the server.")); return; }
+    var g = L.groupTasks(model.tasks, t);
+    var any = false;
+    [["Overdue", g.overdue, "past their date; nothing moves unless you move it"], ["Today", g.today], ["Later", g.later], ["Inbox", g.inbox, "no date yet"]].forEach(function (x) {
+      if (!x[1].length) return;
+      any = true;
+      var s = section(x[0], x[2]);
+      s.appendChild(list(x[1].map(taskEntry), t));
+      root.appendChild(s);
     });
-    root.appendChild(s);
-    if (nd.auto.length) {
+    if (!any) root.appendChild(h("p", "dim", "No open to-dos. Add one above."));
+    if (g.done.length) {
+      var d = section("Ticked in the last two weeks");
+      d.appendChild(list(g.done.map(taskEntry), t));
+      var clearBtn = h("button", "btn btn-sm", "Clear ticked to-dos");
+      clearBtn.type = "button";
+      clearBtn.addEventListener("click", clearDone);
+      d.appendChild(clearBtn);
+      root.appendChild(d);
+    }
+  }
+
+  function renderRenewals(root, t) {
+    var r = L.renewalGroups(L.filterKind(model.renewals, model.kind), t);
+    r.groups.forEach(function (g) {
+      var s = section(g.title);
+      s.appendChild(list(g.items.map(function (x) { return { type: "renewal", id: x.id, label: x.label, kind: x.kind, state: x.state, due: x.due, ref: x }; }), t));
+      root.appendChild(s);
+    });
+    var nd = section("Date still needed", "add the date from the portal and it moves onto the calendar");
+    if (!r.needed.length) nd.appendChild(h("p", "dim", "Every renewal has a date."));
+    r.needed.forEach(function (x) {
+      var el = h("div", "cal-row t-renewal");
+      el.appendChild(h("span", "cal-dot"));
+      var main = h("button", "cal-main"); main.type = "button"; main.appendChild(h("b", null, x.label));
+      main.addEventListener("click", function () { openRenewal(x); });
+      el.appendChild(main);
+      el.appendChild(chip(L.kindTitle(x.kind)));
+      if (x.where) el.appendChild(h("span", "dim cal-when", x.where));
+      nd.appendChild(el);
+    });
+    root.appendChild(nd);
+    if (r.auto.length) {
       var a = section("Renews itself", "no action needed, listed so you know");
-      nd.auto.forEach(function (r) {
-        var el = h("button", "cal-row");
-        el.type = "button";
+      r.auto.forEach(function (x) {
+        var el = h("div", "cal-row t-renewal");
         el.appendChild(h("span", "cal-dot"));
-        el.appendChild(h("b", null, r.label));
-        el.appendChild(h("span", "chip", kindTitle(r.kind)));
-        if (r.where) el.appendChild(h("span", "dim cal-when", r.where));
-        el.addEventListener("click", function () { openRenewal(r); });
+        var main = h("button", "cal-main"); main.type = "button"; main.appendChild(h("b", null, x.label));
+        main.addEventListener("click", function () { openRenewal(x); });
+        el.appendChild(main);
+        el.appendChild(chip(L.kindTitle(x.kind)));
+        if (x.where) el.appendChild(h("span", "dim cal-when", x.where));
         a.appendChild(el);
       });
       root.appendChild(a);
@@ -475,7 +379,7 @@
   function renderTabs() {
     var box = $("cal-tabs");
     clear(box);
-    VIEWS.forEach(function (v) {
+    ACTIVE_VIEWS.forEach(function (v) {
       var b = h("button", "cal-tab" + (model.view === v[0] ? " on" : ""), v[1]);
       b.type = "button";
       b.setAttribute("role", "tab");
@@ -490,7 +394,7 @@
     var sel = $("cal-kind");
     if (sel.options.length) { sel.value = model.kind; return; }
     var all = h("option", null, "All kinds"); all.value = "all"; sel.appendChild(all);
-    KINDS.forEach(function (k) { var o = h("option", null, k[1]); o.value = k[0]; sel.appendChild(o); });
+    L.KINDS.forEach(function (k) { var o = h("option", null, k[1]); o.value = k[0]; sel.appendChild(o); });
     sel.value = model.kind;
   }
 
@@ -498,25 +402,26 @@
     renderTabs();
     renderFilter();
     var root = $("cal-root");
+    $("cal-quick").hidden = !(model.state === "ok" && model.planner === "ok");
     if (model.state === "loading") return;
     if (model.state === "guest") { message("Log in to see the calendar.", "Log in", typeof window.barnyardLoginUrl === "function" ? window.barnyardLoginUrl() : null); return; }
     if (model.state === "forbidden") { message("This page is for the person who runs the hub."); return; }
     if (model.state === "error") { message("Couldn’t reach the Worker just now. It will try again shortly."); return; }
     clear(root);
     var t = today();
-    var renewals = filterKind(model.renewals, model.kind);
-    if (model.partial) root.appendChild(h("p", "cal-warn", "Some keys couldn’t be read just now, so the list may be missing a few."));
-    if (model.view === "today") renderToday(root, renewals, t);
-    else if (model.view === "month") renderMonth(root, renewals, t);
-    else if (model.view === "next") renderNext(root, renewals, t);
-    else renderNoDate(root, renewals);
-    var n = dueCount(model.renewals, model.dueItems, t);
+    if (model.fromCache) root.appendChild(h("p", "cal-note", "Showing the copy saved on this device while the latest loads."));
+    if (model.partial) root.appendChild(h("p", "cal-warn", "Some keys couldn’t be read just now, so the renewals list may be missing a few."));
+    if (model.planner === "error") root.appendChild(h("p", "cal-warn", "Your to-dos and events couldn’t be loaded just now."));
+    if (model.view === "today") renderToday(root, t);
+    else if (model.view === "month") renderMonth(root, t);
+    else if (model.view === "upcoming") renderUpcoming(root, t);
+    else if (model.view === "todos") renderTodos(root, t);
+    else renderRenewals(root, t);
+    var n = L.dueCount(data(), t);
     document.title = (n ? "(" + n + ") " : "") + "Calendar · Barnyard";
-    var foot = $("cal-foot");
-    foot.textContent = "Renewals are Ops board items with the target “renewal”. They live on the server, so clearing this browser loses nothing, and they are included in the hub’s backup. This page remembers your last view and filter in this browser only.";
   }
 
-  // ---- the drawer ---------------------------------------------------------------------------------
+  // ---- the drawer -------------------------------------------------------------------------
 
   function openDrawer(title) {
     var d = $("cal-drawer");
@@ -532,7 +437,6 @@
     var d = $("cal-drawer");
     if (d.hidden) return;
     d.hidden = true;
-    model.open = null;
     if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
   }
 
@@ -545,35 +449,42 @@
     body.appendChild(d);
   }
 
-  function openDay(date, entries) {
-    var body = openDrawer(longDate(date));
-    var t = today();
-    body.appendChild(list(entries, t));
+  function openDay(date) {
+    var body = openDrawer(L.longDate(date));
+    var map = L.entriesByDate(data(), date, date, model.kind);
+    var es = map[date] || [];
+    if (es.length) body.appendChild(list(es, today())); else body.appendChild(h("p", "dim", "Nothing on this day."));
+    var actions = h("div", "cal-actions");
+    if (model.planner === "ok") {
+      var a = h("button", "btn btn-sm", "Add a to-do here"); a.type = "button"; a.addEventListener("click", function () { openTaskForm(null, date); });
+      var b = h("button", "btn btn-sm", "Add an event here"); b.type = "button"; b.addEventListener("click", function () { openEventForm(null, date); });
+      actions.appendChild(a); actions.appendChild(b);
+    }
+    body.appendChild(actions);
+  }
+
+  function openEntry(e) {
+    if (e.type === "renewal") openRenewal(e.ref);
+    else if (e.type === "task") openTask(e.ref);
+    else if (e.type === "event") openEvent(e.ref.event, e.ref.day);
   }
 
   function openRenewal(r) {
-    model.open = r.id;
     var body = openDrawer(r.label);
     var t = today();
     var top = h("div", "cal-chips");
-    top.appendChild(h("span", "chip", kindTitle(r.kind)));
-    var sc = stateChip(r.state);
-    if (sc) top.appendChild(sc);
+    top.appendChild(chip(L.kindTitle(r.kind)));
+    if (L.STATE_BADGE[r.state]) top.appendChild(chip(L.STATE_BADGE[r.state]));
     body.appendChild(top);
-    if (isYmd(r.due)) {
-      var days = daysBetween(t, r.due);
-      var line = h("p", "cal-date " + urgency({ type: "renewal", due: r.due, state: r.state }, t), longDate(r.due) + " · " + relativeText(days));
-      body.appendChild(line);
-    } else {
-      body.appendChild(h("p", "cal-date", r.state === "auto" ? "Renews itself." : "No date yet."));
-    }
+    if (isYmd(r.due)) body.appendChild(h("p", "cal-date " + L.urgency({ type: "renewal", due: r.due, state: r.state }, t), L.longDate(r.due) + " · " + L.relativeText(L.daysBetween(t, r.due))));
+    else body.appendChild(h("p", "cal-date", r.state === "auto" ? "Renews itself." : "No date yet."));
     if (r.state === "estimated") body.appendChild(h("p", "dim", "This date is an estimate. Confirm the exact one at the source, then edit it here."));
     if (r.state === "planned") body.appendChild(h("p", "dim", "A planned rotation date from the security review calendar, not a hard expiry."));
     fact(body, "How to renew it", r.where);
     fact(body, "Portal", r.link, r.link);
     fact(body, "If it lapses", r.breaks);
     fact(body, "Lead time", r.leadDays !== null && r.leadDays !== undefined ? r.leadDays + (r.leadDays === 1 ? " day" : " days") + " of notice" : "");
-    fact(body, "Last renewed", r.lastRenewed ? longDate(r.lastRenewed) : "");
+    fact(body, "Last renewed", r.lastRenewed ? L.longDate(r.lastRenewed) : "");
     fact(body, "Note", r.note);
     var actions = h("div", "cal-actions");
     var open = h("a", "btn btn-sm", r.source === "ops" ? "Open the Ops item" : "Open where it’s managed");
@@ -582,13 +493,64 @@
     if (r.source === "ops") {
       var edit = h("button", "btn btn-primary btn-sm", "Edit");
       edit.type = "button";
-      edit.addEventListener("click", function () { openForm(r); });
+      edit.addEventListener("click", function () { openRenewalForm(r); });
       actions.appendChild(edit);
-    } else {
-      body.appendChild(h("p", "dim", "This key is made and renewed where it’s managed, so there is nothing to edit here."));
-    }
+    } else body.appendChild(h("p", "dim", "This key is made and renewed where it’s managed, so there is nothing to edit here."));
     body.appendChild(actions);
   }
+
+  function openTask(task) {
+    var body = openDrawer(task.title);
+    var t = today();
+    var top = h("div", "cal-chips");
+    top.appendChild(chip("To-do"));
+    if (task.status === "done") top.appendChild(chip("Ticked", "ok"));
+    if (task.priority !== "normal") top.appendChild(chip(task.priority === "high" ? "High priority" : "Low priority"));
+    if (task.recur) top.appendChild(chip(L.recurTitle(task.recur)));
+    body.appendChild(top);
+    body.appendChild(h("p", "cal-date " + (isYmd(task.due) && task.due < t && task.status === "open" ? "alert" : ""), L.taskDueText(task, t)));
+    fact(body, "Notes", task.notes);
+    if (task.ref) fact(body, task.ref.kind === "ops" ? "Ops item" : "Knowledgebase article", task.ref.id, L.refHref(task.ref));
+    if (task.recur && task.doneCount) fact(body, "Done so far", task.doneCount + (task.doneCount === 1 ? " time" : " times"));
+    var actions = h("div", "cal-actions");
+    var tickBtn = h("button", "btn btn-primary btn-sm", task.status === "done" ? "Mark not done" : "Done");
+    tickBtn.type = "button";
+    tickBtn.addEventListener("click", function () { tick(task, task.status !== "done"); closeDrawer(); });
+    actions.appendChild(tickBtn);
+    if (task.status === "open") {
+      [["today", "Today"], ["tomorrow", "Tomorrow"], ["nextweek", "Next week"]].forEach(function (s) {
+        if (s[0] === "today" && task.due === t) return;
+        var b = h("button", "btn btn-sm", "Snooze: " + s[1]);
+        b.type = "button";
+        b.addEventListener("click", function () { snooze(task, s[0]); closeDrawer(); });
+        actions.appendChild(b);
+      });
+    }
+    var edit = h("button", "btn btn-sm", "Edit"); edit.type = "button"; edit.addEventListener("click", function () { openTaskForm(task); });
+    var del = h("button", "btn btn-sm btn-quiet", "Delete"); del.type = "button"; del.addEventListener("click", function () { removeTask(task); closeDrawer(); });
+    actions.appendChild(edit); actions.appendChild(del);
+    body.appendChild(actions);
+  }
+
+  function openEvent(ev, day) {
+    var body = openDrawer(ev.title);
+    var top = h("div", "cal-chips");
+    top.appendChild(chip("Event"));
+    if (ev.recur) top.appendChild(chip(L.recurTitle(ev.recur)));
+    body.appendChild(top);
+    var when = ev.endDate && ev.endDate !== ev.startDate ? L.shortDate(ev.startDate) + (ev.startTime ? ", " + L.timeText(ev.startTime) : "") + " to " + L.shortDate(ev.endDate) + (ev.endTime ? ", " + L.timeText(ev.endTime) : "")
+      : L.shortDate(ev.startDate) + ", " + (ev.startTime ? L.timeText(ev.startTime) + (ev.endTime ? " to " + L.timeText(ev.endTime) : "") : "all day");
+    body.appendChild(h("p", "cal-date", when));
+    if (ev.recur && day && day.startDate !== ev.startDate) body.appendChild(h("p", "dim", "This is the repeat on " + L.longDate(day.startDate) + ". Editing changes every repeat."));
+    fact(body, "Notes", ev.notes);
+    var actions = h("div", "cal-actions");
+    var edit = h("button", "btn btn-primary btn-sm", "Edit"); edit.type = "button"; edit.addEventListener("click", function () { openEventForm(ev); });
+    var del = h("button", "btn btn-sm btn-quiet", ev.recur ? "Delete every repeat" : "Delete"); del.type = "button"; del.addEventListener("click", function () { removeEvent(ev); closeDrawer(); });
+    actions.appendChild(edit); actions.appendChild(del);
+    body.appendChild(actions);
+  }
+
+  // ---- forms ------------------------------------------------------------------------------
 
   function field(form, id, label, control, hint) {
     var wrap = h("div", "cal-field");
@@ -601,7 +563,6 @@
     form.appendChild(wrap);
     return control;
   }
-
   function input(type, value, max) {
     var i = h("input", "cal-input");
     i.type = type; i.value = value || "";
@@ -609,51 +570,193 @@
     i.autocomplete = "off";
     return i;
   }
-
-  function openForm(r) {
-    var isNew = !r;
-    var body = openDrawer(isNew ? "Add a renewal" : "Edit " + r.label);
+  function select(options, value) {
+    var s = h("select", "cal-input");
+    options.forEach(function (o) { var op = h("option", null, o[1]); op.value = o[0]; s.appendChild(op); });
+    s.value = value;
+    return s;
+  }
+  function textarea(value, rows, max) { var t = h("textarea", "cal-input"); t.rows = rows; t.maxLength = max; t.value = value || ""; return t; }
+  function formShell(onSubmit, idPrefix) {
     var form = h("form", "cal-form");
     form.noValidate = true;
-    var title = field(form, "f-title", "Name", input("text", isNew ? "" : r.label, 120), "For example “Renew the domain”.");
-    var kind = h("select", "cal-input");
-    KINDS.forEach(function (k) { var o = h("option", null, k[1]); o.value = k[0]; kind.appendChild(o); });
-    kind.value = isNew ? "secret" : r.kind;
-    field(form, "f-kind", "Kind", kind);
-    var due = field(form, "f-due", "Date to act by", input("date", isNew ? "" : r.due), "Leave empty if you don’t know it yet; it will show under “No date yet”.");
-    var state = h("select", "cal-input");
-    STATES.forEach(function (s) { var o = h("option", null, s[1]); o.value = s[0]; state.appendChild(o); });
-    state.value = isNew ? "known" : r.state;
-    field(form, "f-state", "How sure is the date", state);
-    var where = h("textarea", "cal-input"); where.rows = 3; where.maxLength = 300; where.value = isNew ? "" : r.where;
-    field(form, "f-where", "How to renew it", where, "Where to go and what to click. Never paste the secret itself.");
-    var link = field(form, "f-link", "Portal link (https)", input("url", isNew ? "" : r.link, 300));
-    var breaks = field(form, "f-breaks", "What stops if it lapses", input("text", isNew ? "" : r.breaks, 300));
-    var lead = field(form, "f-lead", "Days of notice it needs", input("number", isNew || r.leadDays === null ? "" : String(r.leadDays)));
-    lead.min = "0"; lead.max = "365";
-    var renewed = field(form, "f-renewed", "Last renewed", input("date", isNew ? "" : r.lastRenewed));
     var err = h("p", "cal-error"); err.setAttribute("role", "alert");
-    form.appendChild(err);
     var actions = h("div", "cal-actions");
     var save = h("button", "btn btn-primary btn-sm", "Save"); save.type = "submit";
     var cancel = h("button", "btn btn-sm btn-quiet", "Cancel"); cancel.type = "button";
-    cancel.addEventListener("click", function () { if (isNew) closeDrawer(); else openRenewal(r); });
+    cancel.addEventListener("click", closeDrawer);
     actions.appendChild(save); actions.appendChild(cancel);
-    form.appendChild(actions);
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
       err.textContent = "";
-      var res = renewalBody({ title: title.value, kind: kind.value, due: due.value, state: state.value, where: where.value.trim(), link: link.value.trim(), breaks: breaks.value.trim(), leadDays: lead.value, renewed: renewed.value }, isNew ? "" : r.extra, isNew);
-      if (res.error) { err.textContent = res.error; var bad = $("f-" + (res.field === "leadDays" ? "lead" : res.field)); if (bad) bad.focus(); return; }
-      save.disabled = true;
-      var req = isNew ? opsRequest("POST", "/items", res.body) : opsRequest("PATCH", "/items/" + r.id, res.body);
-      req.then(function () { closeDrawer(); return load(); }, function (e) { save.disabled = false; err.textContent = saveMessage(e); });
+      onSubmit(err, save);
     });
-    body.appendChild(form);
+    return { form: form, err: err, actions: actions, save: save, cancel: cancel, fail: function (res) { err.textContent = res.error; var bad = $(idPrefix + res.field); if (bad) bad.focus(); } };
+  }
+
+  function openTaskForm(task, presetDate) {
+    var isNew = !task;
+    var body = openDrawer(isNew ? "Add a to-do" : "Edit to-do");
+    var f;
+    var title, due, time, prio, recur, notes, ref;
+    f = formShell(function (err, save) {
+      var res = L.taskBody({ title: title.value, due: due.value, time: time.value, priority: prio.value, recur: recur.value, notes: notes.value, ref: ref.value });
+      if (res.error) { f.fail(res); return; }
+      save.disabled = true;
+      var req = isNew ? plan("/task", res.body) : plan("/task/update", Object.assign({ id: task.id }, res.body));
+      req.then(function (r) { applyTask(r.task); closeDrawer(); render(); }, function (e) { save.disabled = false; err.textContent = say(e); });
+    }, "f-");
+    title = field(f.form, "f-title", "What needs doing", input("text", isNew ? "" : task.title, 200));
+    due = field(f.form, "f-due", "Date", input("date", isNew ? presetDate || "" : task.due), "Leave empty to keep it in the Inbox.");
+    time = field(f.form, "f-time", "Time (optional)", input("time", isNew ? "" : task.time));
+    prio = field(f.form, "f-priority", "Priority", select(L.PRIORITIES, isNew ? "normal" : task.priority));
+    recur = field(f.form, "f-recur", "Repeat", select(L.RECURRENCES, isNew ? "" : task.recur), "A repeating to-do moves to its next date when you tick it.");
+    notes = field(f.form, "f-notes", "Notes", textarea(isNew ? "" : task.notes, 3, 4000));
+    ref = field(f.form, "f-ref", "Link to an Ops item or article (optional)", input("text", isNew || !task.ref ? "" : task.ref.id, 300), "Paste an id (it_… or ka_…) or its address.");
+    f.form.appendChild(f.err); f.form.appendChild(f.actions);
+    body.appendChild(f.form);
     title.focus();
   }
 
-  // ---- 4. events ------------------------------------------------------------------------------------
+  function openEventForm(ev, presetDate) {
+    var isNew = !ev;
+    var body = openDrawer(isNew ? "Add an event" : "Edit event");
+    var title, start, allDay, st, et, end, recur, notes;
+    var f = formShell(function (err, save) {
+      var res = L.eventBody({ title: title.value, startDate: start.value, allDay: allDay.checked, startTime: st.value, endTime: et.value, endDate: end.value, recur: recur.value, notes: notes.value });
+      if (res.error) { f.fail(res); return; }
+      save.disabled = true;
+      var req = isNew ? plan("/event", res.body) : plan("/event/update", Object.assign({ id: ev.id }, res.body));
+      req.then(function (r) { applyEvent(r.event); closeDrawer(); render(); }, function (e) { save.disabled = false; err.textContent = say(e); });
+    }, "f-");
+    title = field(f.form, "f-title", "Name", input("text", isNew ? "" : ev.title, 200));
+    start = field(f.form, "f-startDate", "Starts on", input("date", isNew ? presetDate || today() : ev.startDate));
+    var adWrap = h("div", "cal-field cal-inline");
+    allDay = h("input"); allDay.type = "checkbox"; allDay.id = "f-allDay"; allDay.checked = isNew ? false : ev.allDay;
+    var adl = h("label", null, "All day"); adl.setAttribute("for", "f-allDay");
+    adWrap.appendChild(allDay); adWrap.appendChild(adl);
+    f.form.appendChild(adWrap);
+    st = field(f.form, "f-startTime", "Starts at", input("time", isNew ? "09:00" : ev.startTime));
+    et = field(f.form, "f-endTime", "Ends at (optional)", input("time", isNew ? "" : ev.endTime));
+    end = field(f.form, "f-endDate", "Ends on (optional)", input("date", isNew || ev.endDate === ev.startDate ? "" : ev.endDate), "Only for something that runs past midnight or over several days.");
+    recur = field(f.form, "f-recur", "Repeat", select(L.RECURRENCES, isNew ? "" : ev.recur));
+    notes = field(f.form, "f-notes", "Notes", textarea(isNew ? "" : ev.notes, 3, 4000));
+    function syncAllDay() { st.disabled = et.disabled = allDay.checked; }
+    allDay.addEventListener("change", syncAllDay); syncAllDay();
+    f.form.appendChild(f.err); f.form.appendChild(f.actions);
+    body.appendChild(f.form);
+    title.focus();
+  }
+
+  function openRenewalForm(r) {
+    var isNew = !r;
+    var body = openDrawer(isNew ? "Add a renewal" : "Edit " + r.label);
+    var title, kind, due, state, where, link, breaks, lead, renewed;
+    var f = formShell(function (err, save) {
+      var res = L.renewalBody({ title: title.value, kind: kind.value, due: due.value, state: state.value, where: where.value.trim(), link: link.value.trim(), breaks: breaks.value.trim(), leadDays: lead.value, renewed: renewed.value }, isNew ? "" : r.extra, isNew);
+      if (res.error) { f.fail({ error: res.error, field: res.field === "leadDays" ? "lead" : res.field }); return; }
+      save.disabled = true;
+      var req = isNew ? request(OPS_API, "POST", "/items", res.body) : request(OPS_API, "PATCH", "/items/" + r.id, res.body);
+      req.then(function () { closeDrawer(); return load(); }, function (e) { save.disabled = false; err.textContent = say(e); });
+    }, "f-");
+    title = field(f.form, "f-title", "Name", input("text", isNew ? "" : r.label, 120), "For example “Renew the domain”.");
+    kind = field(f.form, "f-kind", "Kind", select(L.KINDS, isNew ? "secret" : r.kind));
+    due = field(f.form, "f-due", "Date to act by", input("date", isNew ? "" : r.due), "Leave empty if you don’t know it yet; it will show under “Date still needed”.");
+    state = field(f.form, "f-state", "How sure is the date", select(L.STATES, isNew ? "known" : r.state));
+    where = field(f.form, "f-where", "How to renew it", textarea(isNew ? "" : r.where, 3, 300), "Where to go and what to click. Never paste the secret itself.");
+    link = field(f.form, "f-link", "Portal link (https)", input("url", isNew ? "" : r.link, 300));
+    breaks = field(f.form, "f-breaks", "What stops if it lapses", input("text", isNew ? "" : r.breaks, 300));
+    lead = field(f.form, "f-lead", "Days of notice it needs", input("number", isNew || r.leadDays === null ? "" : String(r.leadDays)));
+    lead.min = "0"; lead.max = "365";
+    renewed = field(f.form, "f-renewed", "Last renewed", input("date", isNew ? "" : r.lastRenewed));
+    f.form.appendChild(f.err); f.form.appendChild(f.actions);
+    body.appendChild(f.form);
+    title.focus();
+  }
+
+  // ---- changing things ----------------------------------------------------------------------
+
+  function applyTask(task) {
+    var i = model.tasks.findIndex(function (x) { return x.id === task.id; });
+    if (i >= 0) model.tasks[i] = task; else model.tasks.push(task);
+    writeCache();
+  }
+  function dropTask(id) { model.tasks = model.tasks.filter(function (x) { return x.id !== id; }); writeCache(); }
+  function applyEvent(ev) {
+    var i = model.events.findIndex(function (x) { return x.id === ev.id; });
+    if (i >= 0) model.events[i] = ev; else model.events.push(ev);
+    writeCache();
+  }
+  function dropEvent(id) { model.events = model.events.filter(function (x) { return x.id !== id; }); writeCache(); }
+
+  function tick(task, done) {
+    plan("/task/done", { id: task.id, done: done }).then(function (r) {
+      applyTask(r.task);
+      render();
+      if (r.advanced) toast("Done. “" + task.title + "” moves to " + L.shortDate(r.task.due) + ".", "Undo", function () {
+        plan("/task/update", { id: task.id, due: r.previousDue }).then(function (u) { applyTask(u.task); render(); }, function (e) { toast(say(e)); });
+      });
+      else if (done) toast("Ticked: “" + task.title + "”.", "Undo", function () { tick(r.task, false); });
+    }, function (e) { toast(say(e)); render(); });
+  }
+
+  function snooze(task, to) {
+    plan("/task/snooze", { id: task.id, to: to }).then(function (r) {
+      applyTask(r.task);
+      render();
+      toast("“" + task.title + "” moved to " + L.shortDate(r.task.due) + ".", "Undo", function () {
+        plan("/task/update", { id: task.id, due: r.previousDue || "" }).then(function (u) { applyTask(u.task); render(); }, function (e) { toast(say(e)); });
+      });
+    }, function (e) { toast(say(e)); });
+  }
+
+  function removeTask(task) {
+    plan("/task/delete", { id: task.id }).then(function () {
+      dropTask(task.id);
+      render();
+      toast("Deleted “" + task.title + "”.", "Undo", function () {
+        plan("/task", { title: task.title, notes: task.notes, due: task.due, time: task.time, priority: task.priority, recur: task.recur, ref: task.ref ? task.ref.id : "" })
+          .then(function (r) { applyTask(r.task); render(); }, function (e) { toast(say(e)); });
+      });
+    }, function (e) { toast(say(e)); });
+  }
+
+  function removeEvent(ev) {
+    plan("/event/delete", { id: ev.id }).then(function () {
+      dropEvent(ev.id);
+      render();
+      toast("Deleted “" + ev.title + "”.", "Undo", function () {
+        plan("/event", { title: ev.title, notes: ev.notes, startDate: ev.startDate, startTime: ev.startTime, endDate: ev.endDate, endTime: ev.endTime, recur: ev.recur })
+          .then(function (r) { applyEvent(r.event); render(); }, function (e) { toast(say(e)); });
+      });
+    }, function (e) { toast(say(e)); });
+  }
+
+  function clearDone() {
+    plan("/clear-done", {}).then(function (r) {
+      model.tasks = model.tasks.filter(function (x) { return x.status !== "done"; });
+      writeCache();
+      render();
+      toast("Cleared " + r.removed + (r.removed === 1 ? " ticked to-do." : " ticked to-dos."));
+    }, function (e) { toast(say(e)); });
+  }
+
+  // The quick-add box at the top: a title and an optional date.
+  function quickAdd(ev) {
+    ev.preventDefault();
+    var title = $("cal-quick-title"), date = $("cal-quick-date");
+    var res = L.taskBody({ title: title.value, due: date.value, priority: "normal" });
+    if (res.error) { toast(res.error); title.focus(); return; }
+    plan("/task", res.body).then(function (r) {
+      applyTask(r.task);
+      title.value = ""; date.value = "";
+      render();
+      toast(r.task.due ? "Added for " + L.shortDate(r.task.due) + "." : "Added to your Inbox.");
+      title.focus();
+    }, function (e) { toast(say(e)); });
+  }
+
+  // ---- events ------------------------------------------------------------------------------
 
   function setView(v) {
     model.view = v;
@@ -675,11 +778,11 @@
   }
 
   function downloadIcs() {
-    var text = buildIcs(model.renewals, Date.now(), "https://dashboard.barnyard.site/calendar.html");
+    var text = L.buildIcs({ renewals: model.renewals, tasks: model.tasks, events: model.events }, Date.now(), "https://dashboard.barnyard.site/calendar.html");
     var blob = new Blob([text], { type: "text/calendar;charset=utf-8" });
     var a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "barnyard-renewals.ics";
+    a.download = "barnyard-calendar.ics";
     document.body.appendChild(a);
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
@@ -692,7 +795,9 @@
     if (ev.key === "Escape") { closeDrawer(); return; }
     if (typing(ev.target)) return;
     if (ev.key === "t") goToday();
-    else if (ev.key === "n") openForm(null);
+    else if (ev.key === "n" && model.planner === "ok") { ev.preventDefault(); $("cal-quick-title").focus(); }
+    else if (ev.key === "e" && model.planner === "ok") openEventForm(null);
+    else if (ev.key === "r") openRenewalForm(null);
     else if (ev.key === "ArrowLeft" && model.view === "month") stepMonth(-1);
     else if (ev.key === "ArrowRight" && model.view === "month") stepMonth(1);
   }
@@ -701,12 +806,14 @@
     readPrefs();
     var d = new Date();
     model.month = { year: d.getFullYear(), month: d.getMonth() };
-    $("cal-add").addEventListener("click", function () { openForm(null); });
+    $("cal-add-event").addEventListener("click", function () { openEventForm(null); });
+    $("cal-add-renewal").addEventListener("click", function () { openRenewalForm(null); });
     $("cal-ics").addEventListener("click", downloadIcs);
     $("cal-prev").addEventListener("click", function () { stepMonth(-1); });
     $("cal-next").addEventListener("click", function () { stepMonth(1); });
     $("cal-today").addEventListener("click", goToday);
     $("cal-drawer-close").addEventListener("click", closeDrawer);
+    $("cal-quick").addEventListener("submit", quickAdd);
     $("cal-kind").addEventListener("change", function () { model.kind = $("cal-kind").value; savePrefs(); render(); });
     document.addEventListener("keydown", onKey);
     renderTabs();
@@ -714,11 +821,11 @@
     var authCheck = typeof window.barnyardAuthState === "function" ? window.barnyardAuthState() : Promise.resolve({ authenticated: false });
     authCheck.then(function (auth) {
       if (!auth.authenticated) { model.state = "guest"; render(); return; }
+      if (readCache()) { model.state = "ok"; model.planner = "ok"; render(); }
       load();
       setInterval(function () { if (!document.hidden && model.state === "ok") load(); }, POLL_MS);
     });
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
-  window.BarnyardCalendar = helpers;
 })();
