@@ -27,6 +27,16 @@
   function priorityTone(p) { return p === "P1" ? "alert" : p === "P2" ? "accent" : p === "P3" ? "info" : ""; }
   function priorityHint(p) { return PRIORITY_HINT[p] || ""; }
 
+  // Severity is the CVE's own CVSS rating (the Worker's `severity` filter); priority is how urgent it is HERE.
+  var SEVERITIES = [["critical", "Critical"], ["high", "High"], ["medium", "Medium"], ["low", "Low"], ["unrated", "Unrated"]];
+  // The choices for the severity drop-down, each with how many open findings carry it when the Worker says so: "High (3)".
+  function severityOptions(counts) {
+    var out = [["", "Any severity"]];
+    SEVERITIES.forEach(function (s) { var n = counts && counts[s[0]]; out.push([s[0], s[1] + (n ? " (" + n + ")" : "")]); });
+    return out;
+  }
+  function severityName(key) { for (var i = 0; i < SEVERITIES.length; i++) if (SEVERITIES[i][0] === key) return SEVERITIES[i][1]; return ""; }
+
   function toDate(v) {
     if (v === null || v === undefined || v === "") return null;
     var d = new Date(v);
@@ -148,7 +158,7 @@
   var BULK_MAX_IDS = 1000;
   function bulkFilter(F) {
     var out = { view: "current" };
-    ["q", "priority", "state", "item"].forEach(function (k) { var v = F && F[k] ? String(F[k]).trim() : ""; if (v) out[k] = v; });
+    ["q", "priority", "severity", "state", "item"].forEach(function (k) { var v = F && F[k] ? String(F[k]).trim() : ""; if (v) out[k] = v; });
     if (F && F.all) out.all = true;
     return out;
   }
@@ -483,7 +493,7 @@
     parseImport: parseImport, planImport: planImport, IMPORT_LIMITS: IMPORT_LIMITS,
     vectorText: vectorText, cvssRows: cvssRows, rangeText: rangeText,
     catalogTiles: catalogTiles, sourceRows: sourceRows, loadBanner: loadBanner,
-    stateText: stateText, stateTone: stateTone, priorityTone: priorityTone, priorityHint: priorityHint, fmtDate: fmtDate, monthLabel: monthLabel,
+    stateText: stateText, stateTone: stateTone, priorityTone: priorityTone, priorityHint: priorityHint, severityOptions: severityOptions, severityName: severityName, fmtDate: fmtDate, monthLabel: monthLabel,
     agoText: agoText, thousands: thousands, scoreText: scoreText, scoreTone: scoreTone, epssText: epssText, confidenceText: confidenceText,
     safeUrl: safeUrl, itemLabel: itemLabel, softwareLabel: softwareLabel, autoName: autoName, nameBase: nameBase, matchText: matchText, itemTree: itemTree, queryString: queryString,
     pageCount: pageCount, barPercent: barPercent, planBadge: planBadge, canEditPlan: canEditPlan, canApprove: canApprove, planDraft: planDraft,
@@ -590,8 +600,8 @@
   function mount(root) {
     var S = {
       view: "current", summary: null, env: null, catalog: null, detail: null, envForm: null, importOpen: false, busy: false, banner: null,
-      current: { q: "", priority: "", state: "", all: false, item: "", page: 1 },
-      history: { q: "", priority: "", state: "", item: "", page: 1 },
+      current: { q: "", priority: "", severity: "", state: "", all: false, item: "", page: 1 },
+      history: { q: "", priority: "", severity: "", state: "", item: "", page: 1 },
       catalogue: { q: "", zone: "", month: "", kev: false, page: 1, months: null, open: "" },
       historySummary: null,
       bulk: { ids: {}, all: false, panel: null }
@@ -729,10 +739,13 @@
       var pri = select([["", "Any priority"], ["P1", "P1"], ["P2", "P2"], ["P3", "P3"], ["P4", "P4"]], F.priority);
       pri.setAttribute("aria-label", "Priority");
       pri.addEventListener("change", function () { F.priority = pri.value; F.page = 1; S.bulk.all = false; load(); });
+      var sev = select(severityOptions(S.summary && S.summary.bySeverity), F.severity);
+      sev.setAttribute("aria-label", "Severity");
+      sev.addEventListener("change", function () { F.severity = sev.value; F.page = 1; S.bulk.all = false; load(); });
       var st = select([["", "Any status"]].concat(["new", "affects", "not_affected", "accepted", "approved", "fixed"].map(function (s) { return [s, stateText(s)]; })), F.state);
       st.setAttribute("aria-label", "Status");
       st.addEventListener("change", function () { F.state = st.value; F.page = 1; S.bulk.all = false; load(); });
-      bar.appendChild(q); bar.appendChild(pri); bar.appendChild(st);
+      bar.appendChild(q); bar.appendChild(pri); bar.appendChild(sev); bar.appendChild(st);
       var itemLabel = null;
       if (F.item && S.env) {
         var it = S.env.items.filter(function (i) { return i.id === F.item; })[0];
@@ -754,7 +767,7 @@
 
       var lastRes = null;
       function load() {
-        var query = { view: view, q: F.q, priority: F.priority, state: F.state, item: F.item, page: F.page, per: 25 };
+        var query = { view: view, q: F.q, priority: F.priority, severity: F.severity, state: F.state, item: F.item, page: F.page, per: 25 };
         if (view === "current" && F.all) query.all = true;
         api.findings(query).then(function (res) { lastRes = res; paint(); }, function (err) {
           clear(listHost);
@@ -822,7 +835,7 @@
           if (!res.items.length) {
             var none = S.env && !S.env.items.length;
             if (none) listHost.appendChild(emptyBox("Add your first item", "Tell this what you run, such as a server or a piece of software with its version, and it will keep a record of the known vulnerabilities that apply.", "Add what I run", function () { S.view = "env"; S.envForm = { kind: "infra" }; render(); }));
-            else if (F.q || F.priority || F.state || F.item) listHost.appendChild(emptyBox("Nothing matches", "No findings match those filters.", "Clear filters", function () { F.q = ""; F.priority = ""; F.state = ""; F.item = ""; F.page = 1; S.bulk.all = false; render(); }));
+            else if (F.q || F.priority || F.severity || F.state || F.item) listHost.appendChild(emptyBox("Nothing matches", "No findings match those filters.", "Clear filters", function () { F.q = ""; F.priority = ""; F.severity = ""; F.state = ""; F.item = ""; F.page = 1; S.bulk.all = false; render(); }));
             else listHost.appendChild(emptyBox(view === "current" ? "Nothing needs attention" : "No findings yet", view === "current" ? "No known vulnerability that is worth acting on applies to what you run right now. Lower-risk ones are under “Show everything”." : "Once something you run matches a known CVE it is kept here for good.", null));
             return;
           }
