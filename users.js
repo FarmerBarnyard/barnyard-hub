@@ -220,7 +220,7 @@
     }
     var note = h("div", "us-note");
     note.appendChild(h("p", null, "Entra's groups are the real way in and out. Suspending someone here stops the site working for them at once, but they should also be removed from the Entra group. Restrictions can only lower what their groups already allow."));
-    note.appendChild(h("p", "dim", "People added in Entra who have not signed in yet will not appear until they do. Each person's name, email, groups and sign-in times are stored here (never a password, token or address), and Remove forgets them."));
+    note.appendChild(h("p", "dim", "People added in Entra who have not signed in yet will not appear until they do. Each person's name, email, groups and sign-in times are stored here (never a password, token, IP address or browser details), and Remove forgets them."));
     root.appendChild(note);
 
     // filters
