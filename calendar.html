@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Calendar &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=61714599">
+<link rel="stylesheet" href="calendar.css?v=54563178">
+<script src="themes.js?v=70f6889a"></script>
+</head>
+<body data-shell="calendar" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Calendar</h1>
+      <p>Everything that runs out or comes due, in one place: secrets, keys, tokens, the domain, licences and the Ops items with a date. <a href="index.html">Back to the overview</a></p>
+    </div>
+    <div class="cal-tools">
+      <button type="button" class="btn btn-primary btn-sm" id="cal-add">Add a renewal</button>
+      <button type="button" class="btn btn-sm" id="cal-ics">Download calendar (.ics)</button>
+    </div>
+  </div>
+
+  <div class="cal-bar">
+    <div class="cal-tabs" role="tablist" aria-label="Calendar views" id="cal-tabs"></div>
+    <div class="cal-nav" id="cal-nav" hidden>
+      <button type="button" class="btn btn-sm" id="cal-prev" aria-label="Previous month">&larr;</button>
+      <button type="button" class="btn btn-sm" id="cal-today">Today</button>
+      <button type="button" class="btn btn-sm" id="cal-next" aria-label="Next month">&rarr;</button>
+    </div>
+    <label class="cal-filter">Show
+      <select id="cal-kind" aria-label="Filter by kind"></select>
+    </label>
+  </div>
+
+  <div id="cal-root" aria-live="polite">
+    <p class="dim">Loading&hellip;</p>
+  </div>
+
+  <p class="cal-foot dim" id="cal-foot"></p>
+
+  <aside class="cal-drawer" id="cal-drawer" role="dialog" aria-modal="false" aria-labelledby="cal-drawer-title" hidden>
+    <div class="cal-drawer-head">
+      <h2 id="cal-drawer-title">Details</h2>
+      <button type="button" class="btn btn-sm btn-quiet" id="cal-drawer-close" aria-label="Close details">Close</button>
+    </div>
+    <div class="cal-drawer-body" id="cal-drawer-body"></div>
+  </aside>
+</main>
+
+<script src="shell.js?v=1fd43877"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="calendar.js?v=36d79984"></script>
+</body>
+</html>
