@@ -120,7 +120,7 @@
   };
   var desc = {
     id: "assets", title: "Assets & services", about: "What you run, who looks after it, when it renews and what it costs.",
-    w: 6, h: 7, minW: 3, minH: 3, maxW: 12, maxH: 24, ownerOnly: true
+    w: 6, h: 7, minW: 3, minH: 3, maxW: 12, maxH: 24, ownerOnly: true, permission: "tile.assets"
   };
   helpers.descriptor = desc;
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
@@ -394,6 +394,6 @@
 
   K.register({
     id: desc.id, title: desc.title, about: desc.about, w: desc.w, h: desc.h, minW: desc.minW, minH: desc.minH, maxW: desc.maxW, maxH: desc.maxH,
-    ownerOnly: true, render: render, openRegister: openRegister
+    ownerOnly: true, permission: desc.permission, render: render, openRegister: openRegister
   });
 })(typeof window !== "undefined" ? window : globalThis);
