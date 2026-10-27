@@ -240,6 +240,13 @@
   // ---- the server reporters (a small script on each server; see ClaudeRepo's reporter/) ----------
 
   var SERVERS = [{ id: "app02", name: "app02" }, { id: "cld01", name: "BARNYARDCLD01" }, { id: "vtt", name: "VTT server" }];
+
+  // The switches under settings.alerts in the Worker (monitor-logic.js): every one is on until the owner turns it off.
+  var ALERT_SWITCHES = [
+    ["reporters", "A reporter goes quiet, or the site may have lost power or internet"],
+    ["resources", "A disk is nearly full, memory or load is high, or a service stops"],
+    ["vulns", "A new critical vulnerability affects something you run, with a monthly reminder while any are still open"]
+  ];
   var REPORTER_DOCS = "https://github.com/FarmerBarnyard/ClaudeRepo/tree/main/reporter";
 
   function uptimeText(sec) {
@@ -335,7 +342,7 @@
     emailStatus: emailStatus, mailErrorText: mailErrorText, hoursText: hoursText, validateAddress: validateAddress, addRecipient: addRecipient,
     removeRecipient: removeRecipient, hoursBody: hoursBody, historyRows: historyRows, securityRows: securityRows, expiryRows: expiryRows,
     uptimeText: uptimeText, reportLines: reportLines, reporterCards: reporterCards, envLines: envLines, reasonText: reasonText,
-    derivedRows: derivedRows, keyErrorText: keyErrorText, SERVERS: SERVERS,
+    derivedRows: derivedRows, keyErrorText: keyErrorText, SERVERS: SERVERS, ALERT_SWITCHES: ALERT_SWITCHES,
     ZONES: ZONES, DAY_NAMES: DAY_NAMES, DAY_ORDER: DAY_ORDER, MAX_RECIPIENTS: MAX_RECIPIENTS
   };
 
@@ -726,11 +733,11 @@
     });
     al.appendChild(hf);
 
-    // the groups of alerts that come from the servers' reports
-    al.appendChild(h("h3", "mo-sub", "Alerts from the server reporters"));
+    // the groups of alerts that are not one outside check each: from the servers' reports, and new critical vulnerabilities
+    al.appendChild(h("h3", "mo-sub", "Other alerts"));
     var gl = h("ul", "mo-list");
     gl.setAttribute("role", "list");
-    [["reporters", "A reporter goes quiet, or the site may have lost power or internet"], ["resources", "A disk is nearly full, memory or load is high, or a service stops"]].forEach(function (g) {
+    ALERT_SWITCHES.forEach(function (g) {
       var li = h("li");
       var l = h("label", "mo-check");
       var c = h("input"); c.type = "checkbox"; c.checked = !(s.alerts && s.alerts[g[0]] === false);
