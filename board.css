@@ -1,0 +1,90 @@
+/* The Overview board (board.js, board-layout.js): the 12-column grid the widgets sit on, the Customise bar, and
+   what a tile looks like while it is being moved or resized. Colours are theme tokens only. shell.css (shared by
+   all four sites) is left alone: the ID selector below is what lets this file win over its widget grid. */
+
+:root { --board-row: 36px; }
+
+#widgets.is-board { display: grid; grid-template-columns: repeat(var(--board-cols, 12), minmax(0, 1fr)); grid-auto-rows: var(--board-row); gap: 12px var(--col-gap); align-items: stretch; position: relative; }
+#widgets.is-board > .w { overflow: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; min-height: 0; }
+#widgets.is-board > .w[hidden] { display: none; }
+#widgets.is-board > .all-hidden { grid-column: 1 / -1; }
+/* Narrow: one column at its own natural width. */
+#widgets.is-board[data-cols="1"] { gap: 12px 0; }
+
+/* ---- the bar above the board ---- */
+.board-bar { margin: 0 0 14px; }
+.board-row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+.board-editing { justify-content: space-between; padding: 10px 14px; border: 1px solid var(--accent); border-radius: 12px; background: var(--accent-soft); }
+.board-title { color: var(--fg-strong); font-weight: 600; }
+.board-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.board-ask { color: var(--fg-strong); font-size: 13px; }
+.board-hint { margin: 10px 2px 0; font-size: 13px; max-width: 90ch; }
+.board-panel { margin: 12px 0 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.board-panel-h { font: 600 15px var(--font-display); color: var(--fg-strong); margin: 0 0 4px; }
+.board-tiles { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 18px; }
+.board-tile-label { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; cursor: pointer; }
+.board-tile-label input { margin-top: 3px; }
+.board-tile-text { display: flex; flex-direction: column; gap: 2px; }
+.board-tile-text b { color: var(--fg-strong); font-weight: 500; }
+.board-tile-text .dim { font-size: 12.5px; }
+
+/* ---- a tile while customising ---- */
+.b-bar, .b-rs, .b-menu { display: none; }
+#widgets.is-editing > .w { padding-top: 40px; border-radius: 12px; outline: 1.5px dashed var(--line); outline-offset: -1.5px; user-select: none; -webkit-user-select: none; }
+#widgets.is-editing > .w:not(.lift) { border-top: 0; }
+#widgets.is-editing > .w:focus-within { outline: 2px solid var(--accent); }
+#widgets.is-editing > .w.is-picked { outline: 2px solid var(--accent); background: var(--accent-soft); }
+#widgets.is-editing > .w > :not(.b-bar):not(.b-rs):not(.b-menu):not(.w-grip) { pointer-events: none; }
+#widgets.is-editing > .w > .w-grip { display: none; }
+#widgets.is-editing .b-bar { display: flex; align-items: center; gap: 4px; position: absolute; z-index: 3; top: 0; left: 0; right: 0; height: 34px; padding: 0 4px 0 2px; border-bottom: 1px solid var(--line); border-radius: 12px 12px 0 0; background: var(--panel-2); }
+#widgets.is-editing .b-grip { flex: 1; display: flex; align-items: center; gap: 6px; height: 100%; min-width: 0; padding: 0 8px; border: 0; background: none; color: var(--fg-dim); cursor: grab; touch-action: none; font: inherit; text-align: left; }
+#widgets.is-editing .b-grip:hover, #widgets.is-editing .b-grip:focus-visible { color: var(--fg-strong); }
+#widgets.is-editing .b-grip:focus-visible, #widgets.is-editing .b-more:focus-visible, .b-act:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
+#widgets.is-list .b-grip { cursor: default; }
+.b-grip .i { width: 18px; height: 18px; flex: none; fill: currentColor; stroke: none; }
+.b-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
+#widgets.is-editing .b-more { flex: none; width: 34px; height: 30px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: none; color: var(--fg-dim); cursor: pointer; }
+#widgets.is-editing .b-more:hover { color: var(--fg-strong); background: var(--panel); }
+.b-more .i { width: 20px; height: 20px; fill: currentColor; stroke: none; }
+#widgets.is-editing .b-menu { display: flex; flex-direction: column; position: absolute; z-index: 6; top: 36px; right: 4px; min-width: 190px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: var(--lift); }
+#widgets.is-editing .b-menu[hidden] { display: none; }
+.b-act { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 7px; background: none; color: var(--fg-strong); font: inherit; text-align: left; cursor: pointer; }
+.b-act:hover { background: var(--accent-soft); }
+
+/* the grips on the edges and corner that resize a tile (not on a stacked list) */
+#widgets.is-editing:not(.is-list) .b-rs { display: block; position: absolute; z-index: 3; touch-action: none; }
+.b-rs-e { top: 40px; bottom: 16px; right: 0; width: 14px; cursor: ew-resize; }
+.b-rs-s { left: 16px; right: 16px; bottom: 0; height: 14px; cursor: ns-resize; }
+.b-rs-se { right: 0; bottom: 0; width: 20px; height: 20px; cursor: nwse-resize; }
+.b-rs::after { content: ""; position: absolute; border-radius: 3px; background: var(--fg-dim); opacity: .45; }
+.b-rs-e::after { top: 50%; right: 4px; width: 3px; height: 28px; transform: translateY(-50%); }
+.b-rs-s::after { left: 50%; bottom: 4px; width: 28px; height: 3px; transform: translateX(-50%); }
+.b-rs-se::after { right: 4px; bottom: 4px; width: 9px; height: 9px; border-radius: 2px; background: none; border-right: 3px solid var(--fg-dim); border-bottom: 3px solid var(--fg-dim); }
+.b-rs:hover::after { opacity: 1; background: var(--accent); }
+.b-rs-se:hover::after { background: none; border-color: var(--accent); }
+
+/* while one is being dragged */
+#widgets.is-dragging, #widgets.is-dragging * { cursor: grabbing !important; }
+#widgets.is-dragging > .w { user-select: none; }
+#widgets.is-editing > .w.is-lifting { z-index: 20; opacity: .93; box-shadow: var(--lift); background: var(--panel); outline: 2px solid var(--accent); }
+.b-ghost { z-index: 1; border-radius: 12px; border: 2px dashed var(--accent); background: var(--accent-soft); pointer-events: none; }
+
+/* ---- what a tile shows depends on how much room it has (each .w is a size container) ---- */
+@container (max-width: 270px) {
+  .sec-head .sub, .sec-head a.sub, .need-head a, .week-range { display: none; }
+  .need { padding-inline: 12px; }
+  .need-head { padding-inline: 12px; }
+  .need .acts { flex-wrap: wrap; }
+  .week-day-name { font-size: 10px; }
+  .market-price { font-size: 22px; }
+  .todo-form { flex-wrap: wrap; }
+}
+@container (max-width: 190px) {
+  .weather-forecast, .week-status { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) { #widgets.is-editing > .w.is-lifting { transition: none; } }
+@media (forced-colors: active) {
+  #widgets.is-editing > .w { outline-color: CanvasText; }
+  .b-ghost { border-color: Highlight; }
+}

@@ -646,9 +646,14 @@
     return !!Theme.who && widgetRestricted(id, Theme.who.get());
   }
 
+  // The board (board.js) places the tiles on its grid and handles Customise. If its scripts did not load, the page
+  // falls back to the plain order-and-width layout below, with the older grips for reordering.
+  var board = null;
+
   function applyLayout() {
     var settings = window.BarnyardTheme.get(), box = $("widgets");
     if (!box) return;
+    if (board) { board.render(); return; }
     var shown = 0;
     settings.widgets.forEach(function (w, order) {
       var el = box.querySelector('[data-w="' + w.id + '"]');
@@ -732,17 +737,19 @@
         fs.appendChild(h("legend", null, "Overview widgets"));
         fs.appendChild(h("p", "hint", "Choose what shows on the Overview, how wide each piece is, and the order. Start from a preset, then adjust."));
         var presets = h("div", "preset-row");
+        // Choosing here (a preset, a width, the order, what is shown) starts the board's arrangement over from the list,
+        // so the two never disagree: board: null means "worked out from this list".
         PRESETS.forEach(function (p) {
           var b = h("button", "btn btn-sm", p.title);
           b.type = "button";
-          b.addEventListener("click", function () { Theme.set({ widgets: p.widgets.map(function (w) { return { id: w.id, visible: w.visible, size: w.size }; }) }); window.BarnyardShell.toast("Layout: " + p.title); });
+          b.addEventListener("click", function () { Theme.set({ widgets: p.widgets.map(function (w) { return { id: w.id, visible: w.visible, size: w.size }; }), board: null }); window.BarnyardShell.toast("Layout: " + p.title); });
           presets.appendChild(b);
         });
         fs.appendChild(presets);
         var ul = h("ul", "wlist");
         var widgets = Theme.get().widgets;
         function commit(next, focusIndex, focusDir) {
-          Theme.set({ widgets: next });
+          Theme.set({ widgets: next, board: null });
           if (focusIndex != null) {
             var rows = document.querySelectorAll(".wrow"), row = rows[focusIndex];
             if (row) {
@@ -853,8 +860,14 @@
   function boot() {
     registerLayoutTab();
     registerAccountTab();
+    if (window.BarnyardBoardUI && window.BarnyardBoard && $("widgets")) {
+      board = window.BarnyardBoardUI.create({
+        box: $("widgets"), Theme: window.BarnyardTheme, titles: WIDGET_TITLE, restricted: restricted,
+        say: function (text) { if (window.BarnyardShell && window.BarnyardShell.toast) window.BarnyardShell.toast(text); }
+      });
+    }
     applyLayout();
-    setupDrag();
+    if (!board) setupDrag();
     window.BarnyardTheme.onChange(applyLayout);
     // Once it is known who is signed in, hide the owner's own widgets from a guest.
     if (window.BarnyardTheme.who) window.BarnyardTheme.who.onChange(function () {

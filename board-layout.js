@@ -36,16 +36,41 @@
     { id: "need",    title: "Waiting on you",          about: "What on the Ops board needs a decision or a step from you.",  w: 6,  h: 8, minW: 4, minH: 4, maxW: 12, maxH: 30 },
     { id: "feed",    title: "Since you last looked",   about: "The latest changes on the Ops board.",                        w: 6,  h: 8, minW: 4, minH: 4, maxW: 12, maxH: 30 },
     { id: "flight",  title: "In progress and soaking", about: "Work under way and work being watched.",                     w: 3,  h: 7, minW: 3, minH: 4, maxW: 12, maxH: 30 },
-    { id: "market",  title: "Nasdaq-100",              about: "The live Nasdaq-100 price.",                                  w: 3,  h: 3, minW: 2, minH: 2, maxW: 6,  maxH: 8 },
+    { id: "market",  title: "Nasdaq-100",              about: "The live Nasdaq-100 price.",                                  w: 3,  h: 4, minW: 2, minH: 3, maxW: 6,  maxH: 8 },
     { id: "weather", title: "Weather",                 about: "Today and the week ahead, near you (only asks when you do).", w: 3,  h: 5, minW: 3, minH: 4, maxW: 12, maxH: 14 },
     { id: "week",    title: "This week",               about: "Your calendar for the week.",                                 w: 3,  h: 5, minW: 3, minH: 4, maxW: 12, maxH: 14, ownerOnly: true },
     { id: "todo",    title: "To-do",                   about: "Your to-do list.",                                            w: 3,  h: 6, minW: 3, minH: 4, maxW: 12, maxH: 30 },
     { id: "links",   title: "Shortcuts",               about: "Your quick links.",                                           w: 12, h: 3, minW: 4, minH: 2, maxW: 12, maxH: 8,  ownerOnly: true }
   ];
 
+  var SLUG = /^[a-z0-9][a-z0-9-]{0,31}$/;
+
+  // What the board assumes about a tile it has no entry for (a widget added to themes.js before it was added
+  // here): a middling size, so it still shows up and can be moved and resized instead of vanishing.
+  function generic(id) {
+    return { id: id, title: id, about: "", w: 3, h: 6, minW: 2, minH: 3, maxW: 12, maxH: 30, generic: true };
+  }
+
   function spec(id) {
     for (var i = 0; i < CATALOGUE.length; i++) if (CATALOGUE[i].id === id) return CATALOGUE[i];
-    return null;
+    return typeof id === "string" && SLUG.test(id) ? generic(id) : null;
+  }
+
+  // Adds a tile to the catalogue (a page that brings its own tile calls this before the board starts); the entry
+  // is checked and forced inside the grid. Registering an id again replaces it. -> the stored entry, or null.
+  function register(entry) {
+    if (!entry || typeof entry.id !== "string" || !SLUG.test(entry.id)) return null;
+    var minW = between(isInt(entry.minW) ? entry.minW : 2, 1, COLS), maxW = between(isInt(entry.maxW) ? entry.maxW : COLS, minW, COLS);
+    var minH = between(isInt(entry.minH) ? entry.minH : 3, 1, 40), maxH = between(isInt(entry.maxH) ? entry.maxH : 30, minH, 40);
+    var clean = {
+      id: entry.id, title: String(entry.title || entry.id).slice(0, 60), about: String(entry.about || "").slice(0, 160),
+      w: between(isInt(entry.w) ? entry.w : 3, minW, maxW), h: between(isInt(entry.h) ? entry.h : 6, minH, maxH),
+      minW: minW, minH: minH, maxW: maxW, maxH: maxH
+    };
+    if (entry.ownerOnly) clean.ownerOnly = true;
+    for (var i = 0; i < CATALOGUE.length; i++) if (CATALOGUE[i].id === clean.id) { CATALOGUE[i] = clean; return clean; }
+    CATALOGUE.push(clean);
+    return clean;
   }
 
   function isInt(n) { return typeof n === "number" && isFinite(n) && Math.floor(n) === n; }
@@ -280,7 +305,7 @@
   }
 
   var api = {
-    COLS: COLS, MAX_ROWS: MAX_ROWS, MAX_TILES: MAX_TILES, CATALOGUE: CATALOGUE, spec: spec,
+    COLS: COLS, MAX_ROWS: MAX_ROWS, MAX_TILES: MAX_TILES, CATALOGUE: CATALOGUE, spec: spec, register: register,
     clampTile: clampTile, overlaps: overlaps, lowestFree: lowestFree, settle: settle, compact: compact,
     normalizeBoard: normalizeBoard, toBoard: toBoard, fromWidgets: fromWidgets, effective: effective, toWidgets: toWidgets,
     move: move, resize: resize, nudge: nudge, grow: grow, remove: remove, add: add, fit: fit, reorder: reorder,

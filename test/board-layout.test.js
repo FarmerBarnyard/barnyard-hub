@@ -65,7 +65,7 @@ test("an uncustomised viewer gets the page's arrangement: tiles in order, wrappi
   assertValid(tiles, 12, "default"); assertCompact(tiles, 12, "default");
   assert.strictEqual(boxes(tiles), [
     "need@0,0 6x8", "feed@6,0 6x8",
-    "flight@0,8 3x7", "market@3,8 3x3", "weather@6,8 3x5", "week@9,8 3x5",
+    "flight@0,8 3x7", "market@3,8 3x4", "weather@6,8 3x5", "week@9,8 3x5",
     "todo@0,15 3x6", "links@0,21 12x3"
   ].join(" | "), "same order, same widths");
   assert.deepStrictEqual(B.readingOrder(tiles), DEFAULT_LIST.map(function (e) { return e.id; }), "reading order is the list's order");
@@ -145,7 +145,7 @@ test("a hidden tile leaves a gap that closes; a shown one goes in the first free
   assertValid(back, 12, "added"); assertCompact(back, 12, "added");
   assert.ok(B.find(back, "need"), "it is back");
   assert.strictEqual(B.add(back, "need").length, back.length, "adding what is there changes nothing");
-  assert.strictEqual(B.add(back, "bogus").length, back.length, "an unknown tile is ignored");
+  assert.strictEqual(B.add(back, "Not A Tile!").length, back.length, "an unknown tile is ignored");
 });
 
 test("fitting a tile to its content sets its height inside its limits", function () {
@@ -182,7 +182,7 @@ test("a saved board is checked: unknown tiles, repeats, bad numbers and bad shap
   assert.strictEqual(B.normalizeBoard({ v: 1, tiles: "no" }), null);
   assert.strictEqual(B.normalizeBoard({ v: 1, tiles: [] }), null, "nothing usable");
   var n = B.normalizeBoard({ v: 1, tiles: [
-    { id: "need", x: 0, y: 0, w: 99, h: 99 }, { id: "need", x: 1, y: 1, w: 3, h: 3 }, { id: "bogus", x: 0, y: 0, w: 1, h: 1 },
+    { id: "need", x: 0, y: 0, w: 99, h: 99 }, { id: "need", x: 1, y: 1, w: 3, h: 3 }, { id: "Not A Tile!", x: 0, y: 0, w: 1, h: 1 },
     { id: "feed", x: "a", y: 0, w: 6, h: 6 }, null, { id: "todo", x: 11, y: 0, w: 3, h: 6 }
   ] });
   assertValid(n, 12, "normalised");
@@ -282,6 +282,33 @@ test("a move to a place and then back is stable: dropping a tile where it alread
     var a = B.find(tiles, s.id);
     assert.strictEqual(boxes(B.compact(B.move(tiles, s.id, a.x, a.y))), boxes(tiles), "dropping " + s.id + " in place");
   });
+});
+
+// These two add to the catalogue, so they run last.
+test("a tile the catalogue does not list still gets a middling size, so it never vanishes from the page", function () {
+  var list = DEFAULT_LIST.concat([{ id: "brand-new", visible: true, size: 1 }]);
+  var tiles = B.fromWidgets(list);
+  var added = B.find(tiles, "brand-new");
+  assert.ok(added, "it is on the board");
+  assert.ok(added.w >= 2 && added.h >= 3);
+  assertValid(B.compact(tiles), 12, "with a tile the catalogue has not heard of");
+  assert.strictEqual(B.spec("Not A Tile!"), null, "but something that is not a tile id is still refused");
+  assert.strictEqual(B.spec("brand-new").generic, true);
+});
+
+test("a page can register its own tile, with its limits checked and forced inside the grid", function () {
+  assert.strictEqual(B.register(null), null);
+  assert.strictEqual(B.register({ id: "Bad Id" }), null);
+  var r = B.register({ id: "backups", title: "Backups", about: "How the last backups went.", w: 99, h: 0, minW: 4, minH: 3, maxW: 99, maxH: 99, ownerOnly: true });
+  assert.deepStrictEqual([r.w, r.h, r.minW, r.maxW, r.minH, r.maxH, r.ownerOnly], [12, 3, 4, 12, 3, 40, true]);
+  assert.strictEqual(B.spec("backups").title, "Backups");
+  assert.ok(B.CATALOGUE.some(function (c) { return c.id === "backups"; }), "it is in the catalogue");
+  var again = B.register({ id: "backups", title: "Backups (new)", w: 4, h: 4 });
+  assert.strictEqual(B.CATALOGUE.filter(function (c) { return c.id === "backups"; }).length, 1, "registering again replaces it");
+  assert.strictEqual(B.spec("backups").title, "Backups (new)");
+  assert.ok(again.minW >= 1 && again.w >= again.minW);
+  var tiles = B.add(B.fromWidgets(DEFAULT_LIST), "backups");
+  assertValid(tiles, 12, "with the registered tile");
 });
 
 console.log("\n" + passed + " passed");
