@@ -237,10 +237,105 @@
     });
   }
 
+  // ---- the server reporters (a small script on each server; see ClaudeRepo's reporter/) ----------
+
+  var SERVERS = [{ id: "app02", name: "app02" }, { id: "cld01", name: "BARNYARDCLD01" }, { id: "vtt", name: "VTT server" }];
+  var REPORTER_DOCS = "https://github.com/FarmerBarnyard/ClaudeRepo/tree/main/reporter";
+
+  function uptimeText(sec) {
+    if (!Number.isFinite(sec) || sec < 0) return "";
+    var d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+    if (d) return d + " d " + h + " h";
+    if (h) return h + " h " + m + " min";
+    return Math.max(1, m) + " min";
+  }
+
+  // The last report as short lines a person can read: load, memory, disks, uptime, services, who it can reach.
+  function reportLines(report) {
+    var out = [];
+    if (!report) return out;
+    if (report.load) out.push("Load " + report.load.l1 + " on " + report.load.cores + (report.load.cores === 1 ? " core" : " cores"));
+    if (report.mem) out.push("Memory " + Math.round(report.mem.usedPct) + "% used");
+    (report.disks || []).forEach(function (d) { out.push("Disk " + d.mount + " " + Math.round(d.usedPct) + "% full"); });
+    if (report.uptime !== null && report.uptime !== undefined) out.push("Up " + uptimeText(report.uptime));
+    var sv = report.services || [];
+    if (sv.length) out.push("Services: " + sv.map(function (s) { return s.name + (s.up ? " running" : " NOT running"); }).join(", "));
+    var pe = report.peers || [];
+    if (pe.length) out.push("Can reach: " + pe.map(function (p) { return p.id + (p.ok === null ? " (not tested)" : p.ok ? " yes" + (p.ms ? " (" + p.ms + " ms)" : "") : " NO"); }).join(", "));
+    return out;
+  }
+
+  // One card per server: { id, name, tone, label, line, lines, keys: [{ id, tail, state, text, canRevoke }], canMake }.
+  // The best key is the active one that reported most recently.
+  function reporterCards(reporters, now) {
+    var list = Array.isArray(reporters) ? reporters : [];
+    return SERVERS.map(function (s) {
+      var mine = list.filter(function (r) { return r.server === s.id; });
+      var active = mine.filter(function (r) { return r.state === "reporting" || r.state === "silent" || r.state === "waiting"; });
+      var best = active.slice().sort(function (a, b) { return (b.lastSeen || 0) - (a.lastSeen || 0); })[0];
+      var tone = "", label = "No key yet", line = "Make a key, then install the reporter on this server.", lines = [];
+      if (best) {
+        if (best.state === "reporting") { tone = "ok"; label = "Reporting"; line = "Last report " + agoText(best.lastSeen, now) + "."; lines = reportLines(best.report); }
+        else if (best.state === "silent") { tone = "attn"; label = "Silent"; line = "Last report " + agoText(best.lastSeen, now) + ". The reporter may have stopped, or the server cannot reach the Worker."; lines = reportLines(best.report); }
+        else { tone = "attn"; label = "Waiting for its first report"; line = "The key is made but nothing has reported with it yet. Install the reporter on the server."; }
+      } else if (mine.some(function (r) { return r.state === "expired"; })) { tone = "alert"; label = "Key expired"; line = "Make a new key and put it in the server's env file."; }
+      var keys = mine.map(function (r) {
+        var tail = r.id.slice(-4);
+        var day = function (ms) { return new Date(ms).toISOString().slice(0, 10); };
+        var text = r.state === "revoked" ? "revoked" : r.state === "expired" ? "expired " + day(r.expiresAt) : "made " + day(r.createdAt) + ", expires " + day(r.expiresAt);
+        return { id: r.id, tail: tail, state: r.state, text: text, canRevoke: r.state !== "revoked" && r.state !== "expired" };
+      });
+      var activeCount = active.length;
+      return { id: s.id, name: s.name, tone: tone, label: label, line: line, lines: lines, keys: keys, canMake: activeCount < 3 };
+    });
+  }
+
+  // What the page tells the owner to paste into /etc/barnyard-reporter/env.
+  function envLines(server, key) { return "BR_SERVER=" + server + "\nBR_KEY=" + key + "\n"; }
+
+  // The words for the reason codes the Worker keeps with an alert from a report (monitor-reporters.js reasonText).
+  function reasonText(detail) {
+    if (!detail) return "";
+    if (detail === "server_up") return "The server is running and checking in, but Cloudflare cannot reach it (check the tunnel).";
+    if (detail === "reporter_silent") return "Its reporter has gone quiet too.";
+    if (detail === "peer_reports") return "Its reporter is silent and another server cannot reach it either.";
+    if (detail === "silent") return "It has not checked in, although the server is answering from outside (the reporter service may have stopped).";
+    if (detail === "waiting") return "It has not reported yet.";
+    if (detail === "power") return "Everything that reports from the site went quiet at once and the outside checks fail too: the site may have lost power or internet.";
+    var p = detail.split("|");
+    if (p[0] === "disk95" || p[0] === "disk85") return "The disk " + p[1] + " is " + p[2] + "% full.";
+    if (p[0] === "svc") return "The service " + p[1] + " is not running.";
+    if (p[0] === "mem") return "Memory is " + p[2] + "% used.";
+    if (p[0] === "load") return "The load is " + p[2] + " per core.";
+    return "";
+  }
+
+  // The alerts that come from reports (reporter silent, getting full, disk or service, power or internet) that are not fine.
+  function derivedRows(derived, now) {
+    return (Array.isArray(derived) ? derived : []).filter(function (d) { return d.status === "down"; }).map(function (d) {
+      return {
+        id: d.id, name: d.name, tone: d.grade === "notice" ? "attn" : "alert", label: d.grade === "notice" ? "Notice" : "Alert",
+        text: reasonText(d.detail) + (d.downSince ? " Since " + clockText(d.downSince) + " (" + durationText(now - d.downSince) + ")." : "")
+      };
+    });
+  }
+
+  // Plain words for what the Worker says when a key cannot be made or revoked.
+  function keyErrorText(r) {
+    var err = r && r.error;
+    if (err === "too_many_keys") return "That server already has three keys. Revoke one first.";
+    if (err === "server_unknown") return "That is not one of the servers.";
+    if (err === "label_invalid") return "That label has characters I cannot use.";
+    if (err === "reporter_unknown") return "That key no longer exists.";
+    return mailErrorText(r);
+  }
+
   var helpers = {
     agoText: agoText, durationText: durationText, clockText: clockText, detailText: detailText, tileModel: tileModel, summarise: summarise,
     emailStatus: emailStatus, mailErrorText: mailErrorText, hoursText: hoursText, validateAddress: validateAddress, addRecipient: addRecipient,
     removeRecipient: removeRecipient, hoursBody: hoursBody, historyRows: historyRows, securityRows: securityRows, expiryRows: expiryRows,
+    uptimeText: uptimeText, reportLines: reportLines, reporterCards: reporterCards, envLines: envLines, reasonText: reasonText,
+    derivedRows: derivedRows, keyErrorText: keyErrorText, SERVERS: SERVERS,
     ZONES: ZONES, DAY_NAMES: DAY_NAMES, DAY_ORDER: DAY_ORDER, MAX_RECIPIENTS: MAX_RECIPIENTS
   };
 
@@ -251,7 +346,8 @@
 
   // ---- 2. data --------------------------------------------------------------
 
-  var model = { state: "loading", mon: null, hub: null, vuln: null, flash: null, busy: false };
+  // newKey: the key just made, held here only until the owner is done with it (it is never stored anywhere).
+  var model = { state: "loading", mon: null, hub: null, vuln: null, flash: null, busy: false, newKey: null };
 
   function getJson(url, init) {
     var controller = new AbortController();
@@ -391,6 +487,8 @@
     si.appendChild(tileGrid(tiles.filter(function (t) { return t.group === "sites"; })));
     root.appendChild(si);
 
+    root.appendChild(reportersSection(st, now));
+
     // security
     var sec = section("Security", "from the vulnerability register and the daily check");
     var secRows = securityRows(model.vuln, model.hub, now);
@@ -443,6 +541,104 @@
     var stamp = $("mon-stamp");
     if (stamp) stamp.textContent = "Updated " + new Date().toLocaleTimeString();
     if (model.flash) flash(model.flash.text, model.flash.tone);
+  }
+
+  // Copies text with the clipboard API, or by selecting an input when that is not allowed.
+  function copyText(text, input, done) {
+    function fallback() {
+      try { input.focus(); input.select(); document.execCommand("copy"); done(true); } catch (e) { done(false); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+    else fallback();
+  }
+
+  // One card per server with its reporter's state and the keys, and the box that shows a new key once.
+  function reportersSection(st, now) {
+    var sec = section("Server reporters", "a small script on each server, once a minute");
+    var intro = h("p", "dim", "Each server can report on itself and on the others. That tells a tunnel problem from a server that is down, notices a full disk or a stopped service, and spots the whole site losing power or internet. A key is shown once, only a fingerprint is kept, and you can revoke it any time.");
+    sec.appendChild(intro);
+    var docs = h("a", "sub", "How to install the reporter on a server");
+    docs.href = REPORTER_DOCS; docs.target = "_blank"; docs.rel = "noopener noreferrer";
+    sec.appendChild(docs);
+
+    if (model.newKey) {
+      var nk = h("div", "mo-newkey");
+      nk.appendChild(h("b", null, "Copy this key now. It will not be shown again."));
+      nk.appendChild(h("span", "dim", "Paste both lines into /etc/barnyard-reporter/env on " + model.newKey.name + ", then run the installer (the install steps are linked above)."));
+      var box = h("textarea", "mo-input mo-keybox");
+      box.readOnly = true; box.rows = 2; box.value = envLines(model.newKey.server, model.newKey.key);
+      box.setAttribute("aria-label", "The new key, as two lines for the env file");
+      box.addEventListener("focus", function () { box.select(); });
+      nk.appendChild(box);
+      var row = h("div", "mo-row");
+      var cp = h("button", "btn btn-sm", "Copy");
+      cp.type = "button";
+      cp.addEventListener("click", function () { copyText(box.value, box, function (ok) { flash(ok ? "Copied." : "Could not copy: select the text and copy it yourself.", ok ? "ok" : "alert"); }); });
+      var done = h("button", "btn btn-sm btn-quiet", "I have saved it");
+      done.type = "button";
+      done.addEventListener("click", function () { model.newKey = null; render(); });
+      row.appendChild(cp); row.appendChild(done);
+      nk.appendChild(row);
+      sec.appendChild(nk);
+    }
+
+    var grid = h("ul", "mo-tiles");
+    grid.setAttribute("role", "list");
+    reporterCards(st.reporters, now).forEach(function (c) {
+      var li = h("li", "mo-tile" + (c.tone ? " " + c.tone : ""));
+      var top = h("div", "mo-tile-top");
+      top.appendChild(h("b", null, c.name));
+      top.appendChild(h("span", "chip" + (c.tone ? " " + c.tone : ""), c.label));
+      li.appendChild(top);
+      li.appendChild(h("p", "dim", c.line));
+      if (c.lines.length) {
+        var ul = h("ul", "mo-facts");
+        c.lines.forEach(function (t) { ul.appendChild(h("li", null, t)); });
+        li.appendChild(ul);
+      }
+      if (c.keys.length) {
+        var kl = h("ul", "mo-keys");
+        c.keys.forEach(function (k) {
+          var kli = h("li");
+          kli.appendChild(h("span", "dim", "Key …" + k.tail + " " + k.text));
+          if (k.canRevoke) {
+            var rv = h("button", "btn btn-sm btn-quiet", "Revoke");
+            rv.type = "button";
+            rv.setAttribute("aria-label", "Revoke key ending " + k.tail + " for " + c.name);
+            rv.addEventListener("click", function () { revokeKey(k.id, c.name); });
+            kli.appendChild(rv);
+          }
+          kl.appendChild(kli);
+        });
+        li.appendChild(kl);
+      }
+      var foot = h("div", "mo-tile-foot");
+      var mk = h("button", "btn btn-sm", "Make a key");
+      mk.type = "button";
+      mk.disabled = !c.canMake || model.busy;
+      mk.setAttribute("aria-label", "Make a key for " + c.name);
+      mk.addEventListener("click", function () { makeKey(c.id, c.name); });
+      foot.appendChild(mk);
+      li.appendChild(foot);
+      grid.appendChild(li);
+    });
+    sec.appendChild(grid);
+
+    var rows = derivedRows(st.derived, now);
+    if (rows.length) {
+      sec.appendChild(h("h3", "mo-sub", "What the reports are saying"));
+      var dl = h("ul", "mo-list");
+      dl.setAttribute("role", "list");
+      rows.forEach(function (r) {
+        var li = h("li");
+        li.appendChild(h("span", "chip " + r.tone, r.label));
+        li.appendChild(h("b", null, r.name));
+        li.appendChild(h("span", "dim", r.text));
+        dl.appendChild(li);
+      });
+      sec.appendChild(dl);
+    }
+    return sec;
   }
 
   function alertsPanel(st, tz, now) {
@@ -530,6 +726,24 @@
     });
     al.appendChild(hf);
 
+    // the groups of alerts that come from the servers' reports
+    al.appendChild(h("h3", "mo-sub", "Alerts from the server reporters"));
+    var gl = h("ul", "mo-list");
+    gl.setAttribute("role", "list");
+    [["reporters", "A reporter goes quiet, or the site may have lost power or internet"], ["resources", "A disk is nearly full, memory or load is high, or a service stops"]].forEach(function (g) {
+      var li = h("li");
+      var l = h("label", "mo-check");
+      var c = h("input"); c.type = "checkbox"; c.checked = !(s.alerts && s.alerts[g[0]] === false);
+      c.addEventListener("change", function () {
+        var body = { alerts: {} }; body.alerts[g[0]] = c.checked;
+        saveSettings(body, c.checked ? "You will be emailed about that." : "No email about that.");
+      });
+      l.appendChild(c); l.appendChild(h("span", null, g[1]));
+      li.appendChild(l);
+      gl.appendChild(li);
+    });
+    al.appendChild(gl);
+
     // per-monitor switches
     al.appendChild(h("h3", "mo-sub", "Email me when this goes down"));
     var ml = h("ul", "mo-list");
@@ -595,6 +809,32 @@
       setBusy(false);
       if (r.status === 200 && r.body && r.body.ok) { model.mon = r.body; render(); flash(okText, "ok"); }
       else flash(mailErrorText(r.body && r.body.error ? r.body : { error: r.status ? "failed" : "offline" }), "alert");
+    });
+  }
+
+  function makeKey(server, name) {
+    if (model.busy) return;
+    setBusy(true);
+    send("POST", "/reporters", { server: server }).then(function (r) {
+      setBusy(false);
+      if (r.status === 200 && r.body && r.body.ok && r.body.key) {
+        var key = r.body.key;
+        delete r.body.key;                       // the status copy kept in the page never holds the key
+        model.mon = r.body;
+        model.newKey = { server: server, name: name, key: key };
+        render();
+        flash("Key made for " + name + ". Copy it now: it is not shown again.", "ok");
+      } else flash(keyErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
+    });
+  }
+
+  function revokeKey(id, name) {
+    if (model.busy) return;
+    setBusy(true);
+    send("POST", "/reporters/revoke", { id: id }).then(function (r) {
+      setBusy(false);
+      if (r.status === 200 && r.body && r.body.ok) { model.mon = r.body; render(); flash("Key revoked for " + name + ". A reporter using it stops being accepted at once.", "ok"); }
+      else flash(keyErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
     });
   }
 
