@@ -643,7 +643,12 @@
 
   function restricted(id) {
     var Theme = window.BarnyardTheme;
-    return !!Theme.who && widgetRestricted(id, Theme.who.get());
+    if (!Theme.who) return false;
+    var session = Theme.who.get();
+    if (widgetRestricted(id, session)) return true;
+    // A tile a page registers for itself (tile-kit.js) says in its own description whether it is the owner's.
+    var tile = window.BarnyardBoard && window.BarnyardBoard.spec(id);
+    return !!(tile && tile.ownerOnly && session && session.authenticated === true && session.owner === false);
   }
 
   // The board (board.js) places the tiles on its grid and handles Customise. If its scripts did not load, the page

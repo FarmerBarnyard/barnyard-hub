@@ -212,6 +212,18 @@ test("the layout to show: saved places for shown tiles, new tiles in free space,
   assert.strictEqual(boxes(B.effective({ junk: 1 }, DEFAULT_LIST)), boxes(B.fromWidgets(DEFAULT_LIST)), "a bad saved board: the default");
 });
 
+test("a tile a page registers itself (not in the widgets list) shows only when the saved board has it, and never goes into the list", function () {
+  var base = B.fromWidgets(DEFAULT_LIST);
+  var withExtra = B.add(base, "side-tile");
+  var board = B.toBoard(withExtra);
+  assert.strictEqual(B.find(B.effective(board, DEFAULT_LIST), "side-tile"), null, "not shown unless the page allows it");
+  var eff = B.effective(board, DEFAULT_LIST, null, ["side-tile"]);
+  assert.ok(B.find(eff, "side-tile"), "shown when allowed and saved");
+  assertValid(eff, 12, "with the extra tile");
+  assert.strictEqual(B.find(B.effective(B.toBoard(base), DEFAULT_LIST, null, ["side-tile"]), "side-tile"), null, "and it is never added by itself");
+  assert.ok(!B.toWidgets(withExtra, DEFAULT_LIST).some(function (e) { return e.id === "side-tile"; }), "it is saved in the board only");
+});
+
 test("the widgets list that matches a layout: shown tiles in reading order, hidden ones after, widths mapped to 1, 2 or 4", function () {
   var tiles = B.move(B.fromWidgets(DEFAULT_LIST), "todo", 0, 0);
   var without = B.remove(tiles, "market");

@@ -114,6 +114,45 @@
     function tileEls() { return Array.prototype.slice.call(box.querySelectorAll(".w[data-w]")); }
     function tileEl(id) { return box.querySelector('.w[data-w="' + id + '"]'); }
 
+    // ---- tiles a page registers for itself (BarnyardTiles.register, see tile-kit.js) ----
+    //
+    // They join the catalogue and get a tile on the board; each is drawn the first time it is shown. They are not in
+    // the widgets list, so they start hidden: they appear in the Tiles panel and show once ticked and saved (the saved
+    // board holds them; the list does not).
+
+    var ext = {};
+
+    function adoptTiles() {
+      var kit = root.BarnyardTiles;
+      if (!kit || typeof kit.list !== "function") return;
+      kit.list().forEach(function (desc) {
+        var reg = Layout.register(desc);
+        if (!reg || ext[desc.id] || tileEl(desc.id)) return;
+        var node = el("section", "w lift b-ext");
+        node.setAttribute("data-w", desc.id);
+        node.setAttribute("aria-label", reg.title);
+        node.hidden = true;
+        var body = el("div", "b-ext-body");
+        node.appendChild(body);
+        box.appendChild(node);
+        ext[desc.id] = { desc: desc, node: node, body: body, inst: null, mounted: false };
+      });
+    }
+
+    function mountExt(id) {
+      var e = ext[id];
+      if (!e || e.mounted) return;
+      e.mounted = true;
+      try { e.inst = e.desc.render(e.body, { board: true }) || null; }
+      catch (err) { e.body.appendChild(el("p", "dim", "This tile could not be drawn.")); }
+    }
+
+    function extraIds() {
+      var core = {};
+      Theme.get().widgets.forEach(function (w) { core[w.id] = true; });
+      return Object.keys(ext).filter(function (id) { return !core[id] && !restricted(id); });
+    }
+
     function announce(text) {
       if (!live) return;
       live.textContent = "";
@@ -122,7 +161,7 @@
 
     // ---- what to show ----
 
-    function saved() { var s = Theme.get(); return Layout.effective(s.board, s.widgets, shown); }
+    function saved() { var s = Theme.get(); return Layout.effective(s.board, s.widgets, shown, extraIds()); }
     function listMode() { return S.cols < 12; }
     function editCols() { return S.cols >= 12 ? 12 : 1; }
 
@@ -133,6 +172,7 @@
 
     function render(keepBar) {
       if (S.drag) return;
+      adoptTiles();
       var base = S.editing ? (S.preview || S.working) : saved();
       var cols = S.editing ? editCols() : S.cols;
       var tiles = cols === 12 ? base : Layout.toColumns(base, cols);
@@ -150,6 +190,7 @@
         any = true;
         node.hidden = false;
         place(node, t);
+        if (ext[id]) mountExt(id);
         refreshControls(node, id, t);
       });
       var none = document.getElementById("all-hidden");

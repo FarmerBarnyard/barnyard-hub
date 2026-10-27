@@ -90,7 +90,7 @@ test("normalize: the Overview board is null or a checked list of places on a 12-
   var t = function (o) { var base = { id: "need", x: 0, y: 0, w: 6, h: 8 }; Object.keys(o || {}).forEach(function (k) { base[k] = o[k]; }); return base; };
   var good = { v: 1, tiles: [t(), t({ id: "feed", x: 6 })] };
   assert.deepStrictEqual(Theme.normalize({ board: good }).board, good, "a good board is kept");
-  var messy = Theme.normalize({ board: { v: 1, tiles: [t(), t(), t({ id: "bogus" }), t({ id: "todo", x: 11, w: 3 }), null, t({ id: "week", x: 1.5 }), t({ id: "links", h: 0 }), Object.assign(t({ id: "market", x: 3, w: 3, h: 3 }), { junk: "x" })] } }).board;
+  var messy = Theme.normalize({ board: { v: 1, tiles: [t(), t(), t({ id: "Not A Tile!" }), t({ id: "todo", x: 11, w: 3 }), null, t({ id: "week", x: 1.5 }), t({ id: "links", h: 0 }), Object.assign(t({ id: "market", x: 3, w: 3, h: 3 }), { junk: "x" })] } }).board;
   assert.deepStrictEqual(messy.tiles.map(function (x) { return x.id; }), ["need", "market"], "unknown, repeated, off-grid and malformed tiles are dropped");
   assert.deepStrictEqual(messy.tiles[1], { id: "market", x: 3, y: 0, w: 3, h: 3 }, "extra fields are dropped");
   [null, "x", 3, [], { v: 2, tiles: [t()] }, { v: 1 }, { v: 1, tiles: "no" }, { v: 1, tiles: [] }, { v: 1, tiles: [t({ w: 13 })] }].forEach(function (bad) {

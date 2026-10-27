@@ -175,13 +175,15 @@
   }
 
   // The layout to show: the saved geometry for the tiles that are shown, any shown tile it does not know
-  // placed in the first free space, anything hidden or unknown left out.
-  function effective(board, list, shown) {
+  // placed in the first free space, anything hidden or unknown left out. `extra` lists the ids of tiles that are
+  // not in the widgets list (a tile a page registers for itself): they show only when the saved board has them.
+  function effective(board, list, shown, extra) {
     var saved = normalizeBoard(board);
     var visible = (list || []).filter(function (e) { return e && spec(e.id) && (!shown || shown(e)); });
     if (!saved) return fromWidgets(list, shown);
     var want = {};
     visible.forEach(function (e) { want[e.id] = true; });
+    (extra || []).forEach(function (id) { want[id] = true; });
     var tiles = saved.filter(function (t) { return want[t.id]; });
     var have = {};
     tiles.forEach(function (t) { have[t.id] = true; });
@@ -197,6 +199,7 @@
     (list || []).forEach(function (e) { byId[e.id] = e; });
     var out = [], used = {};
     tiles.slice().sort(byPlace).forEach(function (t) {
+      if (!byId[t.id]) return;       // a tile the page registered itself is saved in the board only, not in this list
       used[t.id] = true;
       out.push({ id: t.id, visible: true, size: t.w <= 4 ? 1 : t.w <= 8 ? 2 : 4 });
     });
