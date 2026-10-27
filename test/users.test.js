@@ -127,4 +127,16 @@ test("the page is wired up: the same CSP as the other pages, scripts from this s
   assert.ok(!/innerHTML/.test(js));
 });
 
+test("every menu item names a permission the Worker can take away, and the Users item is the owner's alone", function () {
+  var shell = fs.readFileSync(path.join(root, "shell.js"), "utf8");
+  var items = shell.match(/\{ id: "[a-z]+", title: "[^"]+", group: "[^"]*", icon: "[a-z]+"[^}]*\}/g) || [];
+  assert.ok(items.length >= 11, "the nav table was found");
+  items.forEach(function (it) { assert.ok(/perm: "[a-z]+\.view"/.test(it), "no permission on: " + it); });
+  var users = items.filter(function (it) { return /id: "users"/.test(it); })[0];
+  assert.ok(users && /ownerOnly: true/.test(users) && /perm: "users\.view"/.test(users));
+  // the same ids the Worker's catalogue uses (access-catalogue.js): overview, ops, vuln, calendar, monitoring, users, chat, study, notebook, kb, campaign, stocks
+  var known = ["overview", "ops", "vuln", "calendar", "monitoring", "users", "chat", "study", "notebook", "kb", "campaign", "stocks"];
+  items.forEach(function (it) { var m = /perm: "([a-z]+)\.view"/.exec(it); assert.ok(known.indexOf(m[1]) !== -1, "unknown area " + m[1]); });
+});
+
 console.log("\n" + passed + " passed");

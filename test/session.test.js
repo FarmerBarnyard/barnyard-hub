@@ -95,6 +95,29 @@ test("clean: keeps only the four fields, tidies apps, never trusts odd shapes", 
   assert.strictEqual(T.who.clean({ authenticated: true, apps: new Array(40).fill("a") }).apps.length, 10);
 });
 
+test("clean: keeps the permissions list and the access state only when the Worker sent them, tidied", function () {
+  var T = fresh().Theme;
+  var c = T.who.clean({ authenticated: true, owner: false, apps: ["hub"], permissions: ["ops.view", 5, "x".repeat(80), "kb.view", null], access: { status: "active", perms: { ops: "view" } } });
+  assert.deepStrictEqual(c.permissions, ["ops.view", "kb.view"]);
+  assert.strictEqual(c.access, "active");
+  assert.strictEqual(T.who.clean({ authenticated: true, owner: false, access: { status: "weird" } }).access, undefined);
+  assert.strictEqual("permissions" in T.who.clean({ authenticated: true, owner: false, permissions: "ops.view" }), false, "not a list: ignored");
+  assert.strictEqual(T.who.clean({ authenticated: true, permissions: new Array(300).fill("a.view") }).permissions.length, 200);
+});
+
+test("permits: the owner and anyone with no list see everything; otherwise only what the list holds", function () {
+  var T = fresh().Theme;
+  var listed = { authenticated: true, owner: false, permissions: ["ops.view", "kb.view"] };
+  assert.strictEqual(T.who.permits(listed, "ops.view"), true);
+  assert.strictEqual(T.who.permits(listed, "vuln.view"), false);
+  assert.strictEqual(T.who.permits({ authenticated: true, owner: false, permissions: [] }, "ops.view"), false, "an empty list hides everything (suspended)");
+  assert.strictEqual(T.who.permits({ authenticated: true, owner: true, permissions: [] }, "vuln.view"), true, "the owner is never restricted");
+  assert.strictEqual(T.who.permits({ authenticated: true, owner: false }, "vuln.view"), true, "no list: fail open");
+  assert.strictEqual(T.who.permits(null, "vuln.view"), true);
+  assert.strictEqual(T.who.permits({ authenticated: false }, "vuln.view"), true);
+  assert.strictEqual(T.who.permits(listed, undefined), true, "an item with no permission is always shown");
+});
+
 // ---- loading it -------------------------------------------------------------------
 
 test("load: the Stocks site never asks for the session (it is not a login origin)", async function () {

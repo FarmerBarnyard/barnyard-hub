@@ -378,7 +378,7 @@ test("the page is drawn as soon as the person's own data is in, without waiting 
 });
 
 test("the shell lists the page under Work, with its icon, and knows which page it is", function () {
-  assert.ok(/\{ id: "vuln", title: "Vulnerabilities", group: "Work", icon: "shield", path: "vulnerabilities\.html", local: "vulnerabilities\.html" \}/.test(shell));
+  assert.ok(/\{ id: "vuln", title: "Vulnerabilities", group: "Work", icon: "shield", path: "vulnerabilities\.html", local: "vulnerabilities\.html", perm: "vuln\.view" \}/.test(shell));
   assert.ok(/shield: '<path/.test(shell), "the icon exists");
   assert.ok(/vulnerabilities\\\.html\$\/\.test\(location\.pathname\)\) return "vuln"/.test(shell));
 });
