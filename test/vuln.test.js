@@ -514,4 +514,22 @@ test("the warning is part of the page, filled in when the status arrives, and bu
   assert.ok(!/innerHTML/.test(js));
 });
 
+test("severity filter: the choices carry the open counts, the filter reaches the list and a bulk Approve, and an empty filter is left out", function () {
+  assert.deepStrictEqual(V.severityOptions(), [["", "Any severity"], ["critical", "Critical"], ["high", "High"], ["medium", "Medium"], ["low", "Low"], ["unrated", "Unrated"]]);
+  assert.deepStrictEqual(V.severityOptions({ critical: 2, high: 14, low: 0 }).map(function (o) { return o[1]; }), ["Any severity", "Critical (2)", "High (14)", "Medium", "Low", "Unrated"], "zero or missing counts show no number");
+  assert.strictEqual(V.severityName("high"), "High");
+  assert.strictEqual(V.severityName("nope"), "");
+  assert.strictEqual(V.queryString({ view: "current", severity: "critical", priority: "", page: 1 }), "?view=current&severity=critical&page=1");
+  assert.strictEqual(V.queryString({ view: "current", severity: "" }), "?view=current");
+  assert.deepStrictEqual(V.bulkFilter({ severity: "high", priority: "", q: "" }), { view: "current", severity: "high" });
+  assert.deepStrictEqual(V.bulkBody({ all: true }, { severity: "critical", priority: "P1" }, "", true), { filter: { view: "current", priority: "P1", severity: "critical" }, dryRun: true });
+});
+
+test("the page has a Severity drop-down beside Priority and clears it with the other filters", function () {
+  var src = fs.readFileSync(path.join(__dirname, "..", "vuln.js"), "utf8");
+  assert.ok(/aria-label", "Severity"/.test(src));
+  assert.ok(/F\.severity = ""/.test(src), "Clear filters also clears severity");
+  assert.ok(/severity: F\.severity/.test(src), "the list request carries it");
+});
+
 console.log("\n" + passed + " passed");
