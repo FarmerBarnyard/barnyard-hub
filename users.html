@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Users &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=61714599">
+<link rel="stylesheet" href="users.css?v=731ced71">
+<script src="themes.js?v=baa619aa"></script>
+</head>
+<body data-shell="users" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Users</h1>
+      <p>Everyone who has signed in to the site, what each of them can see, and where you can hide or limit things for one person. The site still lets people in through Entra groups; this only lowers what a person can use.</p>
+    </div>
+    <div class="mo-tools">
+      <button type="button" class="btn btn-sm btn-quiet" id="us-refresh">Refresh</button>
+    </div>
+  </div>
+  <div id="us-root" aria-live="polite">
+    <p class="dim">Loading&hellip;</p>
+  </div>
+</main>
+
+<script src="shell.js?v=76399d82"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="users.js?v=89458c6e"></script>
+</body>
+</html>
