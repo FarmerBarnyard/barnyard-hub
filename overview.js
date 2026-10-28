@@ -227,13 +227,19 @@
   // A tile that names a permission is hidden when the session says which permissions the person has (the `permissions`
   // list from /auth/session, once it exists) and the list does not include it. No list, or no permission on the tile:
   // shown.
+  //
+  // The two sides spell a tile's permission differently: the tiles name it after the area on the Users page ("tile.assets"), and the
+  // Worker lists what a person may use as "<area>.view", dropping a tile's "tile." prefix (permissionList in access-catalogue.js: the
+  // Assets tile is "assets.view"). Both spellings are accepted here; a "tile.x" is looked up as "x.view". (Looking up "tile.x" as it
+  // stands never matched, which would hide every such tile from everyone, the owner included, once the Worker sends a list.)
+  function permissionKey(p) { return /^tile\./.test(p) ? p.slice(5) + ".view" : p; }
   function tileNeedsPermission(tile, session) {
     return !!(tile && typeof tile.permission === "string" && session && session.authenticated === true &&
-      Array.isArray(session.permissions) && session.permissions.indexOf(tile.permission) === -1);
+      Array.isArray(session.permissions) && session.permissions.indexOf(permissionKey(tile.permission)) === -1);
   }
 
   var helpers = {
-    tileNeedsPermission: tileNeedsPermission,
+    tileNeedsPermission: tileNeedsPermission, permissionKey: permissionKey,
     heroHeadline: heroHeadline, heroSubline: heroSubline, openItems: openItems, waitingItems: waitingItems, flightItems: flightItems,
     statusChips: statusChips, statusIssues: statusIssues, expiryRows: expiryRows, buildCapture: buildCapture, safeNotifyHref: safeNotifyHref, unreadCount: unreadCount, bellRows: bellRows, backupChip: backupChip, exportFileName: exportFileName,
     changedItemCount: changedItemCount, describeFeed: describeFeed, feedFromItems: feedFromItems, agoText: agoText, dueChip: dueChip,

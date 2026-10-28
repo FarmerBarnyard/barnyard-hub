@@ -134,6 +134,22 @@ test("a tile that names a permission is hidden only when the session lists permi
   assert.strictEqual(overview.tileNeedsPermission(tile, null), false);
 });
 
+test("a tile registered as tile.<id> is found in the Worker's <id>.view list (the owner's own tiles must not be hidden from the owner)", function () {
+  var overview = require(path.join(root, "overview.js"));
+  assert.strictEqual(overview.permissionKey("tile.assets"), "assets.view");
+  assert.strictEqual(overview.permissionKey("assets.view"), "assets.view", "the Worker's own spelling is left alone");
+  assert.strictEqual(overview.permissionKey("ops.view"), "ops.view");
+  var owner = { authenticated: true, owner: true, permissions: ["ops.view", "assets.view", "assets.edit", "capture.view", "expiry.view", "today.view"] };
+  ["tile.assets", "tile.capture", "tile.expiry", "tile.today"].forEach(function (p) {
+    assert.strictEqual(overview.tileNeedsPermission({ id: p, permission: p }, owner), false, p + " is shown to a person whose list has it");
+  });
+  var limited = { authenticated: true, owner: false, permissions: ["ops.view"] };
+  ["tile.assets", "tile.capture", "tile.expiry"].forEach(function (p) {
+    assert.strictEqual(overview.tileNeedsPermission({ id: p, permission: p }, limited), true, p + " is hidden from a person whose list lacks it");
+  });
+  assert.strictEqual(overview.tileNeedsPermission({ id: "capture", permission: "tile.capture" }, { authenticated: true, owner: true, permissions: ["tile.capture"] }), true, "the old spelling is not what the Worker sends");
+});
+
 test("a layout saved before the default-on tiles existed shows them at the top once; a layout saved since does not bring back a hidden one", function () {
   var layout = require(path.join(root, "board-layout.js"));
   layout.register({ id: "qb-cap", title: "Capture", w: 12, h: 2, minH: 2, defaultOn: true, order: 0 });
