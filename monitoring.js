@@ -326,7 +326,8 @@
     ["vulns", "A new critical vulnerability affects something you run, with a monthly reminder while any are still open"],
     ["calendar", "A daily Calendar reminder: to-dos due or overdue, and renewals 30 days, 7 days and on the day away"],
     ["digest", "A weekly summary on Monday morning: uptime, incidents, vulnerabilities, renewals, backups and what is waiting on you"],
-    ["report", "A monthly IT report for the committee on the first working day of the month, emailed to you to forward (see Reports)"]
+    ["report", "A monthly IT report for the committee on the first working day of the month, emailed to you to forward (see Reports)"],
+    ["inventory", "A server has not sent its daily software list for 36 hours (the list the Vulnerabilities page checks)"]
   ];
   // What may be pushed to the phone (settings.push.types in the Worker).
   var PUSH_TYPES = [
