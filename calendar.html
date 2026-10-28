@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex">
 <title>Calendar &middot; Barnyard</title>
 <link rel="stylesheet" href="shell.css?v=870e98a5">
-<link rel="stylesheet" href="calendar.css?v=2db9202e">
+<link rel="stylesheet" href="calendar.css?v=32d71e4f">
 <script src="themes.js?v=e151fb94"></script>
 </head>
 <body data-shell="calendar" data-wide>
@@ -17,7 +17,6 @@
   <div class="page-head">
     <div>
       <h1>Calendar</h1>
-      <p>Your to-dos, your own events, and everything that runs out or comes due: secrets, keys, the domain, licences and the Ops items with a date. Microsoft 365 and Outlook calendars are not connected. <a href="index.html">Back to the overview</a></p>
     </div>
     <div class="cal-tools">
       <button type="button" class="btn btn-sm" id="cal-add-event">Add an event</button>
@@ -53,9 +52,7 @@
   <div class="cal-toast" id="cal-toast" role="status" hidden></div>
 
   <div class="cal-foot dim">
-    <p><b>Where this lives.</b> Your to-dos and events are kept on the server (a Durable Object in your Cloudflare account), and renewals are Ops board items. Clearing this browser loses nothing, and all of it is in the hub&rsquo;s backup (Settings, Your data).</p>
-    <p><b>Only in this browser:</b> the view and renewal filter you last used, and a copy of the lists that lets this page open at once while the latest loads. Your Google Calendar events are read each time and never kept here.</p>
-    <p><b>Google Calendar</b> events show read only, for about the last week and the next 90 days (that is what the Worker fetches). <b>Microsoft 365 and Outlook calendars are not connected.</b> Keys: <kbd>t</kbd> today, <kbd>w</kbd> week, <kbd>p</kbd> plan, <kbd>n</kbd> new to-do, <kbd>e</kbd> new event, <kbd>r</kbd> new renewal, &larr; &rarr; change month or week, <kbd>Esc</kbd> closes details.</p>
+    <p>Keys: <kbd>t</kbd> today, <kbd>w</kbd> week, <kbd>p</kbd> plan, <kbd>n</kbd> new to-do, <kbd>e</kbd> new event, <kbd>r</kbd> new renewal, &larr; &rarr; change month or week, <kbd>Esc</kbd> closes details.</p>
   </div>
 
   <aside class="cal-drawer" id="cal-drawer" role="dialog" aria-modal="false" aria-labelledby="cal-drawer-title" hidden>

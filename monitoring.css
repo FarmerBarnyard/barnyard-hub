@@ -1,7 +1,6 @@
 /* Monitoring page (monitoring.html): a Dashboard tab and a Settings tab. Colours come from the shell's tokens so every theme works. */
-.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .mo-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
-#mon-root { max-width: 1180px; margin-top: 14px; }
+#mon-root { margin-top: 14px; }
 .mo-pane { display: grid; gap: 22px; min-width: 0; }
 .dim { color: var(--fg-dim); }
 

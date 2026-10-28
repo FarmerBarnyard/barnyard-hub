@@ -319,7 +319,7 @@ test("the connect panel is built from DOM calls only, downloads only from this s
   assert.ok(js.indexOf('dl.href = "guest-runner/"') >= 0, "the download link is a relative path on this site");
   assert.ok(js.indexOf("chat-key-field") >= 0 && js.indexOf("readOnly = true") >= 0);
   var html = read("chat.html");
-  assert.ok(/<p id="chat-intro">/.test(html), "the intro can be reworded for a guest");
+  assert.ok(!/chat-intro/.test(html), "the page has no intro blurb");
   assert.ok(/connect-src 'self' https:\/\/api\.barnyard\.site wss:\/\/api\.barnyard\.site;/.test(html), "the page still talks only to this site and the Worker");
 });
 

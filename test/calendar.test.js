@@ -385,13 +385,11 @@ test("the page: strict CSP, no inline script or style, no innerHTML, scripts in 
   assert.ok(/calendar: '</.test(shell), "it has an icon");
 });
 
-test("the page keeps only a speed copy and two preferences in this browser, and says so", function () {
+test("the page keeps only a speed copy and two preferences in this browser", function () {
   var js = fs.readFileSync(path.join(root, "calendar.js"), "utf8");
   var keys = (js.match(/localStorage\.(get|set)Item\(([A-Z_]+)/g) || []).map(function (m) { return m.split("(")[1]; });
   assert.deepStrictEqual(Array.from(new Set(keys)).sort(), ["CACHE_KEY", "PREF_KEY"]);
   assert.ok(/barnyard-calendar-prefs/.test(js) && /barnyard-calendar-cache/.test(js));
-  var html = fs.readFileSync(path.join(root, "calendar.html"), "utf8");
-  assert.ok(/Only in this browser/.test(html) && /backup/.test(html), "the page says what is browser-only and that the rest is in the backup");
   assert.ok(/Showing the copy saved on this device/.test(js), "a cached view is marked as such");
 });
 
