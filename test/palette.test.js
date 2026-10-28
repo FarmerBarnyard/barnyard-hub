@@ -28,6 +28,7 @@ test("score: every word of the query may start a different word, and short queri
   assert.ok(P.score("add pro", "Add an Ops proposal") > 0);
   assert.ok(P.score("ovw", "Overview") > 0);
   assert.strictEqual(P.score("ovwx", "Overview"), 0);
+  assert.strictEqual(P.score("cal", "Theme: Cobalt"), 0, "skipped letters must start at the first letter, so long titles are not matched by accident");
   assert.strictEqual(P.score("overviewy", "Overview"), 0);
 });
 

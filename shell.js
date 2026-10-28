@@ -64,7 +64,7 @@
       var words = q.split(" ");
       if (words.length > 1 && words.every(function (w) { return (" " + t).indexOf(" " + w) !== -1; })) return 50;
       if (t.indexOf(q) !== -1) return 40;
-      if (q.length <= 6 && q.indexOf(" ") === -1) {   // letters in order: "ovw" finds "Overview"
+      if (q.length <= 6 && q.indexOf(" ") === -1 && t.charAt(0) === q.charAt(0)) {   // letters in order from the first: "ovw" finds "Overview"
         var i = 0;
         for (var k = 0; k < t.length && i < q.length; k++) if (t.charAt(k) === q.charAt(i)) i++;
         if (i === q.length) return 20;
