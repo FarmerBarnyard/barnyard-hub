@@ -751,7 +751,7 @@
       render: function (body) {
         var fs = h("fieldset");
         fs.appendChild(h("legend", null, "Overview widgets"));
-        fs.appendChild(h("p", "hint", "Choose what shows on the Overview, how wide each piece is, and the order. Start from a preset, then adjust."));
+        fs.appendChild(h("p", "hint", "Choose what shows on the Overview, how wide each piece is, and the order. Start from a preset, then adjust. This is the standard arrangement; layouts you saved for particular screens are managed with Layouts above the Overview."));
         var presets = h("div", "preset-row");
         // Choosing here (a preset, a width, the order, what is shown) starts the board's arrangement over from the list,
         // so the two never disagree: board: null means "worked out from this list".
@@ -884,6 +884,12 @@
     }
     applyLayout();
     if (!board) setupDrag();
+    // The command palette (Ctrl+K) can start Customise from anywhere on this page.
+    if (board && window.BarnyardShell && window.BarnyardShell.palette) {
+      window.BarnyardShell.palette.registerCommands(function () {
+        return board.editing() ? [] : [{ title: "Customise the Overview board", hint: "Overview", keywords: "layout tiles arrange resize move layouts", run: function () { board.enter(); } }];
+      });
+    }
     window.BarnyardTheme.onChange(applyLayout);
     // Once it is known who is signed in, hide the owner's own widgets from a guest.
     if (window.BarnyardTheme.who) window.BarnyardTheme.who.onChange(function () {

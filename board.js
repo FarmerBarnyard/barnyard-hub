@@ -102,7 +102,8 @@
     var titles = opts.titles || {};
     var S = {
       editing: false, cols: 12, working: null, start: null, picked: null, preview: null, drag: null,
-      panel: false, confirmReset: false, menu: null, focusId: null, barFocus: null
+      panel: false, confirmReset: false, menu: null, focusId: null, barFocus: null,
+      cls: Layout.deviceClass(root.innerWidth), layoutId: null, layouts: false, renaming: null, confirmDelete: null, layoutMsg: ""
     };
     var bar = null, live = null, panelEl = null, ghost = null, resizeTimer = null;
 
@@ -161,7 +162,9 @@
 
     // ---- what to show ----
 
-    function saved() { var s = Theme.get(); return Layout.effective(s.board, s.widgets, shown, extraIds()); }
+    // This kind of screen uses the standard arrangement, or a named layout the person saved for it (board-layout.js).
+    function current() { return Layout.settingsFor(Theme.get(), S.cls); }
+    function saved() { var r = current(); return Layout.effective(r.board, r.widgets, shown, extraIds()); }
     function listMode() { return S.cols < 12; }
     function editCols() { return S.cols >= 12 ? 12 : 1; }
 
@@ -502,14 +505,22 @@
       while (bar.firstChild) bar.removeChild(bar.firstChild);
       if (!S.editing) {
         var row = el("div", "board-row");
+        var using = current().layout;
+        if (using) row.appendChild(el("span", "board-using dim", "Layout for this screen: " + using.name));
+        var lb = button("Layouts", "btn btn-sm board-layouts-btn", function () { S.layouts = !S.layouts; S.renaming = null; S.confirmDelete = null; S.layoutMsg = ""; renderBar(); if (S.layouts) { var f = bar.querySelector(".board-layouts input"); if (f) f.focus(); } else lb.focus(); });
+        lb.setAttribute("aria-expanded", S.layouts ? "true" : "false");
+        row.appendChild(lb);
         row.appendChild(button("Customise", "btn btn-sm board-customise", enter));
         bar.appendChild(row);
         if (panelEl && panelEl.parentNode) panelEl.parentNode.removeChild(panelEl);
+        if (S.layouts) bar.appendChild(layoutsPanel()); else if (lpanelEl && lpanelEl.parentNode) lpanelEl.parentNode.removeChild(lpanelEl);
         bar.appendChild(live);
         return;
       }
+      if (lpanelEl && lpanelEl.parentNode) lpanelEl.parentNode.removeChild(lpanelEl);
+      var editing = S.layoutId && Layout.findLayout(Theme.get().boardSets, S.layoutId);
       var head = el("div", "board-row board-editing");
-      var heading = el("strong", "board-title", listMode() ? "Customising: a single column" : "Customising the board");
+      var heading = el("strong", "board-title", (listMode() ? "Customising: a single column" : "Customising the board") + (editing ? " (layout: " + editing.name + ")" : ""));
       head.appendChild(heading);
       var acts = el("div", "board-acts");
       acts.appendChild(button("Done", "btn btn-sm btn-primary", done));
@@ -560,10 +571,131 @@
       panelEl.appendChild(ul);
     }
 
+    // ---- Layouts: which arrangement each kind of screen uses ----
+    //
+    // The standard arrangement plus up to four named ones; every kind of screen (wide, standard, small) picks one. A
+    // change here is saved at once. Customise afterwards edits the one this screen uses.
+
+    var lpanelEl = null;
+
+    function setSets(next, message, focus) {
+      S.barFocus = focus || S.barFocus;
+      Theme.set({ boardSets: next });
+      S.layoutMsg = message || "";
+      render();
+      if (message) { say(message); announce(message); }
+    }
+    var LAYOUT_ERRORS = { name_required: "Give the layout a name.", name_taken: "A layout with that name already exists.", too_many: "You can keep four layouts. Delete one first.", no_tiles: "There is nothing on the board to save.", not_found: "That layout is gone." };
+
+    function layoutsPanel() {
+      if (!lpanelEl) { lpanelEl = el("section", "board-panel board-layouts"); lpanelEl.setAttribute("aria-label", "Layouts"); }
+      var panel = lpanelEl;
+      while (panel.firstChild) panel.removeChild(panel.firstChild);
+      var sets = Layout.normalizeSets(Theme.get().boardSets), layouts = sets ? sets.layouts : [];
+      var here = Layout.DEVICES.filter(function (d) { return d.id === S.cls; })[0];
+      panel.appendChild(el("h2", "board-panel-h", "Layouts"));
+      panel.appendChild(el("p", "dim", "This screen counts as " + here.title.toLowerCase() + " (" + here.about + "). Choose the arrangement each kind of screen uses; Customise then changes the one this screen uses. Changes here save at once."));
+
+      var table = el("table", "lay-table");
+      var cap = el("caption", "sr-only", "Which layout each kind of screen uses");
+      table.appendChild(cap);
+      var thead = el("thead"), hr = el("tr");
+      hr.appendChild(el("th", null, "Layout"));
+      Layout.DEVICES.forEach(function (d) { var th = el("th", d.id === S.cls ? "is-here" : "", d.title); th.scope = "col"; th.title = d.about; hr.appendChild(th); });
+      hr.appendChild(el("th", "sr-only", "Actions"));
+      thead.appendChild(hr);
+      table.appendChild(thead);
+      var tbody = el("tbody");
+      var rows = [{ id: null, name: "Standard", about: "Your usual arrangement" }].concat(layouts.map(function (l) { return { id: l.id, name: l.name, named: true }; }));
+      rows.forEach(function (r) {
+        var tr = el("tr");
+        var th = el("th", "lay-name");
+        th.scope = "row";
+        if (S.renaming && S.renaming === r.id) {
+          var nameIn = el("input", "lay-input");
+          nameIn.type = "text"; nameIn.maxLength = Layout.NAME_MAX; nameIn.value = r.name; nameIn.setAttribute("aria-label", "New name for " + r.name);
+          var save = function () {
+            var res = Layout.renameLayout(Theme.get().boardSets, r.id, nameIn.value);
+            if (res.error) { S.layoutMsg = LAYOUT_ERRORS[res.error] || "That didn't work."; render(); announce(S.layoutMsg); return; }
+            S.renaming = null; setSets(res.sets, "Renamed to " + Layout.cleanName(nameIn.value) + ".");
+          };
+          nameIn.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); save(); } else if (ev.key === "Escape") { ev.preventDefault(); S.renaming = null; render(); } });
+          th.appendChild(nameIn);
+          var ok = button("Save", "btn btn-sm", save);
+          th.appendChild(ok);
+          th.appendChild(button("Cancel", "btn btn-sm", function () { S.renaming = null; render(); }));
+          root.setTimeout(function () { nameIn.focus(); nameIn.select(); }, 0);
+        } else {
+          th.appendChild(el("span", "lay-title", r.name));
+          if (r.about) th.appendChild(el("span", "dim lay-about", r.about));
+        }
+        tr.appendChild(th);
+        Layout.DEVICES.forEach(function (d) {
+          var td = el("td", d.id === S.cls ? "is-here" : "");
+          var rb = el("input");
+          rb.type = "radio"; rb.name = "lay-" + d.id; rb.value = r.id || "";
+          rb.checked = (sets ? sets.pick[d.id] : null) === r.id;
+          rb.setAttribute("aria-label", r.name + " on " + d.title.toLowerCase());
+          rb.addEventListener("change", function () {
+            var res = Layout.assignLayout(Theme.get().boardSets, d.id, r.id);
+            if (res.error) { S.layoutMsg = LAYOUT_ERRORS[res.error] || "That didn't work."; render(); return; }
+            setSets(res.sets, d.title + " now use " + r.name + ".", '.board-layouts input[name="lay-' + d.id + '"][value="' + (r.id || "") + '"]');
+          });
+          td.appendChild(rb);
+          tr.appendChild(td);
+        });
+        var act = el("td", "lay-acts");
+        if (r.named && !(S.renaming === r.id)) {
+          act.appendChild(button("Rename", "btn btn-sm", function () { S.renaming = r.id; S.confirmDelete = null; render(); }));
+          if (S.confirmDelete === r.id) {
+            act.appendChild(button("Yes, delete", "btn btn-sm", function () {
+              var res = Layout.deleteLayout(Theme.get().boardSets, r.id);
+              S.confirmDelete = null;
+              if (res.error) { S.layoutMsg = LAYOUT_ERRORS[res.error]; render(); return; }
+              setSets(res.sets, "Deleted " + r.name + ". Screens that used it go back to Standard.");
+            }));
+            act.appendChild(button("No", "btn btn-sm", function () { S.confirmDelete = null; render(); }));
+          } else {
+            act.appendChild(button("Delete", "btn btn-sm", function () { S.confirmDelete = r.id; S.renaming = null; render(); }));
+          }
+        }
+        tr.appendChild(act);
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      var wrap = el("div", "lay-scroll");
+      wrap.appendChild(table);
+      panel.appendChild(wrap);
+
+      var form = el("div", "lay-new");
+      var label = el("label", "lay-new-label", "Save this screen's arrangement as a new layout");
+      var input = el("input", "lay-input");
+      input.type = "text"; input.maxLength = Layout.NAME_MAX; input.placeholder = "Name, for example Big monitor";
+      input.id = "lay-new-name";
+      label.setAttribute("for", "lay-new-name");
+      var create = function () {
+        var res = Layout.addLayout(Theme.get().boardSets, input.value, saved(), S.cls);
+        if (res.error) { S.layoutMsg = LAYOUT_ERRORS[res.error] || "That didn't work."; render(); announce(S.layoutMsg); return; }
+        setSets(res.sets, "Saved " + Layout.cleanName(input.value) + ". " + here.title + " now use it.", ".board-layouts .lay-new .lay-input");
+      };
+      input.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); create(); } });
+      var add = button("Save as new layout", "btn btn-sm", create);
+      if (layouts.length >= Layout.MAX_LAYOUTS) { add.disabled = true; input.disabled = true; }
+      form.appendChild(label); form.appendChild(input); form.appendChild(add);
+      form.appendChild(el("span", "dim", layouts.length + " of " + Layout.MAX_LAYOUTS + " layouts kept"));
+      panel.appendChild(form);
+      var msg = el("p", "lay-msg", S.layoutMsg);
+      msg.setAttribute("role", "status");
+      panel.appendChild(msg);
+      return panel;
+    }
+
     // ---- Customise: start, finish, give up, reset ----
 
     function enter() {
       S.editing = true;
+      S.layouts = false; S.renaming = null; S.confirmDelete = null;
+      S.layoutId = current().layout ? current().layout.id : null;
       S.start = Layout.compact(saved());
       S.working = Layout.compact(saved());
       S.picked = null; S.menu = null; S.panel = false; S.confirmReset = false;
@@ -574,14 +706,23 @@
 
     function leave() {
       S.editing = false; S.picked = null; S.menu = null; S.panel = false; S.confirmReset = false; S.preview = null; S.working = null; S.start = null;
+      S.layoutId = null;
+      S.cls = Layout.deviceClass(root.innerWidth);   // the window may have been resized while editing
     }
 
     function done() {
-      var changed = !sameTiles(S.working, S.start), s = Theme.get(), working = S.working;
+      var changed = !sameTiles(S.working, S.start), s = Theme.get(), working = S.working, layoutId = S.layoutId;
       leave();
       if (changed) {
-        var list = mergeList(Layout.toWidgets(working, s.widgets), s.widgets, restricted);
-        Theme.set({ widgets: list, board: Layout.toBoard(working) });
+        var named = layoutId && Layout.findLayout(s.boardSets, layoutId);
+        if (named) {
+          // A named layout keeps its own arrangement and what it shows; the standard one and the widgets list are left alone.
+          var res = Layout.writeLayout(s.boardSets, layoutId, working);
+          if (!res.error) Theme.set({ boardSets: res.sets });
+        } else {
+          var list = mergeList(Layout.toWidgets(working, s.widgets), s.widgets, restricted);
+          Theme.set({ widgets: list, board: Layout.toBoard(working) });
+        }
       }
       render();
       var c = box.parentNode.querySelector(".board-customise"); if (c) c.focus();
@@ -596,8 +737,16 @@
     }
 
     function reset() {
+      var layoutId = S.layoutId, s = Theme.get();
       leave();
-      Theme.set({ widgets: Theme.defaults().widgets, board: null });
+      var named = layoutId && Layout.findLayout(s.boardSets, layoutId);
+      if (named) {
+        // Only this named layout goes back to the standard arrangement; the standard one itself is not touched.
+        var res = Layout.writeLayout(s.boardSets, layoutId, Layout.effective(null, Theme.defaults().widgets, shown, extraIds()));
+        if (!res.error) Theme.set({ boardSets: res.sets });
+      } else {
+        Theme.set({ widgets: Theme.defaults().widgets, board: null });
+      }
       render();
       say("Layout reset to the standard arrangement.");
       announce("Layout reset to the standard arrangement.");
@@ -608,7 +757,9 @@
 
     function measure() {
       var next = columnsFor(box.clientWidth || box.getBoundingClientRect().width || 1200);
-      if (next === S.cols) return;
+      var cls = Layout.deviceClass(root.innerWidth), classChanged = !S.editing && cls !== S.cls;
+      if (next === S.cols && !classChanged) return;
+      if (classChanged) S.cls = cls;   // a window that crosses 1000 or 1500 px picks up that kind of screen's layout
       S.cols = next;
       S.picked = null; S.menu = null;
       if (S.drag) endDrag(false);

@@ -330,4 +330,122 @@ test("a registered tile may carry a permission id, kept only when it is a plain 
   assert.strictEqual(B.register({ id: "backups" }).permission, undefined, "and so is a missing one");
 });
 
+
+// ---- named layouts, one per kind of screen -----------------------------------------------------------------
+
+var STD = [t("need", 0, 0, 6, 8), t("feed", 6, 0, 6, 8), t("todo", 0, 8, 3, 6)];
+var ALT = [t("todo", 0, 0, 4, 6), t("need", 4, 0, 8, 8)];
+
+test("deviceClass: wide from 1500, standard from 1000, small below; nonsense counts as standard", function () {
+  assert.strictEqual(B.deviceClass(1920), "wide");
+  assert.strictEqual(B.deviceClass(1500), "wide");
+  assert.strictEqual(B.deviceClass(1499), "standard");
+  assert.strictEqual(B.deviceClass(1000), "standard");
+  assert.strictEqual(B.deviceClass(999), "compact");
+  assert.strictEqual(B.deviceClass(0), "compact");
+  assert.strictEqual(B.deviceClass(undefined), "standard");
+  assert.strictEqual(B.deviceClass(NaN), "standard");
+  assert.strictEqual(B.deviceTitle("wide"), "Wide screens");
+});
+
+test("a person with no saved layouts sees the standard arrangement on every screen", function () {
+  var s = { board: { v: 1, tiles: STD }, widgets: DEFAULT_LIST, boardSets: null };
+  ["wide", "standard", "compact"].forEach(function (c) {
+    var r = B.settingsFor(s, c);
+    assert.strictEqual(r.layout, null);
+    assert.deepStrictEqual(r.board, s.board);
+    assert.strictEqual(r.widgets, s.widgets);
+  });
+  assert.deepStrictEqual(B.settingsFor(null, "wide").widgets, []);
+});
+
+test("addLayout: a new layout is kept, named, picked for the screen it was saved on, and the input is not changed", function () {
+  var r = B.addLayout(null, "  Big   monitor ", STD, "wide");
+  assert.ok(!r.error);
+  assert.strictEqual(r.id, "l1");
+  assert.strictEqual(r.sets.layouts[0].name, "Big monitor");
+  assert.deepStrictEqual(r.sets.pick, { wide: "l1", standard: null, compact: null });
+  var again = B.addLayout(r.sets, "Phone", ALT, "compact");
+  assert.strictEqual(again.id, "l2");
+  assert.deepStrictEqual(again.sets.pick, { wide: "l1", standard: null, compact: "l2" });
+  assert.strictEqual(r.sets.layouts.length, 1, "the earlier sets object was not changed");
+});
+
+test("addLayout: a blank or repeated name, a fifth layout, or an empty board is refused and nothing changes", function () {
+  var sets = null;
+  ["a", "b", "c", "d"].forEach(function (n) { sets = B.addLayout(sets, n, STD, null).sets; });
+  assert.strictEqual(sets.layouts.length, 4);
+  assert.strictEqual(B.addLayout(sets, "e", STD, null).error, "too_many");
+  var one = B.addLayout(null, "One", STD, "wide").sets;
+  assert.strictEqual(B.addLayout(one, "   ", STD, "wide").error, "name_required");
+  assert.strictEqual(B.addLayout(one, "one", STD, "wide").error, "name_taken", "names are compared without regard to case");
+  assert.strictEqual(B.addLayout(one, "Two", [], "wide").error, "no_tiles");
+  assert.deepStrictEqual(B.addLayout(one, "one", STD, "wide").sets, one);
+});
+
+test("a screen that picked a layout draws it, with exactly its tiles shown; others keep the standard one", function () {
+  var sets = B.addLayout(null, "Alt", ALT, "compact").sets;
+  var s = { board: { v: 1, tiles: STD }, widgets: DEFAULT_LIST, boardSets: sets };
+  var small = B.settingsFor(s, "compact");
+  assert.strictEqual(small.layout.name, "Alt");
+  assert.deepStrictEqual(small.board.tiles.map(function (x) { return x.id; }).sort(), ["need", "todo"]);
+  var shownIds = small.widgets.filter(function (w) { return w.visible; }).map(function (w) { return w.id; }).sort();
+  assert.deepStrictEqual(shownIds, ["need", "todo"], "a core tile the layout does not hold is hidden on that screen");
+  assert.strictEqual(B.settingsFor(s, "wide").layout, null);
+  assert.deepStrictEqual(B.settingsFor(s, "wide").board, s.board);
+  var drawn = B.effective(small.board, small.widgets, function (e) { return e.visible; }, []);
+  assert.deepStrictEqual(drawn.map(function (x) { return x.id; }).sort(), ["need", "todo"]);
+  assertValid(drawn, 12, "named layout");
+});
+
+test("assignLayout: pick a layout or go back to the standard; an unknown layout or screen is refused", function () {
+  var sets = B.addLayout(null, "Alt", ALT, "wide").sets;
+  assert.strictEqual(B.assignLayout(sets, "standard", "l1").sets.pick.standard, "l1");
+  assert.strictEqual(B.assignLayout(sets, "wide", null).sets.pick.wide, null);
+  assert.strictEqual(B.assignLayout(sets, "wide", "l9").error, "not_found");
+  assert.strictEqual(B.assignLayout(sets, "tv", "l1").error, "no_such_screen");
+  assert.strictEqual(sets.pick.wide, "l1", "unchanged");
+});
+
+test("writeLayout and renameLayout change one layout; deleteLayout frees the screens that used it", function () {
+  var a = B.addLayout(null, "Alt", ALT, "wide"), b = B.addLayout(a.sets, "Other", STD, "compact");
+  var w = B.writeLayout(b.sets, "l1", STD);
+  assert.deepStrictEqual(w.sets.layouts[0].tiles.map(function (x) { return x.id; }).sort(), ["feed", "need", "todo"]);
+  assert.deepStrictEqual(w.sets.layouts[1].tiles, b.sets.layouts[1].tiles, "the other layout is untouched");
+  assert.strictEqual(B.writeLayout(b.sets, "zz", STD).error, "not_found");
+  var rn = B.renameLayout(b.sets, "l1", "Renamed");
+  assert.strictEqual(rn.sets.layouts[0].name, "Renamed");
+  assert.strictEqual(B.renameLayout(b.sets, "l1", "other").error, "name_taken");
+  assert.strictEqual(B.renameLayout(b.sets, "l1", " ").error, "name_required");
+  var del = B.deleteLayout(b.sets, "l1");
+  assert.deepStrictEqual(del.sets.layouts.map(function (l) { return l.id; }), ["l2"]);
+  assert.deepStrictEqual(del.sets.pick, { wide: null, standard: null, compact: "l2" });
+  assert.strictEqual(B.deleteLayout(del.sets, "l2").sets, null, "no layouts left means no sets at all");
+  assert.strictEqual(B.deleteLayout(b.sets, "nope").error, "not_found");
+});
+
+test("a freed id is reused, so the ids never run out", function () {
+  var sets = B.addLayout(null, "a", STD, null).sets;
+  sets = B.addLayout(sets, "b", STD, null).sets;
+  sets = B.deleteLayout(sets, "l1").sets;
+  var r = B.addLayout(sets, "c", STD, null);
+  assert.strictEqual(r.id, "l1");
+});
+
+test("normalizeSets: junk becomes null, bad layouts and picks are dropped, names are cleaned, there are at most four", function () {
+  [null, undefined, "x", 5, [], {}, { v: 2, layouts: [], pick: {} }, { v: 1, layouts: [], pick: {} }, { v: 1, layouts: "no" }].forEach(function (bad) {
+    assert.strictEqual(B.normalizeSets(bad), null, JSON.stringify(bad));
+  });
+  var r = B.normalizeSets({ v: 1, layouts: [
+    { id: "l1", name: "  <b>Desk</b>  ", tiles: STD }, { id: "l1", name: "Dup", tiles: STD }, { id: "L2", name: "Bad id", tiles: STD },
+    { id: "l3", name: "", tiles: STD }, { id: "l4", name: "No tiles", tiles: [] }, { id: "l5", name: "x".repeat(60), tiles: ALT },
+    { id: "l6", name: "Six", tiles: STD }, { id: "l7", name: "Seven", tiles: STD }, { id: "l8", name: "Eight", tiles: STD }
+  ], pick: { wide: "l1", standard: "l9", compact: "l5", tv: "l1" } });
+  assert.deepStrictEqual(r.layouts.map(function (l) { return l.id; }), ["l1", "l5", "l6", "l7"]);
+  assert.strictEqual(r.layouts[0].name.indexOf("<"), -1);
+  assert.strictEqual(r.layouts[1].name.length, B.NAME_MAX);
+  assert.deepStrictEqual(r.pick, { wide: "l1", standard: null, compact: "l5" });
+  r.layouts.forEach(function (l) { assertValid(l.tiles, 12, l.name); });
+});
+
 console.log("\n" + passed + " passed");
