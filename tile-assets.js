@@ -138,6 +138,9 @@
     var open = h("button", "btn btn-sm", "Open register");
     open.type = "button";
     open.addEventListener("click", function () { openRegister(draw); });
+    var mapLink = h("a", "btn btn-sm btn-quiet", "Dependency map");
+    mapLink.href = "map.html";
+    head.appendChild(mapLink);
     head.appendChild(open);
     var body = h("div", "tl-body");
     wrap.appendChild(head); wrap.appendChild(body);
@@ -201,7 +204,7 @@
     }
 
     function load() {
-      return K.call("GET", "/reg/summary").then(function (r) {
+      return K.summary().then(function (r) {
         if (r.status === 200) { state.summary = r.body; paint(); return; }
         K.loadFailure(body, r, load);
       });
