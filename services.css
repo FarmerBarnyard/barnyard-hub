@@ -1,0 +1,72 @@
+/* Services page (services.html). Colours come from the shell's tokens so every theme works. */
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.svc-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+#svc-root { max-width: 1040px; display: grid; gap: 28px; margin-top: 8px; }
+.dim { color: var(--fg-dim); }
+.small { font-size: 12px; }
+.mono { font-family: var(--font-mono, monospace); font-size: 12px; }
+
+.svc-flash { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; font-size: 14px; max-width: 1040px; }
+.svc-flash[hidden] { display: none; }
+.svc-flash.ok { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+.svc-flash.alert { background: var(--alert-soft); border-color: transparent; color: var(--alert); }
+.svc-off { padding: 14px 16px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); }
+
+.svc-section { display: grid; gap: 12px; }
+.svc-section h2 { font: 600 20px var(--font-display); color: var(--fg-strong); margin: 0; }
+.svc-section h3 { font: 600 15px var(--font-display); color: var(--fg-strong); margin: 6px 0 0; }
+.svc-section > p { margin: 0; max-width: 70ch; }
+
+.svc-strip { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; }
+.svc-strip b { font: 600 17px var(--font-display); color: var(--fg-strong); }
+.svc-strip.ok { background: var(--ok-soft); border-color: transparent; }
+.svc-strip.ok b { color: var(--ok); }
+.svc-strip.alert { background: var(--alert-soft); border-color: transparent; }
+.svc-strip.alert b { color: var(--alert); }
+.svc-strip.attn { background: var(--attn-soft); border-color: transparent; }
+
+.svc-scroll { overflow-x: auto; }
+.svc-table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.svc-table th, .svc-table td { text-align: left; padding: 9px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+.svc-table thead th { border-top: 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-dim); font-weight: 600; }
+.svc-table tbody th { font-weight: 500; color: var(--fg-strong); }
+.svc-table tr.group th { font-weight: 700; }
+.svc-table tr.group { background: var(--panel-2); }
+.svc-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.svc-pct.ok { color: var(--ok); }
+.svc-pct.alert { color: var(--alert); font-weight: 600; }
+.svc-fc.alert { color: var(--alert); font-weight: 600; }
+.svc-fc.attn { color: var(--attn); }
+.svc-fc.ok { color: var(--ok); }
+
+.svc-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.svc-form { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); max-width: 640px; }
+.svc-form label { display: grid; grid-template-columns: 1fr 9em; gap: 4px 12px; align-items: center; font-size: 13px; }
+.svc-form p { grid-column: 1 / -1; margin: 0; }
+.svc-form button { justify-self: start; }
+.svc-form input, .svc-search input, .svc-search select { font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+
+.svc-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.svc-chips button[aria-pressed="true"] { background: var(--fg-strong); color: var(--bg); }
+.svc-search { display: flex; gap: 8px; flex-wrap: wrap; }
+.svc-search input[type="text"] { flex: 1 1 280px; }
+.svc-check { display: flex; gap: 10px; align-items: baseline; font-size: 14px; max-width: 70ch; }
+
+.svc-chart { width: 100%; max-width: 640px; height: auto; }
+.svc-chart .grid { stroke: var(--line); stroke-width: 1; }
+.svc-chart .axis { fill: var(--fg-dim); font-size: 10px; font-family: var(--font-body, sans-serif); }
+.svc-chart .axis.mid { text-anchor: middle; }
+.svc-chart .bar.access, .svc-key .swatch.access { fill: var(--accent); background: var(--accent); }
+.svc-chart .bar.limits, .svc-key .swatch.limits { fill: var(--attn); background: var(--attn); }
+.svc-chart .bar.secrets, .svc-key .swatch.secrets { fill: var(--alert); background: var(--alert); }
+.svc-chart .bar.system, .svc-key .swatch.system { fill: var(--fg-dim); background: var(--fg-dim); }
+.svc-key { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px 18px; flex-wrap: wrap; font-size: 13px; }
+.svc-key li { display: flex; align-items: center; gap: 6px; }
+.svc-key .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+.svc-steps, .svc-list { margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 14px; max-width: 76ch; }
+.svc-list { list-style: none; padding-left: 0; }
+
+@media (max-width: 640px) {
+  .svc-form label { grid-template-columns: 1fr; }
+}
