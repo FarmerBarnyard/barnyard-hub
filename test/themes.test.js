@@ -136,7 +136,7 @@ test("cookie: anything that does not validate is ignored, and layout keys never 
 });
 
 test("the pages keep to the CSP: no inline scripts, handlers or styles, and nothing remote", function () {
-  ["index.html", "ops.html", "chat.html"].forEach(function (file) {
+  ["index.html", "ops.html", "chat.html", "view.html"].forEach(function (file) {
     var html = read(file);
     assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>/i.test(html), file + " has an inline script");
     assert.ok(!/\son[a-z]+\s*=/i.test(html.replace(/<meta[^>]*>/gi, "")), file + " has an inline event handler");
@@ -193,6 +193,32 @@ test("the free-limit banner is raised only by a 503 daily_limit_reached from the
     assert.strictEqual(raised, 1, "another error, a 200, or another site does not raise it");
   } finally { globalThis.fetch = saved; }
   assert.ok(/barnyard-limit-banner/.test(read("themes.js")) && !/innerHTML/.test(read("themes.js")));
+});
+
+
+test("normalize: named Overview layouts are null or a checked set of up to four with a pick per kind of screen", function () {
+  var tiles = [{ id: "need", x: 0, y: 0, w: 6, h: 8 }, { id: "todo", x: 6, y: 0, w: 3, h: 6 }];
+  assert.strictEqual(Theme.defaults().boardSets, null);
+  assert.strictEqual(Theme.normalize({}).boardSets, null);
+  assert.strictEqual(Theme.normalize({ boardSets: "x" }).boardSets, null);
+  assert.strictEqual(Theme.normalize({ boardSets: { v: 1, layouts: [] } }).boardSets, null);
+  var good = { v: 1, layouts: [{ id: "l1", name: "Desk", tiles: tiles }, { id: "l2", name: "Phone", tiles: tiles }], pick: { wide: "l1", standard: null, compact: "l2" } };
+  assert.deepStrictEqual(Theme.normalize({ boardSets: good }).boardSets, good);
+  var messy = Theme.normalize({ boardSets: { v: 1, layouts: [
+    { id: "l1", name: " <i>Desk</i> ", tiles: tiles }, { id: "l1", name: "Dup", tiles: tiles }, { id: "Bad", name: "x", tiles: tiles }, { id: "l3", name: "", tiles: tiles },
+    { id: "l4", name: "Empty", tiles: [] }, { id: "l5", name: "Off grid", tiles: [{ id: "need", x: 9, y: 0, w: 6, h: 8 }] }
+  ], pick: { wide: "l1", standard: "l5", compact: "nope" } } }).boardSets;
+  assert.deepStrictEqual(messy.layouts.map(function (l) { return l.id; }), ["l1"]);
+  assert.ok(messy.layouts[0].name.indexOf("<") === -1);
+  assert.deepStrictEqual(messy.pick, { wide: "l1", standard: null, compact: null });
+  var many = { v: 1, layouts: [1, 2, 3, 4, 5, 6].map(function (n) { return { id: "l" + n, name: "n" + n, tiles: tiles }; }), pick: {} };
+  assert.strictEqual(Theme.normalize({ boardSets: many }).boardSets.layouts.length, 4);
+});
+
+test("named layouts never travel in the shared look-and-feel cookie", function () {
+  var s = Theme.normalize({ boardSets: { v: 1, layouts: [{ id: "l1", name: "Desk", tiles: [{ id: "need", x: 0, y: 0, w: 6, h: 8 }] }], pick: { wide: "l1" } } });
+  assert.ok(Theme.encodePrefs(s).indexOf("l1") === -1 && Theme.encodePrefs(s).indexOf("boardSets") === -1);
+  assert.deepStrictEqual(Theme.decodePrefs("t=amber&boardSets=x"), { theme: "amber" });
 });
 
 console.log("\n" + passed + " tests passed");

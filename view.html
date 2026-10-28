@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Shared view &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=870e98a5">
+<link rel="stylesheet" href="share.css?v=7a7d4331">
+<script src="themes.js?v=e151fb94"></script>
+</head>
+<body class="sv-page">
+
+<main id="sv-main" class="sv-main">
+
+  <noscript><p class="sv-gate">This page needs JavaScript.</p></noscript>
+
+  <div id="sv-gate" class="sv-gate" hidden>
+    <h1 id="sv-gate-title">Shared view</h1>
+    <p id="sv-gate-msg"></p>
+  </div>
+
+  <div id="sv" class="sv" hidden>
+    <header class="sv-head">
+      <p class="sv-kicker" id="sv-kind"></p>
+      <h1 id="sv-title"></h1>
+      <p class="sv-dim" id="sv-when"></p>
+      <p class="sv-frozen">This is a copy taken at one moment. It does not update.</p>
+    </header>
+    <div id="sv-content"></div>
+    <footer class="sv-foot">
+      <button type="button" class="btn" id="sv-print">Print</button>
+      <p class="sv-dim">Shared from Barnyard. Anyone with this address can read it until it expires or is switched off.</p>
+    </footer>
+  </div>
+
+</main>
+
+<script src="markdown.js?v=16084133"></script>
+<script src="share-render.js?v=df7b2124"></script>
+<script src="view.js?v=b1385147"></script>
+</body>
+</html>

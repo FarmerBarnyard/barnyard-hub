@@ -25,6 +25,7 @@
 //   setConnection(status)                     show the Live / Reconnecting pill
 //   setBadge(n)                               the number on the Ops nav item
 //   toast(text)                               a short confirmation
+//   openSettings(tabId?)                      open Settings, on that tab when it exists
 //   palette.open() / close()                  the command palette (Ctrl+K or Cmd+K on every page)
 //   palette.registerCommands(fn)              fn() -> [{ title, hint, keywords, run }]: commands a page adds to the palette
 //
@@ -853,7 +854,8 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && settingsOpen && !document.querySelector("[aria-modal='true'][aria-hidden='false']")) closeSettings(); });
   }
 
-  function openSettings() {
+  function openSettings(tabId) {
+    if (typeof tabId === "string" && tabs.some(function (t) { return t.id === tabId; })) activeTab = tabId;
     settingsOpen = true;
     opener = document.activeElement;
     renderSettings();

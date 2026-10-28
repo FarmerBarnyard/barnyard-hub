@@ -310,7 +310,139 @@
     return "column " + (tile.x + 1) + ", row " + (tile.y + 1) + ", " + tile.w + " wide, " + tile.h + " tall";
   }
 
+  // ---- named layouts, one per kind of screen -------------------------------------------------------------
+  //
+  // The standard arrangement is the profile's "board" (plus the "widgets" list), exactly as before. On top of it a
+  // person may keep up to four NAMED layouts and say which one each kind of screen uses:
+  //   boardSets = { v: 1, layouts: [{ id, name, tiles: [{id, x, y, w, h}] }], pick: { wide: id|null, standard: id|null, compact: id|null } }
+  // A kind of screen with no pick (or a pick that no longer exists) uses the standard arrangement, so a person who has
+  // never saved a layout sees no change. Which kind of screen this is comes from the window width (deviceClass).
+  // A named layout also says what is shown: a core tile it does not hold is hidden on that screen (settingsFor).
+
+  var MAX_LAYOUTS = 4;
+  var NAME_MAX = 24;
+  var DEVICES = [
+    { id: "wide", title: "Wide screens", about: "1500 px and wider", min: 1500 },
+    { id: "standard", title: "Standard screens", about: "1000 to 1499 px", min: 1000 },
+    { id: "compact", title: "Small screens", about: "under 1000 px", min: 0 }
+  ];
+  var LAYOUT_ID = /^[a-z0-9]{1,12}$/;
+
+  function deviceClass(width) {
+    var w = typeof width === "number" && isFinite(width) ? width : 1200;
+    for (var i = 0; i < DEVICES.length; i++) if (w >= DEVICES[i].min) return DEVICES[i].id;
+    return "compact";
+  }
+  function deviceTitle(id) { for (var i = 0; i < DEVICES.length; i++) if (DEVICES[i].id === id) return DEVICES[i].title; return id; }
+
+  function cleanName(name) {
+    var n = String(name == null ? "" : name).replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim();
+    return n.length > NAME_MAX ? n.slice(0, NAME_MAX).trim() : n;
+  }
+
+  // Anything in -> a valid boardSets or null. A layout with no usable tiles, a repeated id or a bad name is dropped,
+  // a pick that names no kept layout is cleared.
+  function normalizeSets(raw) {
+    if (!raw || typeof raw !== "object" || raw.v !== 1 || !Array.isArray(raw.layouts)) return null;
+    var seen = {}, layouts = [];
+    for (var i = 0; i < raw.layouts.length && layouts.length < MAX_LAYOUTS; i++) {
+      var l = raw.layouts[i];
+      if (!l || typeof l !== "object" || typeof l.id !== "string" || !LAYOUT_ID.test(l.id) || seen[l.id]) continue;
+      var name = cleanName(l.name), tiles = normalizeBoard({ v: 1, tiles: l.tiles });
+      if (!name || !tiles) continue;
+      seen[l.id] = true;
+      layouts.push({ id: l.id, name: name, tiles: copyAll(tiles) });
+    }
+    if (!layouts.length) return null;
+    var pick = {};
+    DEVICES.forEach(function (d) { var p = raw.pick && raw.pick[d.id]; pick[d.id] = typeof p === "string" && seen[p] ? p : null; });
+    return { v: 1, layouts: layouts, pick: pick };
+  }
+
+  function findLayout(sets, id) {
+    var s = normalizeSets(sets);
+    if (!s || !id) return null;
+    for (var i = 0; i < s.layouts.length; i++) if (s.layouts[i].id === id) return s.layouts[i];
+    return null;
+  }
+
+  // The layout a kind of screen uses -> a named layout, or null for the standard arrangement.
+  function activeLayout(sets, cls) {
+    var s = normalizeSets(sets);
+    return s ? findLayout(s, s.pick[cls]) : null;
+  }
+
+  // What to draw for this kind of screen: { board, widgets, layout } -- `layout` is the named layout in use or null.
+  // `settings` is the profile ({ board, widgets, boardSets }).
+  function settingsFor(settings, cls) {
+    var L = activeLayout(settings && settings.boardSets, cls);
+    if (!L) return { board: settings ? settings.board : null, widgets: settings ? settings.widgets : [], layout: null };
+    return { board: toBoard(L.tiles), widgets: toWidgets(L.tiles, settings.widgets), layout: L };
+  }
+
+  function nextLayoutId(sets) {
+    var used = {};
+    (sets ? sets.layouts : []).forEach(function (l) { used[l.id] = true; });
+    for (var n = 1; n < 100; n++) if (!used["l" + n]) return "l" + n;
+    return null;
+  }
+
+  // A deep copy to change; an empty one when there are no layouts yet.
+  function openSets(sets) {
+    var s = normalizeSets(sets);
+    if (!s) return { v: 1, layouts: [], pick: { wide: null, standard: null, compact: null } };
+    return { v: 1, layouts: s.layouts.map(function (l) { return { id: l.id, name: l.name, tiles: copyAll(l.tiles) }; }), pick: { wide: s.pick.wide, standard: s.pick.standard, compact: s.pick.compact } };
+  }
+
+  // Each of these returns { sets, error?, id? }: the new boardSets (null when no layouts are left), never the old one changed.
+  function addLayout(sets, name, tiles, cls) {
+    var cur = openSets(sets), n = cleanName(name), keep = normalizeSets(sets);
+    if (!n) return { sets: keep, error: "name_required" };
+    if (cur.layouts.some(function (l) { return l.name.toLowerCase() === n.toLowerCase(); })) return { sets: keep, error: "name_taken" };
+    if (cur.layouts.length >= MAX_LAYOUTS) return { sets: keep, error: "too_many" };
+    var board = normalizeBoard(toBoard(tiles)), id = nextLayoutId(cur);
+    if (!board || !id) return { sets: keep, error: "no_tiles" };
+    cur.layouts.push({ id: id, name: n, tiles: copyAll(board) });
+    if (cls && cur.pick.hasOwnProperty(cls)) cur.pick[cls] = id;
+    return { sets: normalizeSets(cur), id: id };
+  }
+  function writeLayout(sets, id, tiles) {
+    var cur = openSets(sets), keep = normalizeSets(sets), board = normalizeBoard(toBoard(tiles));
+    var l = cur.layouts.filter(function (x) { return x.id === id; })[0];
+    if (!l) return { sets: keep, error: "not_found" };
+    if (!board) return { sets: keep, error: "no_tiles" };
+    l.tiles = copyAll(board);
+    return { sets: normalizeSets(cur), id: id };
+  }
+  function renameLayout(sets, id, name) {
+    var cur = openSets(sets), keep = normalizeSets(sets), n = cleanName(name);
+    var l = cur.layouts.filter(function (x) { return x.id === id; })[0];
+    if (!l) return { sets: keep, error: "not_found" };
+    if (!n) return { sets: keep, error: "name_required" };
+    if (cur.layouts.some(function (x) { return x.id !== id && x.name.toLowerCase() === n.toLowerCase(); })) return { sets: keep, error: "name_taken" };
+    l.name = n;
+    return { sets: normalizeSets(cur), id: id };
+  }
+  function deleteLayout(sets, id) {
+    var cur = openSets(sets), keep = normalizeSets(sets);
+    if (!cur.layouts.some(function (x) { return x.id === id; })) return { sets: keep, error: "not_found" };
+    cur.layouts = cur.layouts.filter(function (x) { return x.id !== id; });
+    DEVICES.forEach(function (d) { if (cur.pick[d.id] === id) cur.pick[d.id] = null; });
+    return { sets: normalizeSets(cur) };
+  }
+  // Say which layout a kind of screen uses (id), or the standard arrangement (null).
+  function assignLayout(sets, cls, id) {
+    var cur = openSets(sets), keep = normalizeSets(sets);
+    if (!cur.pick.hasOwnProperty(cls)) return { sets: keep, error: "no_such_screen" };
+    if (id !== null && !cur.layouts.some(function (x) { return x.id === id; })) return { sets: keep, error: "not_found" };
+    cur.pick[cls] = id;
+    return { sets: normalizeSets(cur) };
+  }
+
   var api = {
+    MAX_LAYOUTS: MAX_LAYOUTS, NAME_MAX: NAME_MAX, DEVICES: DEVICES, deviceClass: deviceClass, deviceTitle: deviceTitle, cleanName: cleanName,
+    normalizeSets: normalizeSets, findLayout: findLayout, activeLayout: activeLayout, settingsFor: settingsFor,
+    addLayout: addLayout, writeLayout: writeLayout, renameLayout: renameLayout, deleteLayout: deleteLayout, assignLayout: assignLayout,
     COLS: COLS, MAX_ROWS: MAX_ROWS, MAX_TILES: MAX_TILES, CATALOGUE: CATALOGUE, spec: spec, register: register,
     clampTile: clampTile, overlaps: overlaps, lowestFree: lowestFree, settle: settle, compact: compact,
     normalizeBoard: normalizeBoard, toBoard: toBoard, fromWidgets: fromWidgets, effective: effective, toWidgets: toWidgets,
