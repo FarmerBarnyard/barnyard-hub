@@ -115,7 +115,7 @@ test("Calendar tile: the three answers become the page's data, and the agenda is
 });
 
 test("every operations tile is described for the Overview board: owner only, a tile.* permission, sizes in order, a unique id", function () {
-  var all = [require(path.join(root, "tile-assets.js")), require(path.join(root, "tile-backups.js")), Today, Activity, Usage, Approvals, Calendar];
+  var all = [require(path.join(root, "tile-assets.js")), require(path.join(root, "tile-backups.js")), require(path.join(root, "tile-weakest.js")), Today, Activity, Usage, Approvals, Calendar];
   var ids = {};
   all.forEach(function (t) {
     var d = t.descriptor;
@@ -125,7 +125,7 @@ test("every operations tile is described for the Overview board: owner only, a t
     assert.strictEqual(d.permission, "tile." + d.id, d.id + " permission");
     assert.ok(d.minW <= d.w && d.w <= d.maxW && d.minH <= d.h && d.h <= d.maxH && d.maxW <= 12, d.id + " sizes");
   });
-  assert.deepStrictEqual(Object.keys(ids).sort(), ["activity", "approvals", "assets", "backups", "calendar", "today", "usage"]);
+  assert.deepStrictEqual(Object.keys(ids).sort(), ["activity", "approvals", "assets", "backups", "calendar", "today", "usage", "weakest"]);
   ["need", "feed", "flight", "market", "weather", "week", "todo", "links"].forEach(function (core) { assert.ok(!ids[core], core + " is the Overview's own"); });
 });
 

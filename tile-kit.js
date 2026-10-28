@@ -150,8 +150,14 @@
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
   function chip(text, tone) { return h("span", "chip" + (tone ? " " + tone : ""), text); }
 
+  // The registry summary (GET /reg/summary) is read by the Assets, Backups and Weakest links tiles; they share one answer for a few
+  // seconds so tiles that load together cost one call and one registry read. Any write made through call() forgets it.
+  var summaryMemo = { at: 0, p: null };
+  var SUMMARY_MS = 8000;
+
   // One call to the Worker: -> Promise of { status, body }. status 0 means the network failed.
   function call(method, path, body) {
+    if (method !== "GET") summaryMemo.p = null;
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, 20000);
     var init = { method: method, credentials: "include", referrerPolicy: "no-referrer", signal: controller.signal };
@@ -160,6 +166,19 @@
       clearTimeout(timer);
       return r.json().catch(function () { return {}; }).then(function (b) { return { status: r.status, body: b }; });
     }, function () { clearTimeout(timer); return { status: 0, body: {} }; });
+  }
+
+  // GET /reg/summary, shared by the tiles that load together (see summaryMemo above). A failed answer is never kept.
+  function summary() {
+    var now = Date.now();
+    if (summaryMemo.p && now - summaryMemo.at < SUMMARY_MS) return summaryMemo.p;
+    summaryMemo.at = now;
+    var p = call("GET", "/reg/summary").then(function (r) {
+      if (r.status !== 200 && summaryMemo.p === p) summaryMemo.p = null;
+      return r;
+    });
+    summaryMemo.p = p;
+    return p;
   }
 
   // A calm message in a tile: text, and optionally a link or a button.
@@ -217,6 +236,6 @@
   }
 
   helpers.h = h; helpers.clear = clear; helpers.chip = chip; helpers.call = call; helpers.notice = notice;
-  helpers.loadFailure = loadFailure; helpers.loginHref = loginHref; helpers.openDrawer = openDrawer;
+  helpers.loadFailure = loadFailure; helpers.loginHref = loginHref; helpers.openDrawer = openDrawer; helpers.summary = summary;
   root.BarnyardTiles = helpers;
 })(typeof window !== "undefined" ? window : globalThis);
