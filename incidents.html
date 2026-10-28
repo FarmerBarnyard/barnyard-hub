@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Incidents &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=870e98a5">
+<link rel="stylesheet" href="incidents.css?v=3f7f8cdc">
+<script src="themes.js?v=e151fb94"></script>
+</head>
+<body data-shell="incidents" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Incidents</h1>
+      <p>When Monitoring says something is down, it opens an incident here: a timeline, what changed just before, the guide to follow, and a draft review when it is over.</p>
+    </div>
+    <div class="inc-tools">
+      <button type="button" class="btn btn-sm" id="inc-new">Open an incident</button>
+      <button type="button" class="btn btn-sm btn-quiet" id="inc-refresh">Refresh</button>
+      <span class="dim" id="inc-stamp"></span>
+    </div>
+  </div>
+  <div id="inc-root" aria-live="polite">
+    <p class="dim">Loading&hellip;</p>
+  </div>
+</main>
+
+<script src="shell.js?v=d51f318e"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="incidents.js?v=6e0c4d43"></script>
+</body>
+</html>
