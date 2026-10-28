@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="todo-widget.css?v=216e5dea">
 <link rel="stylesheet" href="drag.css?v=34b10090">
 <link rel="stylesheet" href="board.css?v=5b3e96b0">
-<link rel="stylesheet" href="tiles.css?v=dd4c4b83">
+<link rel="stylesheet" href="tiles.css?v=7fe6c084">
 <link rel="stylesheet" href="share.css?v=7a7d4331">
 <script src="themes.js?v=e151fb94"></script>
 </head>
@@ -27,22 +27,7 @@
     <div class="ov-bell-head"><h2 id="ov-bell-h">Notifications</h2><button type="button" class="btn btn-sm" id="ov-bell-read">Mark all read</button></div>
     <ul id="ov-bell-list" role="list"></ul>
   </section>
-  <form class="ov-capture" id="ov-capture" autocomplete="off" hidden>
-    <label class="sr-only" for="ov-cap-input">Capture a thought, task or idea</label>
-    <input id="ov-cap-input" type="text" maxlength="500" placeholder="Capture a thought, task or idea&hellip;">
-    <label class="sr-only" for="ov-cap-kind">File it as</label>
-    <select id="ov-cap-kind">
-      <option value="note">Note</option>
-      <option value="item">Ops item</option>
-      <option value="proposal">Proposal</option>
-    </select>
-    <button type="submit" class="btn btn-sm" id="ov-cap-add">Add</button>
-    <span class="dim" id="ov-cap-status" role="status"></span>
-  </form>
-  <section class="ov-expiry" id="ov-expiry-box" aria-labelledby="ov-expiry-h" hidden>
-    <h2 id="ov-expiry-h">Running out soon <a href="ops.html">Add a date</a></h2>
-    <ul id="ov-expiry" role="list"></ul>
-  </section>
+  <!-- Quick capture and Running out soon used to sit here as fixed blocks; they are tiles on the board now (tile-capture.js, tile-expiry.js). -->
 
   <div class="widgets" id="widgets">
 
@@ -127,7 +112,7 @@
 <script src="calendar-logic.js?v=addd9d32"></script>
 <script src="todo-widget.js?v=198fc55f"></script>
 <script src="drag.js?v=5d1cccf4"></script>
-<script src="tile-kit.js?v=ffccdc66"></script>
+<script src="tile-kit.js?v=c71a4f0d"></script>
 <script src="tile-assets.js?v=9439ac87"></script>
 <script src="tile-backups.js?v=239b19b1"></script>
 <script src="map-logic.js?v=b65ff95c"></script>
@@ -139,11 +124,13 @@
 <script src="tile-incidents.js?v=0d6a72e9"></script>
 <script src="tile-services.js?v=f5500bfd"></script>
 <script src="tile-calendar.js?v=cb400b09"></script>
+<script src="tile-capture.js?v=b4d486fb"></script>
+<script src="tile-expiry.js?v=2c63fcb4"></script>
 <script src="planner-engine.js?v=b9d86e13"></script>
 <script src="tile-plan.js?v=1b148117"></script>
-<script src="board-layout.js?v=b1fdaf2a"></script>
-<script src="board.js?v=c6877dfc"></script>
-<script src="overview.js?v=ff93de8c"></script>
+<script src="board-layout.js?v=72001752"></script>
+<script src="board.js?v=dcf9fb86"></script>
+<script src="overview.js?v=692b3d9e"></script>
 <script src="markdown.js?v=16084133"></script>
 <script src="share-render.js?v=df7b2124"></script>
 <script src="share.js?v=9a2252fa"></script>

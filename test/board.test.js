@@ -134,4 +134,54 @@ test("a tile that names a permission is hidden only when the session lists permi
   assert.strictEqual(overview.tileNeedsPermission(tile, null), false);
 });
 
+test("a tile registered as tile.<id> is found in the Worker's <id>.view list (the owner's own tiles must not be hidden from the owner)", function () {
+  var overview = require(path.join(root, "overview.js"));
+  assert.strictEqual(overview.permissionKey("tile.assets"), "assets.view");
+  assert.strictEqual(overview.permissionKey("assets.view"), "assets.view", "the Worker's own spelling is left alone");
+  assert.strictEqual(overview.permissionKey("ops.view"), "ops.view");
+  var owner = { authenticated: true, owner: true, permissions: ["ops.view", "assets.view", "assets.edit", "capture.view", "expiry.view", "today.view"] };
+  ["tile.assets", "tile.capture", "tile.expiry", "tile.today"].forEach(function (p) {
+    assert.strictEqual(overview.tileNeedsPermission({ id: p, permission: p }, owner), false, p + " is shown to a person whose list has it");
+  });
+  var limited = { authenticated: true, owner: false, permissions: ["ops.view"] };
+  ["tile.assets", "tile.capture", "tile.expiry"].forEach(function (p) {
+    assert.strictEqual(overview.tileNeedsPermission({ id: p, permission: p }, limited), true, p + " is hidden from a person whose list lacks it");
+  });
+  assert.strictEqual(overview.tileNeedsPermission({ id: "capture", permission: "tile.capture" }, { authenticated: true, owner: true, permissions: ["tile.capture"] }), true, "the old spelling is not what the Worker sends");
+});
+
+test("a layout saved before the default-on tiles existed shows them at the top once; a layout saved since does not bring back a hidden one", function () {
+  var layout = require(path.join(root, "board-layout.js"));
+  layout.register({ id: "qb-cap", title: "Capture", w: 12, h: 2, minH: 2, defaultOn: true, order: 0 });
+  layout.register({ id: "qb-exp", title: "Expiry", w: 12, h: 6, minH: 3, defaultOn: true, order: 1 });
+  var saved = [{ id: "need", x: 0, y: 0, w: 6, h: 8 }, { id: "feed", x: 6, y: 0, w: 6, h: 8 }];
+  var ids = ["qb-cap", "qb-exp"];
+  var fresh = board.withDefaultTiles(saved, {}, "std", ids);
+  assert.deepStrictEqual(fresh.map(function (t) { return t.id + "@" + t.x + "," + t.y; }), ["qb-cap@0,0", "qb-exp@0,2", "need@0,8", "feed@6,8"], "on top, the rest moved down together");
+  assert.deepStrictEqual(board.withDefaultTiles(saved, null, "std", ids).length, 4, "no record at all: the same");
+  assert.deepStrictEqual(board.withDefaultTiles(saved, { std: 1 }, "std", ids), saved, "saved since: what is missing is hidden on purpose");
+  assert.strictEqual(board.withDefaultTiles(saved, { std: 1 }, "l:l1", ids).length, 4, "each layout has its own record: a named layout not yet saved still gets them");
+  assert.strictEqual(board.withDefaultTiles(saved, {}, "std", []).length, 2, "nothing to add when the person may not use them");
+  var held = [{ id: "qb-exp", x: 0, y: 0, w: 12, h: 6 }, { id: "need", x: 0, y: 6, w: 6, h: 8 }];
+  var one = board.withDefaultTiles(held, {}, "std", ids);
+  assert.deepStrictEqual(one.map(function (t) { return t.id + "@" + t.y; }), ["qb-cap@0", "qb-exp@2", "need@8"], "a tile the layout already holds stays where it is relative to the rest");
+  ["qb-cap", "qb-exp"].forEach(function (id) { layout.CATALOGUE.splice(layout.CATALOGUE.findIndex(function (c) { return c.id === id; }), 1); });
+});
+
+test("the board remembers which layouts have been saved since the default-on tiles existed, per layout, in this browser only", function () {
+  var src = fs.readFileSync(path.join(root, "board.js"), "utf8");
+  assert.ok(/SEEN_KEY = "barnyard-board-defaults"/.test(src), "one storage key");
+  assert.ok(/markSeen\(seenKey\(null\)\)/.test(src) && /markSeen\(seenKey\(named\)\)/.test(src), "Done marks the layout it saved");
+  assert.ok(/clearSeen\(seenKey\(null\)\)/.test(src), "Reset brings the default-on tiles back");
+  assert.ok(/markSeen\("l:" \+ res\.id\)/.test(src), "a new named layout is saved with them");
+});
+
+test("Quick capture and Running out soon are tiles on the board, not fixed blocks in the page", function () {
+  var html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  ["ov-capture", "ov-cap-input", "ov-expiry-box", 'id="ov-expiry"'].forEach(function (s) { assert.strictEqual(html.indexOf(s), -1, s + " is gone from index.html"); });
+  var ov = fs.readFileSync(path.join(root, "overview.js"), "utf8");
+  assert.ok(!/\$\("ov-(capture|expiry|cap-)/.test(ov), "overview.js no longer reaches for them");
+  assert.ok(/publishStatus\(model\.status\)/.test(ov) && /subscribe\("refresh"/.test(ov), "it hands the status answer to the tiles and listens for their refresh request");
+});
+
 console.log("\n" + passed + " tests passed");
