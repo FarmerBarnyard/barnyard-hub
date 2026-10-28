@@ -9,8 +9,21 @@
 //   POST /mon/test-push   a test push to the phone (ntfy; needs a recent sign-in, once a minute)
 //   POST /mon/test-digest the weekly digest email to the saved recipients now (needs a recent sign-in, once a minute)
 //   POST /mon/acknowledge { monitor } stops an outage's reminders until it recovers ({ monitor, undo: true } takes it back)
-// and, to fill the Security block, GET /hub/status (the daily check, what is about to expire) and GET /vuln/summary
-// (open findings by priority). Both are optional: if one fails its block says so and the rest still shows.
+// and, to fill the Security block, GET /hub/status (the daily check, what is about to expire), GET /vuln/summary
+// (open findings by priority) and GET /incidents/summary (the open-incident count). All three are optional: if one
+// fails its block says so and the rest still shows.
+//
+// Two tabs, chosen by the URL hash (#dashboard, #settings): the Dashboard (a status strip, a card per monitor with its
+// 7-day uptime and a 14-day sparkline, recent alerts, the servers' reporters, security and renewals) and Settings (every
+// control: recipients, working hours, switches, phone alerts, reporter keys, the test buttons).
+//
+// Request budget (the owner hit Cloudflare's rate limit on /mon/ with the old page, which asked for three things every
+// minute and again after every button): the Dashboard reads /mon/status once when it opens and then once a minute, only
+// while the page is visible and the Dashboard tab is open (it reads again at once when the tab becomes visible if the last
+// answer is over a minute old); Settings does not poll and reads only if the last answer is over 30 seconds old; the
+// security block is read at most every 10 minutes and the incident count every 5; the three test buttons do not read the
+// status again; Check now counts down the Worker's 30-second limit; a busy answer (429, or the network failure a Cloudflare
+// rate limit looks like to a page) keeps the last answer on screen and waits, doubling up to 5 minutes or obeying Retry-After.
 //
 // Everything from the server reaches the page through textContent, never innerHTML. The page's CSP has no
 // 'unsafe-inline' for scripts or styles.
@@ -22,7 +35,6 @@
   "use strict";
 
   var MON = "https://api.barnyard.site/mon";
-  var POLL_MS = 60000;
 
   // ---- 1. pure helpers ------------------------------------------------------
 
@@ -174,12 +186,32 @@
     if (err === "bad_ntfy_url") return "NTFY_URL is not valid: it must be an https:// address with no path.";
     if (err === "token_invalid") return "NTFY_TOKEN does not look like a token.";
     if (err === "refused") return "ntfy refused the push. If the topic is protected, check NTFY_TOKEN allows it.";
+    if (err === "rate_limited" && r && Number.isFinite(r.retryAfter) && r.retryAfter >= 0) {
+      // ntfy's own limit: the Worker says how long and gives a plain sentence; use its sentence when it is a short one
+      return typeof r.message === "string" && r.message.length > 0 && r.message.length <= 200 ? r.message : "ntfy is slowing requests down. Try again in " + Math.max(1, Math.round(r.retryAfter)) + (Math.max(1, Math.round(r.retryAfter)) === 1 ? " second." : " seconds.");
+    }
     if (err === "rate_limited" && !(r && r.retryMs)) return "ntfy is slowing requests down. Try again in a minute.";
     if (err === "timeout") return "ntfy did not answer in time. Try again in a minute.";
     if (err === "unreachable") return "The Worker could not reach ntfy. Check NTFY_URL if you set one.";
     if (err === "redirected") return "ntfy sent the Worker somewhere else, which it will not follow. Check NTFY_URL.";
     if (/^http_\d+$/.test(String(err))) return "ntfy answered with an error (" + String(err).slice(5) + ").";
     return mailErrorText(r);
+  }
+
+  // How ntfy has been doing, from the status's pushHealth { lastOkAt, lastFailAt, lastFailReason, failures, failing } (null until
+  // the first push, and absent while the Worker is older than this page): { tone, text, hint, failing } or null.
+  function pushHealthLine(ph, tz, now) {
+    if (!ph || typeof ph !== "object") return null;
+    var ok = ph.lastOkAt ? "last OK " + clockText(ph.lastOkAt, tz) + " (" + agoText(ph.lastOkAt, now) + ")" : "no push has gone through yet";
+    if (ph.failing) {
+      var reason = typeof ph.lastFailReason === "string" && /^[A-Za-z0-9_]{1,40}$/.test(ph.lastFailReason) ? ph.lastFailReason : "";
+      var why = reason ? pushErrorText({ error: reason }) : "";
+      if (/^That did not work/.test(why)) why = "The reason the Worker recorded: " + reason + ".";
+      var n = Number(ph.failures) || 0;
+      return { tone: "attn", failing: true, text: "ntfy is failing: " + ok + (n ? "; " + n + (n === 1 ? " push" : " pushes") + " in a row did not go through" : "") + ".", hint: why };
+    }
+    if (!ph.lastOkAt && !ph.lastFailAt) return null;
+    return { tone: ph.lastOkAt ? "ok" : "", failing: false, text: "ntfy: " + ok + ".", hint: "" };
   }
 
   // A failed test email or send, in words. `r` is the Worker's answer { error, detail?, status?, retryMs? }.
@@ -394,6 +426,244 @@
     return mailErrorText(r);
   }
 
+
+  // ---- the dashboard's own helpers (tabs, counts, uptime, sparklines, groups, backoff) ------------------------
+
+  var TABS = ["dashboard", "settings"];
+  var TREND_DAYS = 14;
+  var STATUS_MS = 60000;            // how often the Dashboard asks for the status while it is open and visible
+  var EXTRAS_MS = 10 * 60000;       // the security block (vulnerabilities, expiries) is read this often at most
+  var INCIDENTS_MS = 5 * 60000;     // and the open-incident count this often at most
+  var CHECK_GAP_MS = 30000;         // the Worker lets "Check now" run once every 30 seconds
+  var MIN_REFRESH_MS = 5000;        // the Refresh button will not ask again within this
+  var SETTINGS_STALE_MS = 30000;    // opening Settings reads the status again only if the last read is older than this
+
+  // "#settings" -> "settings"; anything else (no hash, "#dashboard", rubbish) -> "dashboard".
+  function tabFromHash(hash) {
+    var h = String(hash || "").replace(/^#/, "").toLowerCase();
+    return TABS.indexOf(h) !== -1 ? h : "dashboard";
+  }
+  function hashForTab(tab) { return "#" + (TABS.indexOf(tab) !== -1 ? tab : "dashboard"); }
+
+  // The tab a key moves to: arrows wrap, Home and End jump. null for any other key.
+  function nextTab(current, key) {
+    var i = TABS.indexOf(current);
+    if (i === -1) i = 0;
+    if (key === "ArrowRight" || key === "ArrowDown") return TABS[(i + 1) % TABS.length];
+    if (key === "ArrowLeft" || key === "ArrowUp") return TABS[(i + TABS.length - 1) % TABS.length];
+    if (key === "Home") return TABS[0];
+    if (key === "End") return TABS[TABS.length - 1];
+    return null;
+  }
+
+  // up / down / unknown (checked but cannot tell) / waiting (never checked) for the outside monitors.
+  function counts(monitors) {
+    var c = { up: 0, down: 0, unknown: 0, waiting: 0, total: 0 };
+    (Array.isArray(monitors) ? monitors : []).forEach(function (m) {
+      c.total++;
+      if (m.status === "up") c.up++;
+      else if (m.status === "down") c.down++;
+      else if (m.lastCheck) c.unknown++;
+      else c.waiting++;
+    });
+    return c;
+  }
+
+  // The big pill: { key, tone, label }. An outage anywhere is Down; a server's own report raising an alert, or a monitor that
+  // cannot be confirmed, is Degraded; nothing checked yet is Waiting.
+  function overallState(monitors, derived) {
+    var c = counts(monitors);
+    var reportAlerts = (Array.isArray(derived) ? derived : []).filter(function (d) { return d.status === "down" && d.grade !== "notice"; }).length;
+    if (!c.total) return { key: "empty", tone: "", label: "Nothing watched" };
+    if (c.down) return { key: "down", tone: "alert", label: "Down" };
+    if (c.waiting === c.total) return { key: "waiting", tone: "", label: "Waiting for checks" };
+    if (c.unknown || reportAlerts) return { key: "degraded", tone: "attn", label: "Degraded" };
+    return { key: "up", tone: "ok", label: "All up" };
+  }
+
+  // Uptime over the last `days` entries of one monitor's daily [checks, fails] list (today included): { pct, checks } or null.
+  function uptimePct(daily, days) {
+    var list = Array.isArray(daily) ? daily.slice(-Math.max(1, days)) : [];
+    var checks = 0, fails = 0;
+    list.forEach(function (d) { checks += Number(d && d[0]) || 0; fails += Number(d && d[1]) || 0; });
+    if (!checks) return null;
+    return { pct: Math.round((1 - fails / checks) * 1000) / 10, checks: checks };
+  }
+
+  // "99.8%" or an en dash when there is nothing to say yet.
+  function pctText(u) { return u && Number.isFinite(u.pct) ? (u.pct === 100 ? "100%" : u.pct.toFixed(1) + "%") : "–"; }
+
+  // A sparkline of daily uptime in a w x h box: { line, area, last: { x, y, pct }, days: [{ x, y, pct } | null], hasData }.
+  // The scale runs from 90% (bottom) to 100% (top) because an uptime of 99.5% and one of 60% should not look alike; anything
+  // under 90% sits on the floor. A day with no checks breaks the line instead of drawing as zero.
+  function sparkModel(daily, w, h) {
+    var list = Array.isArray(daily) ? daily : [];
+    var n = list.length, pad = 3;
+    var pts = list.map(function (d, i) {
+      var c = Number(d && d[0]) || 0, f = Number(d && d[1]) || 0;
+      if (!c) return null;
+      var pct = (1 - f / c) * 100;
+      var t = Math.max(0, Math.min(1, (pct - 90) / 10));
+      return { x: n > 1 ? pad + i * (w - 2 * pad) / (n - 1) : w / 2, y: pad + (1 - t) * (h - 2 * pad), pct: Math.round(pct * 10) / 10 };
+    });
+    var line = "", area = "", run = [];
+    function flush() {
+      if (!run.length) return;
+      line += (line ? " " : "") + "M" + run.map(function (p) { return round1(p.x) + " " + round1(p.y); }).join(" L");
+      if (run.length > 1) area += (area ? " " : "") + "M" + round1(run[0].x) + " " + (h - 1) + " L" + run.map(function (p) { return round1(p.x) + " " + round1(p.y); }).join(" L") + " L" + round1(run[run.length - 1].x) + " " + (h - 1) + " Z";
+      run = [];
+    }
+    pts.forEach(function (p) { if (p) run.push(p); else flush(); });
+    flush();
+    var lastPt = null;
+    for (var i = pts.length - 1; i >= 0; i--) if (pts[i]) { lastPt = pts[i]; break; }
+    return { line: line, area: area, last: lastPt, days: pts, hasData: !!lastPt };
+  }
+  function round1(v) { return Math.round(v * 10) / 10; }
+
+  // The words for a sparkline's tooltip and screen-reader label: "Daily uptime for the last 14 days, oldest first: 100%, 99.7%, no checks ..."
+  function sparkLabel(daily) {
+    var list = Array.isArray(daily) ? daily : [];
+    return "Daily uptime for the last " + list.length + " days, oldest first: " + list.map(function (d) {
+      var c = Number(d && d[0]) || 0, f = Number(d && d[1]) || 0;
+      return c ? pctText({ pct: Math.round((1 - f / c) * 1000) / 10 }) : "no checks";
+    }).join(", ") + ".";
+  }
+
+  var GROUPS = [
+    ["servers", "Servers", "checked every 5 minutes from the Worker"],
+    ["sites", "Sites", "shown here; no email by default"],
+    ["services", "Services", ""]
+  ];
+
+  // One card: the state words from tileModel plus the facts the dashboard shows. `trend` is the status's trend block.
+  function cardModel(m, now, trend) {
+    var t = tileModel(m, now);
+    var daily = trend && trend.series && Array.isArray(trend.series[m.id]) ? trend.series[m.id] : [];
+    var facts = [];
+    if (m.status === "up" && m.since) facts.push("Up for " + durationText(now - m.since));
+    if (m.status === "down" && m.downSince) facts.push("Down for " + durationText(now - m.downSince));
+    facts.push(m.lastCheck ? "Checked " + agoText(m.lastCheck, now) : "Not checked yet");
+    if (m.lastMs) facts.push(m.lastMs + " ms");
+    var d7 = uptimePct(daily, 7);
+    return {
+      id: m.id, name: m.name, group: m.group, tone: t.tone, label: t.label, facts: facts, detail: t.detail, ack: t.ack, fix: t.fix,
+      uptime7: d7, uptimeText: pctText(d7), spark: sparkModel(daily, 120, 34), sparkLabel: sparkLabel(daily), hasHistory: !!d7
+    };
+  }
+
+  // The monitors in their groups, empty groups left out; a group the page does not know goes last as "Other".
+  function groupCards(monitors, now, trend) {
+    var cards = (Array.isArray(monitors) ? monitors : []).map(function (m) { return cardModel(m, now, trend); });
+    var out = [];
+    GROUPS.forEach(function (g) {
+      var items = cards.filter(function (c) { return c.group === g[0]; });
+      if (items.length) out.push({ id: g[0], title: g[1], note: g[2], items: items });
+    });
+    var known = GROUPS.map(function (g) { return g[0]; });
+    var rest = cards.filter(function (c) { return known.indexOf(c.group) === -1; });
+    if (rest.length) out.push({ id: "other", title: "Other", note: "", items: rest });
+    return out;
+  }
+
+  // The Incident Room's count for the strip: { text, tone, open } or null when the owner has no access or it failed.
+  function incidentsChip(summary) {
+    if (!summary || summary.ok !== true || !Number.isFinite(summary.open)) return null;
+    if (!summary.open) return { text: "No open incidents", tone: "ok", open: 0 };
+    return { text: summary.open + (summary.open === 1 ? " open incident" : " open incidents"), tone: "alert", open: summary.open };
+  }
+
+  // The recent-alerts panel: what is raising an alert right now (from the servers' reports), then what was sent, held, pushed or acknowledged.
+  function timelineRows(history, derived, tz, now) {
+    var rows = [];
+    derivedRows(derived, now).forEach(function (r) { rows.push({ when: "now", kind: r.label, tone: r.tone, subject: r.name, result: r.text, ok: false, live: true }); });
+    historyRows(history, tz).forEach(function (r) { rows.push({ when: r.when, kind: r.kind, tone: r.ok ? "ok" : "alert", subject: r.subject, result: r.result, ok: r.ok, live: false }); });
+    return rows;
+  }
+
+  // A server's reporter as a compact row for the dashboard: { name, tone, label, line, bars: [{ label, pct, tone }], stale }.
+  function reporterBrief(card, report, known) {
+    var bars = [];
+    if (report && report.mem && Number.isFinite(report.mem.usedPct)) bars.push({ label: "Memory", pct: Math.round(report.mem.usedPct), tone: barTone(report.mem.usedPct) });
+    (report && report.disks || []).slice(0, 2).forEach(function (d) { if (Number.isFinite(d.usedPct)) bars.push({ label: "Disk " + d.mount, pct: Math.round(d.usedPct), tone: barTone(d.usedPct) }); });
+    return { id: card.id, name: card.name, tone: card.tone, label: card.label, line: card.line, bars: bars, services: serviceStates(report, known), stale: card.label === "Silent" || card.label === "Key expired" };
+  }
+
+  // A server's services as { name, state: "up" | "down" | "unknown" }. A service the report names is up or down. One the page has
+  // seen in an earlier report from this server but that this one leaves out is "unknown": a reporter leaves out a service whose
+  // check itself failed, which is not the same as the service being down.
+  function serviceStates(report, known) {
+    var out = [], seen = {};
+    ((report && report.services) || []).forEach(function (s) {
+      if (!s || typeof s.name !== "string") return;
+      seen[s.name] = true;
+      out.push({ name: s.name, state: s.up === true ? "up" : s.up === false ? "down" : "unknown" });
+    });
+    (Array.isArray(known) ? known : []).forEach(function (name) { if (!seen[name]) out.push({ name: name, state: "unknown" }); });
+    return out;
+  }
+  function barTone(p) { return p >= 95 ? "alert" : p >= 85 ? "attn" : "ok"; }
+
+  // The best report of each server (the active key that reported most recently), for reporterBrief.
+  function bestReports(reporters) {
+    var out = {};
+    (Array.isArray(reporters) ? reporters : []).forEach(function (r) {
+      if (r.state !== "reporting" && r.state !== "silent") return;
+      if (!out[r.server] || (r.lastSeen || 0) > (out[r.server].lastSeen || 0)) out[r.server] = r;
+    });
+    var map = {};
+    Object.keys(out).forEach(function (k) { map[k] = out[k].report || null; });
+    return map;
+  }
+
+  // ---- request budget: when to ask again, and how to back off ------------------------------------------------
+
+  // Retry-After as seconds (a number, or an HTTP date), or null.
+  function parseRetryAfter(value, now) {
+    if (value === null || value === undefined || value === "") return null;
+    var n = Number(value);
+    if (Number.isFinite(n) && n >= 0) return Math.round(n);
+    var t = Date.parse(value);
+    if (Number.isFinite(t)) return Math.max(0, Math.round((t - (now || Date.now())) / 1000));
+    return null;
+  }
+
+  // How long to wait after a 429 (or a failed poll): the server's Retry-After when it gave one (5 s to 5 min), else 60 s doubling to 5 min.
+  function backoffMs(attempt, retryAfterSec) {
+    if (Number.isFinite(retryAfterSec)) return Math.max(5, Math.min(300, retryAfterSec)) * 1000;
+    return Math.min(300000, 60000 * Math.pow(2, Math.max(0, (attempt || 1) - 1)));
+  }
+
+  // The calm line shown while waiting.
+  function busyText(ms) {
+    var s = Math.max(1, Math.ceil(ms / 1000));
+    return "The Worker is busy. Showing the last answer; trying again in " + (s >= 90 ? Math.round(s / 60) + " min" : s + " s") + ".";
+  }
+
+  // Whether the Dashboard should ask for the status now: only while the page is visible, on the Dashboard tab, signed in, idle and not backing off.
+  function pollDue(s) {
+    if (!s || s.hidden || s.tab !== "dashboard" || s.state !== "ok" || s.busy || s.inflight) return false;
+    if (s.backoffUntil && s.now < s.backoffUntil) return false;
+    return !s.fetchedAt || s.now - s.fetchedAt >= (s.every || STATUS_MS);
+  }
+
+  // Milliseconds until the next poll is due (never negative), for the timer.
+  function nextPollIn(s) {
+    var wait = (s.every || STATUS_MS) - (s.now - (s.fetchedAt || 0));
+    if (s.backoffUntil && s.backoffUntil > s.now) wait = Math.max(wait, s.backoffUntil - s.now);
+    return Math.max(1000, wait);
+  }
+
+  // Whether an optional read (security block, incidents) is due: never read, or older than its limit.
+  function extraDue(at, now, limit) { return !at || now - at >= limit; }
+
+  // Seconds left before "Check now" may run again (0 when it may).
+  function checkWait(until, now) { return Math.max(0, Math.ceil((until - now) / 1000)); }
+  function checkLabel(sec) { return sec > 0 ? "Check now (" + sec + " s)" : "Check now"; }
+
+  // Whether the Settings tab should read the status as it opens.
+  function settingsNeedsRead(fetchedAt, now) { return !fetchedAt || now - fetchedAt >= SETTINGS_STALE_MS; }
+
   var helpers = {
     agoText: agoText, durationText: durationText, clockText: clockText, detailText: detailText, tileModel: tileModel, summarise: summarise,
     emailStatus: emailStatus, mailErrorText: mailErrorText, hoursText: hoursText, validateAddress: validateAddress, addRecipient: addRecipient,
@@ -401,7 +671,13 @@
     uptimeText: uptimeText, reportLines: reportLines, reporterCards: reporterCards, envLines: envLines, reasonText: reasonText,
     derivedRows: derivedRows, keyErrorText: keyErrorText, SERVERS: SERVERS, ALERT_SWITCHES: ALERT_SWITCHES,
     ackModel: ackModel, pushStatus: pushStatus, pushErrorText: pushErrorText, PUSH_TYPES: PUSH_TYPES,
-    ZONES: ZONES, DAY_NAMES: DAY_NAMES, DAY_ORDER: DAY_ORDER, MAX_RECIPIENTS: MAX_RECIPIENTS
+    ZONES: ZONES, DAY_NAMES: DAY_NAMES, DAY_ORDER: DAY_ORDER, MAX_RECIPIENTS: MAX_RECIPIENTS,
+    // the dashboard
+    TABS: TABS, TREND_DAYS: TREND_DAYS, STATUS_MS: STATUS_MS, EXTRAS_MS: EXTRAS_MS, INCIDENTS_MS: INCIDENTS_MS, CHECK_GAP_MS: CHECK_GAP_MS, MIN_REFRESH_MS: MIN_REFRESH_MS,
+    tabFromHash: tabFromHash, hashForTab: hashForTab, nextTab: nextTab, counts: counts, overallState: overallState, uptimePct: uptimePct, pctText: pctText,
+    sparkModel: sparkModel, sparkLabel: sparkLabel, cardModel: cardModel, groupCards: groupCards, incidentsChip: incidentsChip, timelineRows: timelineRows,
+    reporterBrief: reporterBrief, bestReports: bestReports, serviceStates: serviceStates, pushHealthLine: pushHealthLine, parseRetryAfter: parseRetryAfter, backoffMs: backoffMs, busyText: busyText, pollDue: pollDue,
+    nextPollIn: nextPollIn, extraDue: extraDue, checkWait: checkWait, checkLabel: checkLabel, settingsNeedsRead: settingsNeedsRead
   };
 
   if (typeof document === "undefined") {
@@ -411,9 +687,19 @@
 
   // ---- 2. data --------------------------------------------------------------
 
-  // newKey: the key just made, held here only until the owner is done with it (it is never stored anywhere).
-  var model = { state: "loading", mon: null, hub: null, vuln: null, flash: null, busy: false, newKey: null };
+  var HUB = "https://api.barnyard.site/hub/status", VULN = "https://api.barnyard.site/vuln/summary", INC = "https://api.barnyard.site/incidents/summary";
 
+  // newKey: the key just made, held here only until the owner is done with it (it is never stored anywhere).
+  // fetchedAt / hubAt / incAt: when each read last finished. attempt / backoffUntil: the backing-off after a busy answer.
+  var model = {
+    state: "loading", mon: null, hub: null, vuln: null, inc: null, tab: "dashboard", flash: null, busy: false, newKey: null,
+    fetchedAt: 0, hubAt: 0, incAt: 0, inflight: false, attempt: 0, backoffUntil: 0, note: "", checkUntil: 0, lastRefreshAt: 0, stale: false,
+    known: {}          // server id -> { service name: true } for every service a report from it has named, so one that goes missing reads as unknown
+  };
+  var pollTimer = null, checkTimer = null;
+
+  // -> { status, body, retryAfter }. Status 0 is a network failure, which is also how the browser reports Cloudflare's own
+  // rate-limit answer (it carries no CORS headers), so 0 and 429 are both treated as "busy".
   function getJson(url, init) {
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, 20000);
@@ -421,30 +707,103 @@
     for (var k in init) opts[k] = init[k];
     return fetch(url, opts).then(function (r) {
       clearTimeout(timer);
-      return r.json().catch(function () { return {}; }).then(function (body) { return { status: r.status, body: body }; });
-    }, function () { clearTimeout(timer); return { status: 0, body: {} }; });
+      var header = null;
+      try { header = r.headers.get("Retry-After"); } catch (e) { header = null; }
+      return r.json().catch(function () { return {}; }).then(function (body) {
+        var sec = parseRetryAfter(header);
+        if (sec === null && body && Number.isFinite(body.retryMs)) sec = Math.ceil(body.retryMs / 1000);
+        if (sec === null && body && Number.isFinite(body.resetsInSeconds)) sec = Math.min(300, body.resetsInSeconds);
+        return { status: r.status, body: body, retryAfter: sec };
+      });
+    }, function () { clearTimeout(timer); return { status: 0, body: {}, retryAfter: null }; });
   }
 
-  function load() {
-    return Promise.all([
-      getJson(MON + "/status", {}),
-      getJson("https://api.barnyard.site/hub/status", {}),
-      getJson("https://api.barnyard.site/vuln/summary", {})
-    ]).then(function (res) {
-      var mon = res[0];
-      if (mon.status === 401) { model.state = "guest"; return; }
-      if (mon.status === 403) { model.state = "forbidden"; return; }
-      if (mon.status === 0 || mon.status >= 500 || !mon.body) { model.state = model.mon ? "ok" : "error"; return; }
-      model.mon = mon.body;
-      model.hub = res[1].status === 200 ? res[1].body : null;
-      model.vuln = res[2].status === 200 ? res[2].body : null;
-      model.state = "ok";
-    }).then(render);
+  function snapshot() {
+    return { hidden: document.hidden, tab: model.tab, state: model.state, busy: model.busy, inflight: model.inflight, backoffUntil: model.backoffUntil, fetchedAt: model.fetchedAt, now: Date.now() };
+  }
+
+  // Reads the status. Only one read at a time; a read that finds the Worker busy keeps the last answer on screen and waits.
+  function fetchStatus(opts) {
+    opts = opts || {};
+    if (model.inflight) return Promise.resolve(false);
+    if (!opts.force && model.backoffUntil > Date.now()) return Promise.resolve(false);
+    model.inflight = true;
+    return getJson(MON + "/status", {}).then(function (r) {
+      model.inflight = false;
+      var ok = applyStatus(r);
+      render();
+      schedule();
+      if (ok && model.tab === "dashboard") fetchExtras(!!opts.force);
+      return ok;
+    });
+  }
+
+  function applyStatus(r) {
+    var now = Date.now();
+    if (r.status === 401) { model.state = "guest"; return false; }
+    if (r.status === 403) { model.state = "forbidden"; return false; }
+    if (r.status === 200 && r.body && typeof r.body === "object") {
+      model.mon = r.body; model.fetchedAt = now; model.attempt = 0; model.backoffUntil = 0; model.note = ""; model.stale = false; model.state = "ok";
+      rememberServices(r.body.reporters);
+      return true;
+    }
+    // busy (429), unreachable (0, which is also what a Cloudflare rate-limit answer looks like) or a server error
+    model.attempt++;
+    var wait = backoffMs(model.attempt, r.retryAfter);
+    model.backoffUntil = now + wait;
+    model.note = busyText(wait);
+    if (!model.mon) model.state = "error";
+    else model.state = "ok";
+    return false;
+  }
+
+  function rememberServices(reporters) {
+    (Array.isArray(reporters) ? reporters : []).forEach(function (r) {
+      var list = r && r.report && Array.isArray(r.report.services) ? r.report.services : [];
+      list.forEach(function (s) {
+        if (!s || typeof s.name !== "string" || !/^[A-Za-z0-9_.@:-]{1,60}$/.test(s.name)) return;
+        (model.known[r.server] = model.known[r.server] || {})[s.name] = true;
+      });
+    });
+  }
+
+  // The security block (vulnerabilities, what is about to expire) and the open-incident count: decoration, so each is read
+  // when first needed and then at most every few minutes, never on every status poll.
+  function fetchExtras(force) {
+    var now = Date.now(), jobs = [];
+    if (force || extraDue(model.hubAt, now, EXTRAS_MS)) {
+      model.hubAt = now;
+      jobs.push(getJson(HUB, {}).then(function (r) { model.hub = r.status === 200 ? r.body : null; }));
+      jobs.push(getJson(VULN, {}).then(function (r) { model.vuln = r.status === 200 ? r.body : null; }));
+    }
+    if (force || extraDue(model.incAt, now, INCIDENTS_MS)) {
+      model.incAt = now;
+      jobs.push(getJson(INC, {}).then(function (r) { model.inc = r.status === 200 ? r.body : null; }));
+    }
+    if (!jobs.length) return Promise.resolve();
+    return Promise.all(jobs).then(function () { if (model.tab === "dashboard" && model.state === "ok") render(); });
+  }
+
+  // The next poll: only while the page is visible, on the Dashboard tab and idle.
+  function schedule() {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+    if (document.hidden) return;
+    // the very first read was refused or busy: try again when the back-off ends (a signed-out or forbidden page does not retry)
+    if (model.state === "error") {
+      pollTimer = setTimeout(function () { fetchStatus({ force: true }); }, Math.max(1000, model.backoffUntil - Date.now()));
+      return;
+    }
+    if (model.tab !== "dashboard" || model.state !== "ok") return;
+    pollTimer = setTimeout(function () {
+      if (pollDue(snapshot())) fetchStatus(); else schedule();
+    }, nextPollIn(snapshot()));
   }
 
   // ---- 3. rendering ---------------------------------------------------------
 
   var $ = function (id) { return document.getElementById(id); };
+  var SVGNS = "http://www.w3.org/2000/svg";
   function h(tag, cls, text) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -452,6 +811,9 @@
     return e;
   }
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  // data-fk names a control so it can be given focus back after the panel is rebuilt.
+  function fk(el, key) { el.setAttribute("data-fk", key); return el; }
+  function button(text, cls, key) { var b = h("button", cls, text); b.type = "button"; if (key) fk(b, key); return b; }
 
   function message(text, linkText, href) {
     var box = $("mon-root");
@@ -460,9 +822,8 @@
     if (href) { var a = h("a", "btn btn-sm", linkText); a.href = href; box.appendChild(a); }
   }
 
-  function section(title, note, id) {
-    var s = h("section", "mo-section");
-    if (id) s.id = id;
+  function box(title, note, cls) {
+    var s = h("section", "mo-box" + (cls ? " " + cls : ""));
     var head = h("div", "sec-head");
     head.appendChild(h("h2", null, title));
     if (note) head.appendChild(h("span", "sub", note));
@@ -470,54 +831,21 @@
     return s;
   }
 
-  function tileGrid(tiles) {
-    var grid = h("ul", "mo-tiles");
-    grid.setAttribute("role", "list");
-    tiles.forEach(function (t) {
-      var li = h("li", "mo-tile" + (t.tone ? " " + t.tone : ""));
-      var top = h("div", "mo-tile-top");
-      top.appendChild(h("b", null, t.name));
-      top.appendChild(h("span", "chip" + (t.tone ? " " + t.tone : ""), t.label));
-      li.appendChild(top);
-      li.appendChild(h("p", "dim", t.line));
-      if (t.detail) li.appendChild(h("p", "mo-why", t.detail));
-      if (t.ack && t.ack.acked) li.appendChild(h("p", "mo-note", t.ack.text));
-      var foot = h("div", "mo-tile-foot");
-      if (t.ack) foot.appendChild(ackButton(t.id, t.name, t.ack.acked));
-      if (t.fix) {
-        var a = h("a", "sub", t.fix.text);
-        a.href = t.fix.href;
-        if (/^https?:/.test(t.fix.href)) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
-        foot.appendChild(a);
-      }
-      li.appendChild(foot);
-      grid.appendChild(li);
-    });
-    return grid;
-  }
-
-  // "Acknowledge" (stop this outage's reminders) or, once acknowledged, "Undo".
-  function ackButton(id, name, acked) {
-    var b = h("button", "btn btn-sm", acked ? "Undo acknowledge" : "Acknowledge");
-    b.type = "button";
-    b.setAttribute("aria-label", (acked ? "Undo the acknowledgement of " : "Acknowledge the outage of ") + name);
-    b.addEventListener("click", function () { acknowledge(id, name, !acked); });
-    return b;
-  }
+  function list(cls) { var ul = h("ul", cls || "mo-list"); ul.setAttribute("role", "list"); return ul; }
 
   function flash(text, tone) {
     model.flash = text ? { text: text, tone: tone || "" } : null;
-    var box = $("mon-flash");
-    if (!box) return;
-    clear(box);
-    if (!model.flash) { box.hidden = true; return; }
-    box.hidden = false;
-    box.className = "mo-flash " + (tone || "");
-    box.appendChild(h("span", null, text));
+    var el = $("mon-flash");
+    if (!el) return;
+    clear(el);
+    if (!model.flash) { el.hidden = true; return; }
+    el.hidden = false;
+    el.className = "mo-flash " + (tone || "");
+    el.appendChild(h("span", null, text));
     if (/sign in again/i.test(text) && typeof window.barnyardLoginUrl === "function") {
       var a = h("a", "btn btn-sm", "Sign in again");
       a.href = window.barnyardLoginUrl();
-      box.appendChild(a);
+      el.appendChild(a);
     }
   }
 
@@ -528,183 +856,265 @@
     return l;
   }
 
+  // "Acknowledge" (stop this outage's reminders) or, once acknowledged, "Undo".
+  function ackButton(id, name, acked) {
+    var b = button(acked ? "Undo acknowledge" : "Acknowledge", "btn btn-sm", "ack:" + id);
+    b.setAttribute("aria-label", (acked ? "Undo the acknowledgement of " : "Acknowledge the outage of ") + name);
+    b.addEventListener("click", function () { acknowledge(id, name, !acked); });
+    return b;
+  }
+
+  function focusKey() {
+    var a = document.activeElement;
+    return a && a.getAttribute ? a.getAttribute("data-fk") : null;
+  }
+  function restoreFocus(key) {
+    if (!key) return;
+    var nodes = document.querySelectorAll("[data-fk]");
+    for (var i = 0; i < nodes.length; i++) if (nodes[i].getAttribute("data-fk") === key) { try { nodes[i].focus({ preventScroll: true }); } catch (e) { nodes[i].focus(); } return; }
+  }
+
+  function updateTabs() {
+    TABS.forEach(function (t) {
+      var b = $("tab-" + t);
+      if (!b) return;
+      var on = model.tab === t;
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      b.tabIndex = on ? 0 : -1;
+      b.classList.toggle("on", on);
+    });
+  }
+
   function render() {
-    var root = $("mon-root");
+    var root = $("mon-root"), tabs = $("mon-tabs");
+    if (tabs) tabs.hidden = true;
     if (model.state === "loading") return;
     if (model.state === "guest") { message("Log in to see monitoring.", "Log in", typeof window.barnyardLoginUrl === "function" ? window.barnyardLoginUrl() : null); return; }
     if (model.state === "forbidden") { message("This page is for the person who runs the hub."); return; }
-    if (model.state === "error" || !model.mon) { message("Couldn’t reach the Worker just now. It will try again shortly."); return; }
+    if (model.state === "error" || !model.mon) { message(model.note || "Couldn’t reach the Worker just now. It will try again shortly."); return; }
     var st = model.mon, now = Date.now();
-    clear(root);
-
-    var box = h("div", "mo-flash");
-    box.id = "mon-flash"; box.hidden = true; box.setAttribute("role", "status");
-    root.appendChild(box);
-
     if (st.enabled === false) {
+      clear(root);
       root.appendChild(h("p", "mo-off", "Monitoring is switched off. The Worker variable MONITOR_ENABLED is 0; remove it (or set it to 1) in Cloudflare to switch it back on."));
       return;
     }
-    var tz = (st.settings && st.settings.businessHours && st.settings.businessHours.tz) || "Australia/Perth";
-
-    // the strip
-    var sum = summarise(st.monitors, now);
-    var strip = h("div", "mo-strip" + (sum.tone ? " " + sum.tone : ""));
-    strip.appendChild(h("b", null, sum.headline));
-    if (sum.detail) strip.appendChild(h("span", "dim", sum.detail));
-    root.appendChild(strip);
-
-    // servers and sites
-    var tiles = (st.monitors || []).map(function (m) { return tileModel(m, now); });
-    var sv = section("Servers", "checked every 5 minutes from the Worker");
-    sv.appendChild(tileGrid(tiles.filter(function (t) { return t.group === "servers"; })));
-    root.appendChild(sv);
-    var si = section("Sites", "shown here; no email by default");
-    si.appendChild(tileGrid(tiles.filter(function (t) { return t.group === "sites"; })));
-    root.appendChild(si);
-
-    root.appendChild(reportersSection(st, now));
-
-    // security
-    var sec = section("Security", "from the vulnerability register and the daily check");
-    var secRows = securityRows(model.vuln, model.hub, now);
-    var secList = h("ul", "mo-list");
-    secList.setAttribute("role", "list");
-    secRows.forEach(function (r) {
-      var li = h("li");
-      li.appendChild(h("span", "chip" + (r.tone ? " " + r.tone : ""), r.value));
-      li.appendChild(h("b", null, r.title));
-      if (r.note) li.appendChild(h("span", "dim", r.note));
-      secList.appendChild(li);
-    });
-    sec.appendChild(secList);
-    var ex = expiryRows(model.hub);
-    if (ex.length) {
-      sec.appendChild(h("h3", "mo-sub", "Next to expire"));
-      var el = h("ul", "mo-list");
-      el.setAttribute("role", "list");
-      ex.forEach(function (e) {
-        var li = h("li");
-        li.appendChild(h("span", "chip" + (e.tone ? " " + e.tone : ""), e.text));
-        li.appendChild(h("b", null, e.label));
-        el.appendChild(li);
-      });
-      sec.appendChild(el);
-    }
-    var links = h("p", "mo-links");
-    var a1 = h("a", "sub", "Open the Vulnerabilities tab"); a1.href = "vulnerabilities.html"; links.appendChild(a1);
-    sec.appendChild(links);
-    root.appendChild(sec);
-
-    // the other monitors
-    var other = section("Other places to look", "already built, linked here");
-    var ol = h("ul", "mo-list");
-    ol.setAttribute("role", "list");
-    [["Overview status row", "index.html", "Chat runner, campaign engine, daily check and expiries at a glance."],
-     ["System health", "health.html", "The render service, the map cache and the Worker’s request counts."],
-     ["Activity feed", "activity.html", "What changed on the Ops board and when."],
-     ["The bell", "", "At the top of every page: proposals waiting, expiries within two weeks, failed checks."]].forEach(function (x) {
-      var li = h("li");
-      if (x[1]) { var a = h("a", null, x[0]); a.href = x[1]; li.appendChild(a); } else li.appendChild(h("b", null, x[0]));
-      li.appendChild(h("span", "dim", x[2]));
-      ol.appendChild(li);
-    });
-    other.appendChild(ol);
-    root.appendChild(other);
-
-    root.appendChild(alertsPanel(st, tz, now));
-
+    if (tabs) tabs.hidden = false;
+    updateTabs();
+    var key = focusKey();
+    clear(root);
+    var panel = h("div", "mo-pane");
+    panel.id = "mon-panel";
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", "tab-" + model.tab);
+    if (model.tab === "settings") renderSettings(panel, st, now); else renderDashboard(panel, st, now);
+    root.appendChild(panel);
+    restoreFocus(key);
     var stamp = $("mon-stamp");
-    if (stamp) stamp.textContent = "Updated " + new Date().toLocaleTimeString();
-    if (model.flash) flash(model.flash.text, model.flash.tone);
+    if (stamp) stamp.textContent = model.fetchedAt ? "Updated " + new Date(model.fetchedAt).toLocaleTimeString() : "";
+    tickCheck();
   }
 
-  // Copies text with the clipboard API, or by selecting an input when that is not allowed.
-  function copyText(text, input, done) {
-    function fallback() {
-      try { input.focus(); input.select(); document.execCommand("copy"); done(true); } catch (e) { done(false); }
-    }
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
-    else fallback();
+  // ---- the Dashboard tab ----------------------------------------------------
+
+  function sparkSvg(c) {
+    var svg = document.createElementNS(SVGNS, "svg");
+    svg.setAttribute("viewBox", "0 0 120 34");
+    svg.setAttribute("width", "120"); svg.setAttribute("height", "34");
+    svg.setAttribute("class", "mo-spark" + (c.tone ? " " + c.tone : ""));
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", c.sparkLabel);
+    var title = document.createElementNS(SVGNS, "title");
+    title.textContent = c.sparkLabel;
+    svg.appendChild(title);
+    function path(cls, d) { var p = document.createElementNS(SVGNS, "path"); p.setAttribute("class", cls); p.setAttribute("d", d); svg.appendChild(p); }
+    if (!c.spark.hasData) { path("mo-spark-empty", "M3 17 L117 17"); return svg; }
+    if (c.spark.area) path("mo-spark-area", c.spark.area);
+    path("mo-spark-line", c.spark.line);
+    var dot = document.createElementNS(SVGNS, "circle");
+    dot.setAttribute("class", "mo-spark-dot");
+    dot.setAttribute("cx", String(c.spark.last.x)); dot.setAttribute("cy", String(c.spark.last.y)); dot.setAttribute("r", "3");
+    svg.appendChild(dot);
+    return svg;
   }
 
-  // One card per server with its reporter's state and the keys, and the box that shows a new key once.
-  function reportersSection(st, now) {
-    var sec = section("Server reporters", "a small script on each server, once a minute");
-    var intro = h("p", "dim", "Each server can report on itself and on the others. That tells a tunnel problem from a server that is down, notices a full disk or a stopped service, and spots the whole site losing power or internet. A key is shown once, only a fingerprint is kept, and you can revoke it any time.");
-    sec.appendChild(intro);
-    var docs = h("a", "sub", "How to install the reporter on a server");
-    docs.href = REPORTER_DOCS; docs.target = "_blank"; docs.rel = "noopener noreferrer";
-    sec.appendChild(docs);
+  function monitorCard(c, incidentsOpen) {
+    var li = h("li", "mo-card" + (c.tone ? " " + c.tone : ""));
+    var top = h("div", "mo-card-top");
+    top.appendChild(h("b", null, c.name));
+    top.appendChild(h("span", "chip" + (c.tone ? " " + c.tone : ""), c.label));
+    li.appendChild(top);
+    var mid = h("div", "mo-card-mid");
+    var up = h("div", "mo-uptime");
+    up.appendChild(h("span", "mo-pct", c.uptimeText));
+    up.appendChild(h("span", "mo-cap", c.hasHistory ? "7-day uptime" : "no history yet"));
+    mid.appendChild(up);
+    mid.appendChild(sparkSvg(c));
+    li.appendChild(mid);
+    li.appendChild(h("p", "mo-facts-line", c.facts.join(" · ")));
+    if (c.detail) li.appendChild(h("p", "mo-why", c.detail));
+    if (c.ack && c.ack.acked) li.appendChild(h("p", "mo-note", c.ack.text));
+    var foot = h("div", "mo-card-foot");
+    if (c.ack) foot.appendChild(ackButton(c.id, c.name, c.ack.acked));
+    if (c.label === "Down" && incidentsOpen) {
+      var inc = h("a", "sub", "View the incident");
+      inc.href = "incidents.html";
+      foot.appendChild(inc);
+    }
+    if (c.fix) {
+      var a = h("a", "sub", c.fix.text);
+      a.href = c.fix.href;
+      if (/^https?:/.test(c.fix.href)) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+      foot.appendChild(a);
+    }
+    if (foot.childNodes.length) li.appendChild(foot);
+    return li;
+  }
 
-    if (model.newKey) {
-      var nk = h("div", "mo-newkey");
-      nk.appendChild(h("b", null, "Copy this key now. It will not be shown again."));
-      nk.appendChild(h("span", "dim", "Paste both lines into /etc/barnyard-reporter/env on " + model.newKey.name + ", then run the installer (the install steps are linked above)."));
-      var box = h("textarea", "mo-input mo-keybox");
-      box.readOnly = true; box.rows = 2; box.value = envLines(model.newKey.server, model.newKey.key);
-      box.setAttribute("aria-label", "The new key, as two lines for the env file");
-      box.addEventListener("focus", function () { box.select(); });
-      nk.appendChild(box);
-      var row = h("div", "mo-row");
-      var cp = h("button", "btn btn-sm", "Copy");
-      cp.type = "button";
-      cp.addEventListener("click", function () { copyText(box.value, box, function (ok) { flash(ok ? "Copied." : "Could not copy: select the text and copy it yourself.", ok ? "ok" : "alert"); }); });
-      var done = h("button", "btn btn-sm btn-quiet", "I have saved it");
-      done.type = "button";
-      done.addEventListener("click", function () { model.newKey = null; render(); });
-      row.appendChild(cp); row.appendChild(done);
-      nk.appendChild(row);
-      sec.appendChild(nk);
+  function stat(label, value, tone, href) {
+    var s = h(href ? "a" : "div", "mo-stat" + (tone ? " " + tone : ""));
+    if (href) { s.href = href; s.classList.add("link"); }
+    s.appendChild(h("b", null, String(value)));
+    s.appendChild(h("span", null, label));
+    return s;
+  }
+
+  function renderDashboard(root, st, now) {
+    var tz = (st.settings && st.settings.businessHours && st.settings.businessHours.tz) || "Australia/Perth";
+    var ov = overallState(st.monitors, st.derived), c = counts(st.monitors), sum = summarise(st.monitors, now);
+    var chip = incidentsChip(model.inc);
+
+    // the summary strip
+    var hero = h("section", "mo-hero" + (ov.tone ? " " + ov.tone : ""));
+    hero.setAttribute("aria-label", "Status summary");
+    var lead = h("div", "mo-hero-lead");
+    var state = h("div", "mo-hero-state");
+    state.appendChild(h("span", "mo-dot" + (ov.tone ? " " + ov.tone : "")));
+    state.appendChild(h("b", null, ov.label));
+    lead.appendChild(state);
+    lead.appendChild(h("p", "mo-hero-line", sum.headline + (sum.detail ? ". " + sum.detail : "")));
+    hero.appendChild(lead);
+    var stats = h("div", "mo-stats");
+    stats.appendChild(stat("up", c.up, c.up ? "ok" : ""));
+    stats.appendChild(stat("down", c.down, c.down ? "alert" : ""));
+    stats.appendChild(stat("can’t tell", c.unknown + c.waiting, c.unknown ? "attn" : ""));
+    if (chip) stats.appendChild(stat(chip.open === 1 ? "open incident" : "open incidents", chip.open, chip.open ? "alert" : "", "incidents.html"));
+    hero.appendChild(stats);
+    var last = (st.monitors || []).reduce(function (a, m) { return Math.max(a, m.lastCheck || 0); }, 0);
+    var act = h("div", "mo-hero-act");
+    act.appendChild(h("span", "dim", last ? "Last check " + agoText(last, now) : "No check has run yet"));
+    var ck = button("Check now", "btn btn-sm", "check");
+    ck.id = "mon-check";
+    ck.addEventListener("click", checkNow);
+    act.appendChild(ck);
+    hero.appendChild(act);
+    root.appendChild(hero);
+
+    if (model.note) root.appendChild(h("p", "mo-busy", model.note));
+    var es = emailStatus(st);
+    var ps = pushStatus(st);
+    if (es.tone !== "ok") {
+      var warn = h("p", "mo-setup");
+      warn.appendChild(h("b", null, es.text + " "));
+      var go = h("a", null, "Open Settings");
+      go.href = "#settings";
+      warn.appendChild(go);
+      root.appendChild(warn);
+    }
+    if (st.pending) root.appendChild(h("p", "mo-note", st.pending + (st.pending === 1 ? " alert is" : " alerts are") + " waiting to be sent" + (st.inHours ? "." : " until working hours start.")));
+    if (st.lastSend && st.lastSend.ok === false) root.appendChild(h("p", "mo-note", "The last send failed (" + st.lastSend.reason + ") " + agoText(st.lastSend.at, now) + "; it is tried again every 5 minutes."));
+    if (ps.tone === "attn") root.appendChild(h("p", "mo-note", ps.text));
+    var phl = pushHealthLine(st.pushHealth, tz, now);
+    if (phl && phl.failing) {
+      var pw = h("p", "mo-setup");
+      pw.appendChild(h("b", null, phl.text + " "));
+      var pg = h("a", null, "Open Settings");
+      pg.href = "#settings";
+      pw.appendChild(pg);
+      root.appendChild(pw);
     }
 
-    var grid = h("ul", "mo-tiles");
-    grid.setAttribute("role", "list");
-    reporterCards(st.reporters, now).forEach(function (c) {
-      var li = h("li", "mo-tile" + (c.tone ? " " + c.tone : ""));
-      var top = h("div", "mo-tile-top");
-      top.appendChild(h("b", null, c.name));
-      top.appendChild(h("span", "chip" + (c.tone ? " " + c.tone : ""), c.label));
-      li.appendChild(top);
-      li.appendChild(h("p", "dim", c.line));
-      if (c.lines.length) {
-        var ul = h("ul", "mo-facts");
-        c.lines.forEach(function (t) { ul.appendChild(h("li", null, t)); });
-        li.appendChild(ul);
-      }
-      if (c.keys.length) {
-        var kl = h("ul", "mo-keys");
-        c.keys.forEach(function (k) {
-          var kli = h("li");
-          kli.appendChild(h("span", "dim", "Key …" + k.tail + " " + k.text));
-          if (k.canRevoke) {
-            var rv = h("button", "btn btn-sm btn-quiet", "Revoke");
-            rv.type = "button";
-            rv.setAttribute("aria-label", "Revoke key ending " + k.tail + " for " + c.name);
-            rv.addEventListener("click", function () { revokeKey(k.id, c.name); });
-            kli.appendChild(rv);
-          }
-          kl.appendChild(kli);
-        });
-        li.appendChild(kl);
-      }
-      var foot = h("div", "mo-tile-foot");
-      var mk = h("button", "btn btn-sm", "Make a key");
-      mk.type = "button";
-      mk.disabled = !c.canMake || model.busy;
-      mk.setAttribute("aria-label", "Make a key for " + c.name);
-      mk.addEventListener("click", function () { makeKey(c.id, c.name); });
-      foot.appendChild(mk);
-      li.appendChild(foot);
-      grid.appendChild(li);
+    // the monitors, grouped
+    groupCards(st.monitors, now, st.trend).forEach(function (g) {
+      var sec = box(g.title, g.note, "mo-group");
+      var grid = list("mo-grid");
+      g.items.forEach(function (card) { var li = monitorCard(card, !!(chip && chip.open)); grid.appendChild(li); });
+      sec.appendChild(grid);
+      root.appendChild(sec);
     });
-    sec.appendChild(grid);
 
+    // alerts and reporters side by side
+    var cols = h("div", "mo-cols");
+    cols.appendChild(alertsTimeline(st, tz, now));
+    cols.appendChild(reportersBrief(st, now));
+    root.appendChild(cols);
+
+    root.appendChild(securityBox(now));
+  }
+
+  function alertsTimeline(st, tz, now) {
+    var sec = box("Recent alerts", "what was sent, held, pushed or acknowledged");
+    var rows = timelineRows(st.history, [], tz, now).slice(0, 10);
+    if (!rows.length) { sec.appendChild(h("p", "dim", "Nothing yet. Alerts appear here as they are sent.")); return sec; }
+    var ul = list("mo-feed");
+    rows.forEach(function (r) {
+      var li = h("li");
+      li.appendChild(h("span", "mo-when", r.when));
+      li.appendChild(h("span", "chip" + (r.tone ? " " + r.tone : ""), r.kind));
+      var body = h("span", "mo-feed-body");
+      body.appendChild(h("b", null, r.subject));
+      body.appendChild(h("span", "dim", r.result));
+      li.appendChild(body);
+      ul.appendChild(li);
+    });
+    sec.appendChild(ul);
+    return sec;
+  }
+
+  function reportersBrief(st, now) {
+    var sec = box("Server reporters", "each server reporting on itself");
+    var reports = bestReports(st.reporters);
+    var ul = list("mo-rep");
+    reporterCards(st.reporters, now).forEach(function (card) {
+      var b = reporterBrief(card, reports[card.id] || null, Object.keys(model.known[card.id] || {}));
+      var li = h("li", "mo-rep-row" + (b.tone ? " " + b.tone : ""));
+      var top = h("div", "mo-rep-top");
+      top.appendChild(h("b", null, b.name));
+      top.appendChild(h("span", "chip" + (b.tone ? " " + b.tone : ""), b.label));
+      li.appendChild(top);
+      li.appendChild(h("p", "dim", b.line));
+      if (b.bars.length) {
+        var bars = h("div", "mo-bars");
+        b.bars.forEach(function (x) {
+          var row = h("div", "mo-bar-row");
+          row.appendChild(h("span", "dim", x.label));
+          var track = h("span", "mo-bar " + x.tone);
+          var fill = h("span", "mo-bar-fill");
+          fill.style.width = Math.max(2, Math.min(100, x.pct)) + "%";
+          track.appendChild(fill);
+          row.appendChild(track);
+          row.appendChild(h("span", "mo-bar-n", x.pct + "%"));
+          bars.appendChild(row);
+        });
+        li.appendChild(bars);
+      }
+      if (b.services.length) {
+        var svc = h("div", "mo-svcs");
+        b.services.forEach(function (x) {
+          var tone = x.state === "up" ? "ok" : x.state === "down" ? "alert" : "";
+          var word = x.state === "up" ? "running" : x.state === "down" ? "NOT running" : "can’t tell";
+          var c = h("span", "chip" + (tone ? " " + tone : ""), x.name + ": " + word);
+          if (x.state === "unknown") c.title = "The report did not say. The check on the server may itself have failed, which is not the same as the service being down.";
+          svc.appendChild(c);
+        });
+        li.appendChild(svc);
+      }
+      ul.appendChild(li);
+    });
+    sec.appendChild(ul);
     var rows = derivedRows(st.derived, now);
     if (rows.length) {
       sec.appendChild(h("h3", "mo-sub", "What the reports are saying"));
-      var dl = h("ul", "mo-list");
-      dl.setAttribute("role", "list");
+      var dl = list();
       rows.forEach(function (r) {
         var li = h("li");
         li.appendChild(h("span", "chip " + r.tone, r.label));
@@ -715,32 +1125,95 @@
       });
       sec.appendChild(dl);
     }
+    var set = h("p", "mo-links");
+    var a = h("a", "sub", "Make or revoke a key in Settings");
+    a.href = "#settings";
+    set.appendChild(a);
+    sec.appendChild(set);
     return sec;
   }
 
-  function alertsPanel(st, tz, now) {
-    var s = st.settings;
-    var al = section("Alerts", "who is emailed, and when");
+  // Vulnerabilities and what is about to expire: already-built reads, taken once when the page opens and then every ten minutes at most.
+  function securityBox(now) {
+    var sec = box("Security and renewals", "read when the page opens, then every ten minutes");
+    var rows = securityRows(model.vuln, model.hub, now);
+    var ul = list();
+    rows.forEach(function (r) {
+      var li = h("li");
+      li.appendChild(h("span", "chip" + (r.tone ? " " + r.tone : ""), r.value));
+      li.appendChild(h("b", null, r.title));
+      if (r.note) li.appendChild(h("span", "dim", r.note));
+      ul.appendChild(li);
+    });
+    sec.appendChild(ul);
+    var ex = expiryRows(model.hub);
+    if (ex.length) {
+      sec.appendChild(h("h3", "mo-sub", "Next to expire"));
+      var el = list();
+      ex.forEach(function (e) {
+        var li = h("li");
+        li.appendChild(h("span", "chip" + (e.tone ? " " + e.tone : ""), e.text));
+        li.appendChild(h("b", null, e.label));
+        el.appendChild(li);
+      });
+      sec.appendChild(el);
+    }
+    var links = h("p", "mo-links");
+    var a1 = h("a", "sub", "Open the Vulnerabilities tab"); a1.href = "vulnerabilities.html"; links.appendChild(a1);
+    var a2 = h("a", "sub", "System health"); a2.href = "health.html"; links.appendChild(a2);
+    var a3 = h("a", "sub", "Activity feed"); a3.href = "activity.html"; links.appendChild(a3);
+    sec.appendChild(links);
+    return sec;
+  }
 
+  // ---- the Settings tab -----------------------------------------------------
+
+  // Copies text with the clipboard API, or by selecting an input when that is not allowed.
+  function copyText(text, input, done) {
+    function fallback() {
+      try { input.focus(); input.select(); document.execCommand("copy"); done(true); } catch (e) { done(false); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+    else fallback();
+  }
+
+  function check(label, checked, key, onChange) {
+    var l = h("label", "mo-check");
+    var c = h("input"); c.type = "checkbox"; c.checked = !!checked; fk(c, key);
+    c.addEventListener("change", function () { onChange(c); });
+    l.appendChild(c); l.appendChild(h("span", null, label));
+    return l;
+  }
+
+  function renderSettings(root, st, now) {
+    var s = st.settings;
+    var tz = (s.businessHours && s.businessHours.tz) || "Australia/Perth";
+    var grid = h("div", "mo-settings");
+    grid.appendChild(emailBox(st, s, now));
+    grid.appendChild(hoursBox(s));
+    grid.appendChild(switchesBox(st, s));
+    grid.appendChild(phoneBox(st, s, now));
+    grid.appendChild(keysBox(st, now));
+    grid.appendChild(systemBox(st, tz, now));
+    root.appendChild(grid);
+  }
+
+  function emailBox(st, s, now) {
+    var al = box("Email", "who is told, and the test buttons");
     var es = emailStatus(st);
     var line = h("div", "mo-email " + es.tone);
     line.appendChild(h("b", null, es.text));
     if (es.hint) line.appendChild(h("span", "dim", es.hint));
     al.appendChild(line);
-    al.appendChild(h("p", "dim", "An email needs the internet and Microsoft 365 to be working. If one of them is what is down, no email can reach you, so look at this page if something feels wrong."));
-    if (st.pending) al.appendChild(h("p", "mo-note", st.pending + (st.pending === 1 ? " alert is" : " alerts are") + " waiting to be sent" + (st.inHours ? "." : " until working hours start.")));
-    if (st.lastSend && st.lastSend.ok === false) al.appendChild(h("p", "mo-note", "The last send failed (" + st.lastSend.reason + ") " + agoText(st.lastSend.at, now) + "; it is tried again every 5 minutes."));
+    al.appendChild(h("p", "dim", "An email needs the internet and Microsoft 365 to be working. If one of them is what is down, no email can reach you, so look at the Dashboard if something feels wrong."));
 
-    // recipients
     al.appendChild(h("h3", "mo-sub", "Who is emailed"));
-    var rl = h("ul", "mo-list");
-    rl.setAttribute("role", "list");
+    var rl = list();
     if (!s.recipients.length) rl.appendChild(h("li", "dim", "Nobody yet."));
     s.recipients.forEach(function (addr) {
       var li = h("li");
       li.appendChild(h("b", null, addr));
-      var rm = h("button", "btn btn-sm btn-quiet", "Remove");
-      rm.type = "button";
+      var rm = button("Remove", "btn btn-sm btn-quiet", "rm:" + addr);
       rm.setAttribute("aria-label", "Remove " + addr);
       rm.addEventListener("click", function () { saveSettings({ recipients: removeRecipient(s.recipients, addr) }, "Removed."); });
       li.appendChild(rm);
@@ -765,13 +1238,27 @@
       al.appendChild(form);
     }
 
-    // hours
-    al.appendChild(h("h3", "mo-sub", "When you are emailed"));
+    var tools = h("div", "mo-row");
+    var test = button("Send test email", "btn btn-sm", "test-email");
+    test.id = "mon-test";
+    test.addEventListener("click", sendTest);
+    tools.appendChild(test);
+    var td = button("Send this week’s digest now", "btn btn-sm", "test-digest");
+    td.id = "mon-test-digest";
+    td.addEventListener("click", sendTestDigest);
+    tools.appendChild(td);
+    al.appendChild(tools);
+    if (st.lastSend && st.lastSend.ok === false) al.appendChild(h("p", "mo-note", "The last send failed (" + st.lastSend.reason + ") " + agoText(st.lastSend.at, now) + "; it is tried again every 5 minutes."));
+    return al;
+  }
+
+  function hoursBox(s) {
+    var al = box("Working hours", "when you are emailed");
     var bh = s.businessHours;
     var hf = h("form", "mo-hours");
     hf.setAttribute("novalidate", "novalidate");
     var onWrap = h("label", "mo-check");
-    var on = h("input"); on.type = "checkbox"; on.checked = !!bh.enabled;
+    var on = h("input"); on.type = "checkbox"; on.checked = !!bh.enabled; fk(on, "hours-on");
     onWrap.appendChild(on); onWrap.appendChild(h("span", null, "Only in working hours (anything outside them waits for the next morning)"));
     hf.appendChild(onWrap);
     var days = h("div", "mo-days");
@@ -802,115 +1289,170 @@
       saveSettings(body, "Hours saved.");
     });
     al.appendChild(hf);
+    return al;
+  }
 
-    // the groups of alerts that are not one outside check each: from the servers' reports, and new critical vulnerabilities
+  function switchesBox(st, s) {
+    var al = box("What emails you", "each one can be switched off");
+    al.appendChild(h("h3", "mo-sub", "Email me when this goes down"));
+    var ml = list();
+    st.monitors.forEach(function (m) {
+      var li = h("li");
+      li.appendChild(check(m.name, m.alert, "mon:" + m.id, function (c) {
+        var body = { monitors: {} }; body.monitors[m.id] = { alert: c.checked };
+        saveSettings(body, c.checked ? "You will be emailed if " + m.name + " goes down." : "No email for " + m.name + ".");
+      }));
+      ml.appendChild(li);
+    });
+    al.appendChild(ml);
     al.appendChild(h("h3", "mo-sub", "Other alerts"));
-    var gl = h("ul", "mo-list");
-    gl.setAttribute("role", "list");
+    var gl = list();
     ALERT_SWITCHES.forEach(function (g) {
       var li = h("li");
-      var l = h("label", "mo-check");
-      var c = h("input"); c.type = "checkbox"; c.checked = !(s.alerts && s.alerts[g[0]] === false);
-      c.addEventListener("change", function () {
+      li.appendChild(check(g[1], !(s.alerts && s.alerts[g[0]] === false), "alert:" + g[0], function (c) {
         var body = { alerts: {} }; body.alerts[g[0]] = c.checked;
         saveSettings(body, c.checked ? "You will be emailed about that." : "No email about that.");
-      });
-      l.appendChild(c); l.appendChild(h("span", null, g[1]));
-      li.appendChild(l);
+      }));
       gl.appendChild(li);
     });
     al.appendChild(gl);
+    return al;
+  }
 
-    // the phone (ntfy)
-    al.appendChild(h("h3", "mo-sub", "Phone alerts"));
+  function phoneBox(st, s, now) {
+    var al = box("Phone alerts", "ntfy");
     var ps = pushStatus(st);
     var pline = h("div", "mo-email " + ps.tone);
     pline.appendChild(h("b", null, ps.text));
     if (ps.hint) pline.appendChild(h("span", "dim", ps.hint));
     al.appendChild(pline);
-    if (st.lastPush && st.lastPush.ok === false) al.appendChild(h("p", "mo-note", "The last push failed (" + st.lastPush.reason + ") " + agoText(st.lastPush.at, now) + "; it is tried again every 5 minutes."));
+    // how ntfy has actually been doing (the Worker's pushHealth; absent from an older Worker, null before the first push)
+    var phl = pushHealthLine(st.pushHealth, (s.businessHours && s.businessHours.tz) || "Australia/Perth", now);
+    if (phl) {
+      var hl = h("div", "mo-email " + phl.tone);
+      hl.setAttribute("role", phl.failing ? "alert" : "status");
+      hl.appendChild(h("b", null, phl.text));
+      if (phl.hint) hl.appendChild(h("span", "dim", phl.hint));
+      al.appendChild(hl);
+    }
+    if (st.lastPush && st.lastPush.ok === false && !(phl && phl.failing)) al.appendChild(h("p", "mo-note", "The last push failed (" + st.lastPush.reason + ") " + agoText(st.lastPush.at, now) + "; it is tried again every 5 minutes."));
     var pset = (s && s.push) || { enabled: true, when: "fallback", types: {} };
-    var pl = h("ul", "mo-list");
-    pl.setAttribute("role", "list");
-    var onLi = h("li"), onL = h("label", "mo-check"), onC = h("input");
-    onC.type = "checkbox"; onC.checked = pset.enabled !== false;
-    onC.addEventListener("change", function () { saveSettings({ push: { enabled: onC.checked } }, onC.checked ? "Phone alerts are on." : "Phone alerts are off."); });
-    onL.appendChild(onC); onL.appendChild(h("span", null, "Send alerts to my phone"));
-    onLi.appendChild(onL); pl.appendChild(onLi);
-    var whenLi = h("li"), whenL = h("label", "mo-check"), whenC = h("input");
-    whenC.type = "checkbox"; whenC.checked = pset.when === "always";
-    whenC.addEventListener("change", function () { saveSettings({ push: { when: whenC.checked ? "always" : "fallback" } }, whenC.checked ? "Every alert will also go to your phone." : "Your phone is used only when email cannot carry an outage."); });
-    whenL.appendChild(whenC); whenL.appendChild(h("span", null, "Also push alerts that email carries (otherwise only outages email cannot carry, such as at night)"));
-    whenLi.appendChild(whenL); pl.appendChild(whenLi);
+    var pl = list();
+    var onLi = h("li");
+    onLi.appendChild(check("Send alerts to my phone", pset.enabled !== false, "push-on", function (c) { saveSettings({ push: { enabled: c.checked } }, c.checked ? "Phone alerts are on." : "Phone alerts are off."); }));
+    pl.appendChild(onLi);
+    var whenLi = h("li");
+    whenLi.appendChild(check("Also push alerts that email carries (otherwise only outages email cannot carry, such as at night)", pset.when === "always", "push-always", function (c) {
+      saveSettings({ push: { when: c.checked ? "always" : "fallback" } }, c.checked ? "Every alert will also go to your phone." : "Your phone is used only when email cannot carry an outage.");
+    }));
+    pl.appendChild(whenLi);
     PUSH_TYPES.forEach(function (g) {
-      var li = h("li"), l = h("label", "mo-check"), c = h("input");
-      c.type = "checkbox"; c.checked = !!(pset.types && pset.types[g[0]]);
-      c.addEventListener("change", function () { var body = { push: { types: {} } }; body.push.types[g[0]] = c.checked; saveSettings(body, c.checked ? "That will be pushed." : "That will not be pushed."); });
-      l.appendChild(c); l.appendChild(h("span", null, g[1]));
-      li.appendChild(l); pl.appendChild(li);
+      var li = h("li");
+      li.appendChild(check(g[1], !!(pset.types && pset.types[g[0]]), "push:" + g[0], function (c) {
+        var body = { push: { types: {} } }; body.push.types[g[0]] = c.checked;
+        saveSettings(body, c.checked ? "That will be pushed." : "That will not be pushed.");
+      }));
+      pl.appendChild(li);
     });
     al.appendChild(pl);
     var prow = h("div", "mo-row");
-    var tp = h("button", "btn btn-sm", "Send test push");
-    tp.type = "button"; tp.id = "mon-test-push";
+    var tp = button("Send test push", "btn btn-sm", "test-push");
+    tp.id = "mon-test-push";
     tp.addEventListener("click", sendTestPush);
     prow.appendChild(tp);
     al.appendChild(prow);
-
-    // per-monitor switches
-    al.appendChild(h("h3", "mo-sub", "Email me when this goes down"));
-    var ml = h("ul", "mo-list");
-    ml.setAttribute("role", "list");
-    st.monitors.forEach(function (m) {
-      var li = h("li");
-      var l = h("label", "mo-check");
-      var c = h("input"); c.type = "checkbox"; c.checked = !!m.alert;
-      c.addEventListener("change", function () {
-        var body = { monitors: {} }; body.monitors[m.id] = { alert: c.checked };
-        saveSettings(body, c.checked ? "You will be emailed if " + m.name + " goes down." : "No email for " + m.name + ".");
-      });
-      l.appendChild(c); l.appendChild(h("span", null, m.name));
-      li.appendChild(l);
-      ml.appendChild(li);
-    });
-    al.appendChild(ml);
-
-    // test and history
-    var tools = h("div", "mo-row");
-    var test = h("button", "btn btn-sm", "Send test email");
-    test.type = "button"; test.id = "mon-test";
-    test.addEventListener("click", sendTest);
-    tools.appendChild(test);
-    var td = h("button", "btn btn-sm", "Send this week's digest now");
-    td.type = "button"; td.id = "mon-test-digest";
-    td.addEventListener("click", sendTestDigest);
-    tools.appendChild(td);
-    al.appendChild(tools);
-
-    al.appendChild(h("h3", "mo-sub", "What was sent"));
-    var rows = historyRows(st.history, tz);
-    if (!rows.length) al.appendChild(h("p", "dim", "Nothing yet."));
-    else {
-      var hl = h("ul", "mo-list");
-      hl.setAttribute("role", "list");
-      rows.forEach(function (r) {
-        var li = h("li");
-        li.appendChild(h("span", "dim", r.when));
-        li.appendChild(h("span", "chip" + (r.ok ? " ok" : " alert"), r.kind));
-        li.appendChild(h("b", null, r.subject));
-        li.appendChild(h("span", "dim", r.result));
-        hl.appendChild(li);
-      });
-      al.appendChild(hl);
-    }
     return al;
+  }
+
+  // The keys for each server's reporter, and the box that shows a new key once.
+  function keysBox(st, now) {
+    var sec = box("Server reporters", "keys, once a minute");
+    sec.appendChild(h("p", "dim", "Each server can report on itself and on the others. That tells a tunnel problem from a server that is down, notices a full disk or a stopped service, and spots the whole site losing power or internet. A key is shown once, only a fingerprint is kept, and you can revoke it any time."));
+    var docs = h("a", "sub", "How to install the reporter on a server");
+    docs.href = REPORTER_DOCS; docs.target = "_blank"; docs.rel = "noopener noreferrer";
+    sec.appendChild(docs);
+
+    if (model.newKey) {
+      var nk = h("div", "mo-newkey");
+      nk.appendChild(h("b", null, "Copy this key now. It will not be shown again."));
+      nk.appendChild(h("span", "dim", "Paste both lines into /etc/barnyard-reporter/env on " + model.newKey.name + ", then run the installer (the install steps are linked above)."));
+      var kb = h("textarea", "mo-input mo-keybox");
+      kb.readOnly = true; kb.rows = 2; kb.value = envLines(model.newKey.server, model.newKey.key);
+      kb.setAttribute("aria-label", "The new key, as two lines for the env file");
+      kb.addEventListener("focus", function () { kb.select(); });
+      nk.appendChild(kb);
+      var row = h("div", "mo-row");
+      var cp = button("Copy", "btn btn-sm", "key-copy");
+      cp.addEventListener("click", function () { copyText(kb.value, kb, function (ok) { flash(ok ? "Copied." : "Could not copy: select the text and copy it yourself.", ok ? "ok" : "alert"); }); });
+      var done = button("I have saved it", "btn btn-sm btn-quiet", "key-done");
+      done.addEventListener("click", function () { model.newKey = null; render(); });
+      row.appendChild(cp); row.appendChild(done);
+      nk.appendChild(row);
+      sec.appendChild(nk);
+    }
+
+    var ul = list("mo-keycards");
+    reporterCards(st.reporters, now).forEach(function (c) {
+      var li = h("li", "mo-keycard" + (c.tone ? " " + c.tone : ""));
+      var top = h("div", "mo-rep-top");
+      top.appendChild(h("b", null, c.name));
+      top.appendChild(h("span", "chip" + (c.tone ? " " + c.tone : ""), c.label));
+      li.appendChild(top);
+      li.appendChild(h("p", "dim", c.line));
+      if (c.keys.length) {
+        var kl = h("ul", "mo-keys");
+        c.keys.forEach(function (k) {
+          var kli = h("li");
+          kli.appendChild(h("span", "dim", "Key …" + k.tail + " " + k.text));
+          if (k.canRevoke) {
+            var rv = button("Revoke", "btn btn-sm btn-quiet", "revoke:" + k.id);
+            rv.setAttribute("aria-label", "Revoke key ending " + k.tail + " for " + c.name);
+            rv.addEventListener("click", function () { revokeKey(k.id, c.name); });
+            kli.appendChild(rv);
+          }
+          kl.appendChild(kli);
+        });
+        li.appendChild(kl);
+      }
+      var mk = button("Make a key", "btn btn-sm", "mk:" + c.id);
+      mk.disabled = !c.canMake || model.busy;
+      mk.setAttribute("aria-label", "Make a key for " + c.name);
+      mk.addEventListener("click", function () { makeKey(c.id, c.name); });
+      li.appendChild(mk);
+      ul.appendChild(li);
+    });
+    sec.appendChild(ul);
+    return sec;
+  }
+
+  function systemBox(st, tz, now) {
+    var sec = box("About monitoring", "status of the system itself");
+    var ul = list();
+    var tick = st.lastTick && st.lastTick.at ? st.lastTick.at : 0;
+    [
+      ["Checks run", "every 5 minutes from the Worker" + (tick ? "; the last one finished " + agoText(tick, now) : "")],
+      ["Email waiting", String(st.pending || 0) + (st.pending ? (st.inHours ? " (sent on the next check)" : " (held until working hours start)") : "")],
+      ["Working hours now", st.inHours ? "inside " + hoursText(st.settings.businessHours) : "outside " + hoursText(st.settings.businessHours)],
+      ["Kill switch", "set the Worker variable MONITOR_ENABLED to 0 in Cloudflare to switch monitoring off; remove it to switch it back on"],
+      ["Page reads", "the Dashboard asks for the status once a minute while it is open and visible; Settings does not poll"]
+    ].forEach(function (r) {
+      var li = h("li");
+      li.appendChild(h("b", null, r[0]));
+      li.appendChild(h("span", "dim", r[1]));
+      ul.appendChild(li);
+    });
+    sec.appendChild(ul);
+    return sec;
   }
 
   // ---- 4. actions -----------------------------------------------------------
 
+  var BUSY_IDS = ["mon-check", "mon-test", "mon-test-push", "mon-test-digest", "mon-refresh"];
+
   function setBusy(on) {
     model.busy = on;
-    ["mon-check", "mon-test", "mon-test-push", "mon-test-digest", "mon-refresh"].forEach(function (id) { var b = $(id); if (b) b.disabled = on; });
+    BUSY_IDS.forEach(function (id) { var b = $(id); if (b) b.disabled = on; });
+    if (!on) tickCheck();
   }
 
   function send(method, path, body) {
@@ -919,13 +1461,18 @@
     return getJson(MON + path, init);
   }
 
+  // Used by every action that answers with a fresh status: keeps the page's copy and its clock in step.
+  function adopt(body) { model.mon = body; model.fetchedAt = Date.now(); model.stale = false; rememberServices(body && body.reporters); }
+
+  function busyAnswer(r) { return r.status === 429 || r.status === 0; }
+
   function saveSettings(body, okText) {
     if (model.busy) return;
     setBusy(true);
     send("PUT", "/settings", body).then(function (r) {
       setBusy(false);
-      if (r.status === 200 && r.body && r.body.ok) { model.mon = r.body; render(); flash(okText, "ok"); }
-      else flash(mailErrorText(r.body && r.body.error ? r.body : { error: r.status ? "failed" : "offline" }), "alert");
+      if (r.status === 200 && r.body && r.body.ok) { adopt(r.body); render(); flash(okText, "ok"); }
+      else flash(mailErrorText(r.body && r.body.error ? r.body : { error: busyAnswer(r) ? "rate_limited" : r.status ? "failed" : "offline" }), "alert");
     });
   }
 
@@ -937,7 +1484,7 @@
       if (r.status === 200 && r.body && r.body.ok && r.body.key) {
         var key = r.body.key;
         delete r.body.key;                       // the status copy kept in the page never holds the key
-        model.mon = r.body;
+        adopt(r.body);
         model.newKey = { server: server, name: name, key: key };
         render();
         flash("Key made for " + name + ". Copy it now: it is not shown again.", "ok");
@@ -950,19 +1497,21 @@
     setBusy(true);
     send("POST", "/reporters/revoke", { id: id }).then(function (r) {
       setBusy(false);
-      if (r.status === 200 && r.body && r.body.ok) { model.mon = r.body; render(); flash("Key revoked for " + name + ". A reporter using it stops being accepted at once.", "ok"); }
+      if (r.status === 200 && r.body && r.body.ok) { adopt(r.body); render(); flash("Key revoked for " + name + ". A reporter using it stops being accepted at once.", "ok"); }
       else flash(keyErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
     });
   }
 
+  // The three test buttons do not re-read the status: the answer to them is only "sent", and the history on the Dashboard is
+  // read the next time that tab opens (model.stale), which saves a request.
   function sendTest() {
     if (model.busy) return;
     setBusy(true);
     send("POST", "/test-email").then(function (r) {
       setBusy(false);
-      if (r.status === 200 && r.body && r.body.ok) { flash("Test email sent to " + r.body.sent + (r.body.sent === 1 ? " address." : " addresses.") + " It should arrive within a minute.", "ok"); load(); return; }
-      flash(mailErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
-      load();
+      model.stale = true;
+      if (r.status === 200 && r.body && r.body.ok) flash("Test email sent to " + r.body.sent + (r.body.sent === 1 ? " address." : " addresses.") + " It should arrive within a minute.", "ok");
+      else flash(mailErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
     });
   }
 
@@ -971,9 +1520,9 @@
     setBusy(true);
     send("POST", "/test-push").then(function (r) {
       setBusy(false);
-      if (r.status === 200 && r.body && r.body.ok) { flash("Test push sent. It should reach your phone within a few seconds.", "ok"); load(); return; }
-      flash(pushErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
-      load();
+      model.stale = true;
+      if (r.status === 200 && r.body && r.body.ok) flash("Test push sent. It should reach your phone within a few seconds.", "ok");
+      else flash(pushErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
     });
   }
 
@@ -982,9 +1531,9 @@
     setBusy(true);
     send("POST", "/test-digest").then(function (r) {
       setBusy(false);
-      if (r.status === 200 && r.body && r.body.ok) { flash("This week's digest was sent to " + r.body.sent + (r.body.sent === 1 ? " address." : " addresses.") + " It should arrive within a minute.", "ok"); load(); return; }
-      flash(mailErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
-      load();
+      model.stale = true;
+      if (r.status === 200 && r.body && r.body.ok) flash("This week’s digest was sent to " + r.body.sent + (r.body.sent === 1 ? " address." : " addresses.") + " It should arrive within a minute.", "ok");
+      else flash(mailErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
     });
   }
 
@@ -996,31 +1545,95 @@
     if (!on) body.undo = true;
     send("POST", "/acknowledge", body).then(function (r) {
       setBusy(false);
-      if (r.status === 200 && r.body && r.body.ok) { model.mon = r.body; render(); flash(on ? "Acknowledged. No more reminders about " + name + " until it is back up." : "Reminders about " + name + " are back on.", "ok"); }
-      else if (r.body && (r.body.error === "not_down")) { flash(name + " is not down any more.", ""); load(); }
-      else flash(mailErrorText(r.body && r.body.error ? r.body : { error: r.status ? "failed" : "offline" }), "alert");
+      if (r.status === 200 && r.body && r.body.ok) { adopt(r.body); render(); flash(on ? "Acknowledged. No more reminders about " + name + " until it is back up." : "Reminders about " + name + " are back on.", "ok"); }
+      else if (r.body && (r.body.error === "not_down")) { flash(name + " is not down any more.", ""); fetchStatus({ force: true }); }
+      else flash(mailErrorText(r.body && r.body.error ? r.body : { error: busyAnswer(r) ? "rate_limited" : r.status ? "failed" : "offline" }), "alert");
     });
   }
 
+  // "Check now": the Worker allows one every 30 seconds, so the button counts that down instead of failing when pressed early.
+  function tickCheck() {
+    clearTimeout(checkTimer);
+    var b = $("mon-check");
+    if (!b) return;
+    var sec = checkWait(model.checkUntil, Date.now());
+    b.textContent = checkLabel(sec);
+    b.disabled = sec > 0 || model.busy;
+    if (sec > 0) checkTimer = setTimeout(tickCheck, 1000);
+  }
+
   function checkNow() {
-    if (model.busy) return;
+    if (model.busy || checkWait(model.checkUntil, Date.now()) > 0) return;
+    model.checkUntil = Date.now() + CHECK_GAP_MS;
     setBusy(true);
+    tickCheck();
     send("POST", "/check").then(function (r) {
       setBusy(false);
-      if (r.status === 200 && r.body && r.body.ok) { model.mon = r.body; render(); flash("Checked just now.", "ok"); }
+      if (r.status === 200 && r.body && r.body.ok) { adopt(r.body); render(); flash("Checked just now.", "ok"); }
+      else if (r.body && r.body.error === "rate_limited") { model.checkUntil = Date.now() + (r.body.retryMs || CHECK_GAP_MS); tickCheck(); flash("Too soon: it can run again in " + checkWait(model.checkUntil, Date.now()) + " seconds.", ""); }
+      else if (busyAnswer(r)) { flash("The Worker is busy. Try again in a minute.", ""); }
       else flash(mailErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
     });
   }
 
+  // The Refresh button: one read, no more than once every few seconds, and the optional reads too.
+  function refresh() {
+    var now = Date.now();
+    if (model.inflight || now - model.lastRefreshAt < MIN_REFRESH_MS) return;
+    model.lastRefreshAt = now;
+    model.backoffUntil = 0;
+    fetchStatus({ force: true });
+  }
+
+  // ---- tabs -----------------------------------------------------------------
+
+  function setTab(tab) {
+    if (TABS.indexOf(tab) === -1) tab = "dashboard";
+    var changed = model.tab !== tab;
+    model.tab = tab;
+    render();
+    if (!changed && model.state !== "ok") return;
+    clearTimeout(pollTimer);
+    if (model.state !== "ok") return;
+    var now = Date.now();
+    if (tab === "settings") { if (settingsNeedsRead(model.fetchedAt, now)) fetchStatus({ force: true }); return; }
+    if (model.stale || pollDue({ hidden: document.hidden, tab: tab, state: model.state, busy: model.busy, inflight: model.inflight, backoffUntil: model.backoffUntil, fetchedAt: model.fetchedAt, now: now })) fetchStatus({ force: model.stale });
+    else { fetchExtras(false); schedule(); }
+  }
+
+  function bindTabs() {
+    var list = $("mon-tabs");
+    if (!list) return;
+    TABS.forEach(function (t) {
+      var b = $("tab-" + t);
+      if (!b) return;
+      b.addEventListener("click", function () { if (location.hash !== hashForTab(t)) location.hash = hashForTab(t); else setTab(t); });
+    });
+    list.addEventListener("keydown", function (ev) {
+      var to = nextTab(model.tab, ev.key);
+      if (!to) return;
+      ev.preventDefault();
+      var b = $("tab-" + to);
+      if (b) b.focus();
+      location.hash = hashForTab(to);
+    });
+    window.addEventListener("hashchange", function () { setTab(tabFromHash(location.hash)); });
+  }
+
   function boot() {
-    var rf = $("mon-refresh"), ck = $("mon-check");
-    if (rf) rf.addEventListener("click", function () { load(); });
-    if (ck) ck.addEventListener("click", checkNow);
+    var rf = $("mon-refresh");
+    if (rf) rf.addEventListener("click", refresh);
+    model.tab = tabFromHash(location.hash);
+    bindTabs();
+    updateTabs();
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) { clearTimeout(pollTimer); return; }
+      if (pollDue(snapshot())) fetchStatus(); else schedule();
+    });
     var authCheck = typeof window.barnyardAuthState === "function" ? window.barnyardAuthState() : Promise.resolve({ authenticated: false });
     authCheck.then(function (auth) {
       if (!auth.authenticated) { model.state = "guest"; render(); return; }
-      load();
-      setInterval(function () { if (!document.hidden && model.state === "ok" && !model.busy) load(); }, POLL_MS);
+      fetchStatus({ force: true });
     });
   }
 

@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex">
 <title>Monitoring &middot; Barnyard</title>
 <link rel="stylesheet" href="shell.css?v=870e98a5">
-<link rel="stylesheet" href="monitoring.css?v=80621578">
+<link rel="stylesheet" href="monitoring.css?v=629a9b1e">
 <script src="themes.js?v=e151fb94"></script>
 </head>
 <body data-shell="monitor" data-wide>
@@ -19,18 +19,22 @@
       <h1>Monitoring</h1>
     </div>
     <div class="mo-tools">
-      <button type="button" class="btn btn-sm" id="mon-check">Check now</button>
       <button type="button" class="btn btn-sm btn-quiet" id="mon-refresh">Refresh</button>
       <span class="dim" id="mon-stamp"></span>
     </div>
   </div>
-  <div id="mon-root" aria-live="polite">
+  <div id="mon-flash" class="mo-flash" role="status" hidden></div>
+  <div class="mo-tabs" id="mon-tabs" role="tablist" aria-label="Monitoring sections" hidden>
+    <button type="button" class="mo-tab on" id="tab-dashboard" role="tab" aria-selected="true" aria-controls="mon-panel">Dashboard</button>
+    <button type="button" class="mo-tab" id="tab-settings" role="tab" aria-selected="false" aria-controls="mon-panel" tabindex="-1">Settings</button>
+  </div>
+  <div id="mon-root">
     <p class="dim">Loading&hellip;</p>
   </div>
 </main>
 
 <script src="shell.js?v=ea29c0b8"></script>
 <script src="auth-gate.js?v=a1b7693a"></script>
-<script src="monitoring.js?v=53e72014"></script>
+<script src="monitoring.js?v=8253e7ed"></script>
 </body>
 </html>
