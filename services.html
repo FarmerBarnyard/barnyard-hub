@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Services &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=870e98a5">
+<link rel="stylesheet" href="services.css?v=1b1e0666">
+<script src="themes.js?v=e151fb94"></script>
+</head>
+<body data-shell="services" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Services</h1>
+    </div>
+    <div class="svc-tools">
+      <button type="button" class="btn btn-sm btn-quiet" id="svc-refresh">Refresh</button>
+      <span class="dim" id="svc-stamp"></span>
+    </div>
+  </div>
+  <div id="svc-flash" class="svc-flash" hidden role="status"></div>
+  <div id="svc-root" aria-live="polite">
+    <p class="dim">Loading&hellip;</p>
+  </div>
+</main>
+
+<script src="shell.js?v=ea29c0b8"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="services.js?v=d0d5888f"></script>
+</body>
+</html>

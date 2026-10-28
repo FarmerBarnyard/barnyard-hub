@@ -206,8 +206,8 @@ test("every menu item names a permission the Worker can take away, and the Users
   items.forEach(function (it) { assert.ok(/perm: "[a-z]+\.view"/.test(it), "no permission on: " + it); });
   var users = items.filter(function (it) { return /id: "users"/.test(it); })[0];
   assert.ok(users && /ownerOnly: true/.test(users) && /perm: "users\.view"/.test(users));
-  // the same ids the Worker's catalogue uses (access-catalogue.js): overview, ops, vuln, calendar, monitoring, incidents, reports, users, chat, study, notebook, kb, campaign, stocks
-  var known = ["overview", "ops", "vuln", "calendar", "monitoring", "incidents", "reports", "users", "chat", "study", "notebook", "kb", "campaign", "stocks"];
+  // the same ids the Worker's catalogue uses (access-catalogue.js): overview, ops, vuln, calendar, monitoring, incidents, reports, services, users, chat, study, notebook, kb, campaign, stocks
+  var known = ["overview", "ops", "vuln", "calendar", "monitoring", "incidents", "reports", "services", "users", "chat", "study", "notebook", "kb", "campaign", "stocks"];
   items.forEach(function (it) { var m = /perm: "([a-z]+)\.view"/.exec(it); assert.ok(known.indexOf(m[1]) !== -1, "unknown area " + m[1]); });
 });
 

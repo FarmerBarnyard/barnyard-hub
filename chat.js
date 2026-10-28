@@ -352,8 +352,6 @@
     var MD = window.BarnyardMarkdown;
     var isG = helpers.isGuest(me);
     var state = { me: me, convs: [], conv: null, messages: [], busy: false, text: "", stream: null, streamStatus: "connecting", notice: "", confirm: null, setup: false, keys: [], kit: null, kitLoaded: false, newToken: "", makingKey: false };
-    var intro = document.getElementById("chat-intro");
-    if (intro && isG) intro.textContent = "Your own Claude, running on your own computer with your own Claude account. It can read one folder you choose and cannot change anything. Nothing about your Claude account is sent to Barnyard.";
     var cache = {};              // seq -> {sig, node}: a reply is rendered again only when it changed
     var renderQueued = false;
     var stick = true;            // keep the newest text in view unless the person scrolled up
