@@ -18,6 +18,10 @@
 .us-note { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; display: grid; gap: 6px; }
 .us-note p { margin: 0; }
 .us-warn { margin: 0; padding: 10px 14px; border-radius: 10px; background: var(--attn-soft); font-size: 14px; }
+.us-entra { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; display: grid; gap: 6px; justify-items: start; }
+.us-entra p { margin: 0; }
+.us-entra.warn { background: var(--attn-soft); border-color: transparent; }
+.us-entra .btn:disabled { opacity: .6; cursor: default; }
 
 .us-bar { display: flex; gap: 10px; flex-wrap: wrap; }
 .us-bar input { flex: 1 1 220px; }

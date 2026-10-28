@@ -1,9 +1,11 @@
-// The Users page (users.html): everyone who has signed in to the site, what each of them can see, and the owner's
-// controls to hide or limit areas, set an access-until date, suspend or remove them. The owner's page.
+// The Users page (users.html): everyone with access to the site (people who have signed in, and people Entra lists in
+// the access groups who have not yet), what each of them can see, and the owner's controls to hide or limit areas, set an
+// access-until date, suspend or remove them. The owner's page.
 //
 // Reads and writes /users/* on the Worker (ClaudeRepo's cloudflare-worker/src/access-routes.js, owner only):
 //   GET  /users/catalogue   the areas, the presets and what each preset means
-//   GET  /users/list        the people, their status and what each can see
+//   GET  /users/list        the people, their status and what each can see, plus `directory`: whether the Entra read is set up and what it last did
+//   POST /users/refresh     read the Entra groups' members now (needs a recent sign-in; once a minute)
 //   GET  /users/user?key=   one person, with the latest changes made to them
 //   PUT  /users/user        { key, preset, caps, until, note }  (needs a recent sign-in)
 //   POST /users/suspend | /users/restore | /users/remove   { key }  (need a recent sign-in)
@@ -23,7 +25,7 @@
 
   var RANK = { none: 0, view: 1, edit: 2 };
   var GROUP_NAME = { "barnyard-hub-sso": "Hub", "study-hub-sso": "Study", "campaign-hub-sso": "Campaign" };
-  var STATUS_TEXT = { owner: "Owner", active: "Active", suspended: "Suspended", expired: "Access ended" };
+  var STATUS_TEXT = { owner: "Owner", active: "Active", suspended: "Suspended", expired: "Access ended", left: "Left the Entra groups" };
 
   function groupLabels(groups) {
     var out = [];
@@ -64,12 +66,90 @@
     return typeof until === "string" && /^\d{4}-\d{2}-\d{2}$/.test(until) && now > Date.parse(until + "T23:59:59.999Z");
   }
 
-  // The state a person is in right now: owner | suspended | expired | active.
+  // Whether the Entra read lists this person, and whether they have yet to sign in / have left every access group.
+  function neverSignedIn(u) { return !!(u && u.directory && (u.neverSignedIn === true || !u.signIns)); }
+  function leftGroups(u) { return !!(u && u.directory && u.directory.state === "removed"); }
+
+  // The state a person is in right now: owner | suspended | expired | left | active.
   function statusOf(user, now) {
     if (user.isOwner) return "owner";
     if (user.status === "suspended") return "suspended";
     if (isEnded(user.until, now)) return "expired";
+    if (leftGroups(user)) return "left";
     return "active";
+  }
+
+  // Small facts beside the status: [{ text, tone }] for never signed in, guest, disabled account.
+  function rowBadges(u) {
+    var out = [];
+    if (neverSignedIn(u)) out.push({ text: "Not signed in yet", tone: "plain" });
+    if (u && u.directory && u.directory.guest) out.push({ text: "Guest", tone: "plain" });
+    if (u && u.directory && u.directory.enabled === false) out.push({ text: "Account disabled", tone: "alert" });
+    return out;
+  }
+
+  function lastSignInText(u, now) {
+    if (neverSignedIn(u)) return "Has not signed in yet";
+    return "Last sign-in " + agoText(u.lastSeen, now);
+  }
+
+  // "Left every Entra group 3 days ago; comes off this list on 12 Dec 2026."
+  function leftText(u, now) {
+    var d = u && u.directory;
+    if (!d || d.state !== "removed") return "";
+    var drops = d.dropsAt ? new Date(d.dropsAt).toISOString().slice(0, 10) : "";
+    return "No longer in any Entra access group (" + agoText(d.removedAt, now) + ")" + (drops ? "; comes off this list on " + drops + ", and what you changed for them stays in the change log" : "") + ".";
+  }
+
+  var REASON_TEXT = {
+    not_configured: "the Worker does not have the three GRAPH_READ settings yet",
+    no_groups: "the Worker's group list (ENTRA_GROUP_MAP) is missing or unreadable",
+    auth: "Microsoft refused the read-only app's sign-in. Check that GRAPH_READ_CLIENT_SECRET has not expired or been mistyped, and that the tenant and client ids are right",
+    forbidden: "the app is not allowed to read group members. In Entra, open the app's API permissions and check GroupMember.Read.All is an Application permission with admin consent granted",
+    not_found: "a group in the Worker's group list was not found in Entra",
+    bad_request: "Microsoft rejected the request",
+    throttled: "Microsoft asked us to slow down; it will work on the next try",
+    unavailable: "Microsoft could not be reached; it will work on the next try",
+    too_large: "a group is larger than the list this page reads in one go",
+    empty: "Microsoft returned nobody at all, which usually means the app lost its permission"
+  };
+  function reasonText(reason, detail) {
+    var t = REASON_TEXT[reason] || "an unexpected problem";
+    return t + (detail ? " (Microsoft's code: " + detail + ")" : "") + ".";
+  }
+  var LIMIT_WORDS = { accountEnabled: "whether accounts are enabled", userType: "which accounts are guests", address: "email addresses", name: "names" };
+
+  // What the page says about the Entra read, from /users/list's `directory`: { tone: "" | "warn", lines: [], canRefresh }.
+  function directoryNote(dir, now) {
+    var out = { tone: "", lines: [], canRefresh: false };
+    if (!dir) return out;
+    if (!dir.configured) {
+      out.tone = "warn";
+      out.lines.push("Only people who have signed in are listed. To list everyone in the Entra groups, the Worker needs the read-only Entra app's settings." + (dir.missing && dir.missing.length ? " Missing: " + dir.missing.join(", ") + "." : ""));
+      return out;
+    }
+    out.canRefresh = true;
+    var st = dir.status || {}, last = st.last;
+    if (!last) { out.lines.push("The Entra groups have not been read yet. Use the button to read them now; it also runs by itself each day."); return out; }
+    if (!last.ok) {
+      out.tone = "warn";
+      out.lines.push("The last read of the Entra groups (" + agoText(last.at, now) + ") failed: " + reasonText(last.reason, last.detail));
+      if (st.goodAt) out.lines.push("The list below is from the last good read, " + agoText(st.goodAt, now) + ".");
+      return out;
+    }
+    out.lines.push("Entra groups read " + agoText(last.at, now) + ": " + (st.members || 0) + (st.members === 1 ? " person" : " people") + " in them" + (st.removed ? ", " + st.removed + " recently left" : "") + ".");
+    var bad = (last.groups || []).filter(function (g) { return !g.ok; });
+    if (last.partial && bad.length) {
+      out.tone = "warn";
+      out.lines.push("Some groups could not be read (" + bad.map(function (g) { return g.name + (g.detail ? ": " + g.detail : g.reason ? ": " + g.reason : ""); }).join("; ") + "), so nobody is marked as having left until every group reads.");
+    }
+    if (last.held) {
+      out.tone = "warn";
+      out.lines.push(last.held + " people dropped out of the Entra list at once, so none were marked as having left. If that is wrong, check the read-only app's permission, then read again.");
+    }
+    var lim = (last.limits || []).map(function (l) { return LIMIT_WORDS[l]; }).filter(Boolean);
+    if (lim.length) out.lines.push("Microsoft did not return " + lim.join(", ") + " for this app, so those read as unknown. People who sign in are matched to the list by their directory id.");
+    return out;
   }
 
   // What they would see with these caps: { status, tabs: [{id,label,level}], capabilities: [...], tiles: [...], hidden: n }.
@@ -95,6 +175,8 @@
       var s = statusOf(u, now);
       if (status === "suspended") return s === "suspended";
       if (status === "ended") return s === "expired";
+      if (status === "never") return neverSignedIn(u);
+      if (status === "left") return s === "left";
       if (status === "restricted") return s === "active" && Object.keys(u.caps || {}).length > 0;
       if (status === "active") return s === "active" || s === "owner";
       return true;
@@ -113,12 +195,17 @@
     if (err === "until_invalid") return "That date is not valid.";
     if (err === "area_owner_only") return "That area is always owner only.";
     if (err === "access_not_configured") return "The access store is not set up on the Worker yet.";
-    if (err === "rate_limited") return "That was too many requests at once. Wait a moment.";
+    if (err === "rate_limited") return r && r.retryMs > 0 ? "Entra was read a moment ago. Wait about " + Math.max(1, Math.ceil(r.retryMs / 1000)) + " seconds, then try again." : "That was too many requests at once. Wait a moment.";
     return "That did not work. Try again in a moment.";
   }
 
   function auditText(entry) {
     var a = entry && entry.action;
+    if (a === "listed") return "Found in the Entra groups; has not signed in yet";
+    if (a === "directory_linked") return "Matched to the Entra list" + (entry.detail ? " (" + entry.detail + ")" : "");
+    if (a === "left_groups") return "No longer in any Entra access group";
+    if (a === "rejoined") return "Back in the Entra groups";
+    if (a === "dropped_off") return "Taken off the list after 30 days out of the Entra groups";
     if (a === "first_seen") return "First seen" + (entry.detail ? " (" + entry.detail + ")" : "");
     if (a === "permissions") return "Permissions changed: " + (entry.detail || "");
     if (a === "suspend") return "Suspended";
@@ -126,7 +213,8 @@
     return String(a || "") + (entry && entry.detail ? ": " + entry.detail : "");
   }
 
-  var helpers = { groupLabels: groupLabels, agoText: agoText, baseLevel: baseLevel, effectiveLevel: effectiveLevel, isEnded: isEnded, statusOf: statusOf, previewModel: previewModel, filterUsers: filterUsers, errorText: errorText, auditText: auditText, STATUS_TEXT: STATUS_TEXT };
+  var helpers = { groupLabels: groupLabels, agoText: agoText, baseLevel: baseLevel, effectiveLevel: effectiveLevel, isEnded: isEnded, statusOf: statusOf, previewModel: previewModel, filterUsers: filterUsers, errorText: errorText, auditText: auditText, STATUS_TEXT: STATUS_TEXT,
+    neverSignedIn: neverSignedIn, leftGroups: leftGroups, rowBadges: rowBadges, lastSignInText: lastSignInText, leftText: leftText, reasonText: reasonText, directoryNote: directoryNote };
 
   if (typeof document === "undefined") {
     if (typeof module !== "undefined" && module.exports) module.exports = helpers;
@@ -220,15 +308,28 @@
     }
     var note = h("div", "us-note");
     note.appendChild(h("p", null, "Entra's groups are the real way in and out. Suspending someone here stops the site working for them at once, but they should also be removed from the Entra group. Restrictions can only lower what their groups already allow."));
-    note.appendChild(h("p", "dim", "People added in Entra who have not signed in yet will not appear until they do. Each person's name, email, groups and sign-in times are stored here (never a password, token, IP address or browser details), and Remove forgets them."));
+    note.appendChild(h("p", "dim", "Each person's name, email, groups and sign-in times are stored here (never a password, token, IP address or browser details), and Remove forgets them."));
     root.appendChild(note);
+
+    // what the Entra read has done, why not, and the button to run it now
+    var dn = directoryNote(model.list.directory, now);
+    if (dn.lines.length) {
+      var box = h("div", "us-entra" + (dn.tone === "warn" ? " warn" : "")); box.id = "us-entra-note";
+      dn.lines.forEach(function (line) { box.appendChild(h("p", null, line)); });
+      if (dn.canRefresh) {
+        var eb = h("button", "btn btn-sm", model.reading ? "Reading Entra…" : "Read the Entra groups now"); eb.type = "button"; eb.id = "us-entra"; eb.disabled = !!model.reading;
+        eb.addEventListener("click", readEntra);
+        box.appendChild(eb);
+      }
+      root.appendChild(box);
+    }
 
     // filters
     var bar = h("div", "us-bar");
     var q = h("input", "mo-input"); q.type = "search"; q.id = "us-q"; q.placeholder = "Search name or email"; q.value = model.query; q.setAttribute("aria-label", "Search people");
     q.addEventListener("input", function () { model.query = q.value; renderList(); });
     var sel = h("select", "mo-input"); sel.id = "us-status"; sel.setAttribute("aria-label", "Filter by status");
-    [["all", "Everyone"], ["active", "Active"], ["restricted", "Restricted"], ["suspended", "Suspended"], ["ended", "Access ended"]].forEach(function (o) { var op = h("option", null, o[1]); op.value = o[0]; if (o[0] === model.status) op.selected = true; sel.appendChild(op); });
+    [["all", "Everyone"], ["active", "Active"], ["never", "Not signed in yet"], ["restricted", "Restricted"], ["suspended", "Suspended"], ["ended", "Access ended"], ["left", "Left the Entra groups"]].forEach(function (o) { var op = h("option", null, o[1]); op.value = o[0]; if (o[0] === model.status) op.selected = true; sel.appendChild(op); });
     sel.addEventListener("change", function () { model.status = sel.value; renderList(); });
     bar.appendChild(q); bar.appendChild(sel);
     root.appendChild(bar);
@@ -243,20 +344,21 @@
     var ul = $("us-list"); if (!ul) return; clear(ul);
     var now = model.list.now || Date.now();
     var rows = filterUsers(model.list.users, model.query, model.status, now);
-    if (!rows.length) { ul.appendChild(h("li", "dim", model.list.users.length ? "Nobody matches." : "Nobody has signed in yet.")); return; }
+    if (!rows.length) { ul.appendChild(h("li", "dim", model.list.users.length ? "Nobody matches." : model.list.directory && model.list.directory.configured ? "Nobody is listed yet. Read the Entra groups above." : "Nobody has signed in yet.")); return; }
     rows.forEach(function (u) {
       var st = statusOf(u, now);
-      var li = h("li", "us-row" + (st === "suspended" || st === "expired" ? " off" : ""));
+      var li = h("li", "us-row" + (st === "suspended" || st === "expired" || st === "left" ? " off" : ""));
       var who = h("div", "us-who");
       who.appendChild(h("b", null, u.name || "(no name)"));
       who.appendChild(h("span", "dim", u.email || ""));
       li.appendChild(who);
       var meta = h("div", "us-meta");
       meta.appendChild(pill(STATUS_TEXT[st], st === "active" ? "ok" : st === "owner" ? "" : "alert"));
+      rowBadges(u).forEach(function (b) { meta.appendChild(pill(b.text, b.tone)); });
       groupLabels(u.groups).forEach(function (g) { meta.appendChild(pill(g, "plain")); });
-      meta.appendChild(h("span", "dim", "Last sign-in " + agoText(u.lastSeen, now)));
+      meta.appendChild(h("span", "dim", lastSignInText(u, now)));
       li.appendChild(meta);
-      li.appendChild(h("p", "us-sum", st === "active" ? "Can see: " + u.summary : u.summary));
+      li.appendChild(h("p", "us-sum", st === "left" ? leftText(u, now) : st === "active" ? "Can see: " + u.summary : u.summary));
       var open = h("button", "btn btn-sm", u.isOwner ? "View" : "Open"); open.type = "button";
       open.setAttribute("aria-label", "Open " + (u.name || u.email));
       open.addEventListener("click", function () { openUser(u.key); });
@@ -284,8 +386,16 @@
     head.appendChild(t);
     var x = h("button", "btn btn-sm btn-quiet", "Close"); x.type = "button"; x.addEventListener("click", closeDrawer); head.appendChild(x);
     d.appendChild(head);
-    d.appendChild(h("p", "dim", (u.email || "") + " · " + (groupLabels(u.groups).join(", ") || "no site groups") + " · first seen " + agoText(u.firstSeen, now) + " · " + u.signIns + (u.signIns === 1 ? " sign-in" : " sign-ins")));
-    var pr = h("p", null); pr.appendChild(pill(STATUS_TEXT[st], st === "active" ? "ok" : st === "owner" ? "" : "alert")); d.appendChild(pr);
+    d.appendChild(h("p", "dim", (u.email || "") + " · " + (groupLabels(u.groups).join(", ") || "no site groups") + " · " + (neverSignedIn(u) ? "has not signed in yet" : "first seen " + agoText(u.firstSeen, now) + " · " + u.signIns + (u.signIns === 1 ? " sign-in" : " sign-ins"))));
+    var pr = h("p", null); pr.appendChild(pill(STATUS_TEXT[st], st === "active" ? "ok" : st === "owner" ? "" : "alert"));
+    rowBadges(u).forEach(function (b) { pr.appendChild(document.createTextNode(" ")); pr.appendChild(pill(b.text, b.tone)); });
+    d.appendChild(pr);
+    if (u.directory && u.directory.state === "member") {
+      var inEntra = groupLabels(u.directory.groups).join(", ") || "no site groups";
+      d.appendChild(h("p", "dim", "In Entra now: " + inEntra + (u.directory.enabled === null ? "" : u.directory.enabled ? " · account enabled" : " · account disabled") + " · read " + agoText(u.directory.listedAt, now)));
+      if (neverSignedIn(u)) d.appendChild(h("p", "dim", "What you set here applies from their first sign-in."));
+    }
+    if (leftGroups(u)) d.appendChild(h("p", "us-warn", leftText(u, now)));
 
     if (u.isOwner) {
       d.appendChild(h("p", "us-note", "This is you. The owner can always see and do everything, and cannot be restricted, suspended or removed from here."));
@@ -403,7 +513,7 @@
     var box = h("div", "us-confirm");
     box.appendChild(h("p", null, model.confirm === "suspend"
       ? "Suspend " + (u.name || u.email) + "? Every page and request stops working for them straight away. You can restore them any time."
-      : "Remove " + (u.name || u.email) + " from the list? Their record and the changes logged for them are deleted. They come back if they sign in again, with no restrictions."));
+      : "Remove " + (u.name || u.email) + " from the list? Their record and the changes logged for them are deleted. They come back if they sign in again" + (u.directory && u.directory.state === "member" ? ", or the next time the Entra groups are read while they are still in one," : "") + " with no restrictions."));
     var yes = h("button", "btn", model.confirm === "suspend" ? "Suspend" : "Remove"); yes.type = "button";
     yes.addEventListener("click", function () { var what = model.confirm; model.confirm = null; if (what === "suspend") setStatus("suspend"); else removeUser(); });
     var no = h("button", "btn btn-quiet", "Cancel"); no.type = "button"; no.addEventListener("click", function () { model.confirm = null; renderConfirm(); });
@@ -424,6 +534,21 @@
     model.busy = true;
     var d = model.draft;
     send("PUT", "/user", { key: model.selected, preset: d.preset || "", caps: d.caps, until: d.until || null, note: d.note || "" }).then(function (r) { afterChange(r, "Saved. It applies within a minute."); });
+  }
+  // Reads the Entra groups' members now (the Worker allows it once a minute and needs a recent sign-in).
+  function readEntra() {
+    if (model.reading) return;
+    model.reading = true; render();
+    send("POST", "/refresh").then(function (r) {
+      model.reading = false;
+      var b = r.body || {};
+      if (r.status !== 200) { flash(errorText(b), "alert"); render(); return; }
+      var res = b.result || {};
+      if (!b.ok) flash("The Entra groups could not be read: " + reasonText(res.reason, res.detail), "alert");
+      else if (res.partial) flash("Read part of the Entra groups. See the note below for what could not be read.", "alert");
+      else flash("Entra read: " + res.counts.members + (res.counts.members === 1 ? " person" : " people") + ", " + res.counts.added + " new, " + res.counts.removed + " marked as left.", "ok");
+      load();
+    });
   }
   function setStatus(what) {
     if (model.busy) return;
