@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Dependency map &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=870e98a5">
+<link rel="stylesheet" href="map.css?v=7297afef">
+<script src="themes.js?v=e151fb94"></script>
+</head>
+<body data-shell="overview" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Dependency map</h1>
+      <p>What depends on what, and what breaks if something goes down. Boxes that are down glow red; anything that needs them is marked affected. <a href="index.html">Back to the overview</a></p>
+    </div>
+    <div class="mp-tools">
+      <button type="button" class="btn btn-sm" id="mp-starting">Starting links&hellip;</button>
+      <button type="button" class="btn btn-sm btn-quiet" id="mp-refresh">Refresh</button>
+      <span class="dim" id="mp-stamp"></span>
+    </div>
+  </div>
+  <div id="mp-root" aria-live="polite">
+    <p class="dim">Loading&hellip;</p>
+  </div>
+</main>
+
+<script src="shell.js?v=b04f5b2b"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="map-logic.js?v=b65ff95c"></script>
+<script src="map.js?v=498c0a02"></script>
+</body>
+</html>
