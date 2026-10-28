@@ -216,10 +216,11 @@ test("the page never keeps the key: it is built into a read-only box, not stored
   assert.ok(/delete r\.body\.key/.test(js), "the status copy kept in the page drops the key");
 });
 
-test("the alert switches are the three the Worker knows, each with words, in the order shown", function () {
-  assert.deepStrictEqual(Mon.ALERT_SWITCHES.map(function (a) { return a[0]; }), ["reporters", "resources", "vulns"]);
+test("the alert switches are the four the Worker knows, each with words, in the order shown", function () {
+  assert.deepStrictEqual(Mon.ALERT_SWITCHES.map(function (a) { return a[0]; }), ["reporters", "resources", "vulns", "calendar"]);
   Mon.ALERT_SWITCHES.forEach(function (a) { assert.ok(a[1].length > 20, a[0]); });
   assert.ok(/critical vulnerability/.test(Mon.ALERT_SWITCHES[2][1]));
+  assert.ok(/Calendar reminder/.test(Mon.ALERT_SWITCHES[3][1]));
 });
 
 console.log("\n" + passed + " tests passed");
