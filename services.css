@@ -1,7 +1,6 @@
 /* Services page (services.html). Colours come from the shell's tokens so every theme works. */
-.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .svc-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
-#svc-root { max-width: 1040px; display: grid; gap: 28px; margin-top: 8px; }
+#svc-root { display: grid; gap: 28px; margin-top: 8px; }
 .dim { color: var(--fg-dim); }
 .small { font-size: 12px; }
 .mono { font-family: var(--font-mono, monospace); font-size: 12px; }

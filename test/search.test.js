@@ -82,7 +82,7 @@ test("the search page is wired: strict CSP, no inline script or style, text only
   var js = fs.readFileSync(path.join(root, "search.js"), "utf8");
   assert.ok(!/\.innerHTML\s*\+?=|insertAdjacentHTML|document\.write/.test(js));
   var idx = fs.readFileSync(path.join(root, "index.html"), "utf8");
-  assert.ok(idx.indexOf('id="ov-capture"') !== -1 && idx.indexOf("script-src 'self'") !== -1, "the capture form is in the page, with no inline script");
+  assert.ok(/src="tile-capture\.js/.test(idx) && idx.indexOf("script-src 'self'") !== -1, "the capture tile is loaded by the page, with no inline script");
   var ov = fs.readFileSync(path.join(root, "overview.js"), "utf8");
   assert.ok(ov.indexOf('["Search everything", "search.html"]') !== -1 && ov.indexOf('["Activity", "activity.html"]') !== -1);
 });

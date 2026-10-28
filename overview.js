@@ -168,19 +168,11 @@
     return out;
   }
 
-  // The dated things, each with how close it is: expired and today are red, two weeks is amber, two
-  // months is the accent colour, further off is plain.
-  function expiryRows(list) {
-    return (list || []).map(function (e) {
-      var d = e.daysLeft, text, tone;
-      if (d < 0) { text = "Expired " + (-d) + (d === -1 ? " day ago" : " days ago"); tone = "alert"; }
-      else if (d === 0) { text = "Today"; tone = "alert"; }
-      else if (d <= 14) { text = "In " + d + (d === 1 ? " day" : " days"); tone = "attn"; }
-      else if (d <= 60) { text = "In " + d + " days"; tone = "accent"; }
-      else { var months = Math.round(d / 30); text = "In " + months + (months === 1 ? " month" : " months"); tone = ""; }
-      return { label: e.label, due: e.due, chip: { text: text, tone: tone }, href: e.kind === "item" ? "ops.html#" + e.id : "chat.html" };
-    });
-  }
+  // The dated things (the "Running out soon" tile) and the Quick capture box are tiles now; their rules live with them
+  // (tile-expiry.js, tile-capture.js) and are re-exported here so the tests and the other pages keep one address for them.
+  var Expiry = typeof module !== "undefined" && module.exports ? require("./tile-expiry.js") : (window.BarnyardExpiry || {});
+  var Capture = typeof module !== "undefined" && module.exports ? require("./tile-capture.js") : (window.BarnyardCapture || {});
+  function expiryRows(list) { return Expiry.expiryRows ? Expiry.expiryRows(list) : []; }
 
   // ---- the bell and the backup (GET /hub/notifications, GET /hub/export) --------------------------------
   //
@@ -219,26 +211,8 @@
 
   // ---- quick capture ---------------------------------------------------------------------------
   //
-  // One box that files a thought where it belongs. kind: "note" (a note in the Notebook's inbox, through
-  // POST /hub/capture), "item" (an Ops item in the backlog, yours) or "proposal" (an idea for you to approve).
-  // The first line is the title; the rest goes in the details. -> { base: "hub"|"ops", path, body } or null
-  // when there is nothing to file or it is too long for that kind.
-  function buildCapture(kind, text) {
-    var t = String(text == null ? "" : text).replace(/\r\n/g, "\n").trim();
-    if (!t) return null;
-    if (kind === "note") return t.length > 8000 ? null : { base: "hub", path: "/capture", body: { text: t } };
-    if (kind !== "item" && kind !== "proposal") return null;
-    var first = t.split("\n")[0].replace(/\s+/g, " ").trim();
-    var title = first.slice(0, 120).trim();
-    if (!title) return null;
-    var body = { title: title, lane: "backlog", category: "other" };
-    if (t.length > title.length) {
-      if (t.length > 6000) return null;
-      body.details = t;
-    }
-    if (kind === "proposal") body.proposal = true; else body.owner = "you";
-    return { base: "ops", path: "/items", body: body };
-  }
+  // The box that files a thought (a note, an Ops item or a proposal) is the Quick capture tile now: see tile-capture.js.
+  function buildCapture(kind, text) { return Capture.buildCapture ? Capture.buildCapture(kind, text) : null; }
 
   // Widgets that show the hub owner's own data, so they are hidden for anyone else
   // who signs in: "week" reads the owner's Google Calendar (behind the owner's
@@ -253,13 +227,19 @@
   // A tile that names a permission is hidden when the session says which permissions the person has (the `permissions`
   // list from /auth/session, once it exists) and the list does not include it. No list, or no permission on the tile:
   // shown.
+  //
+  // The two sides spell a tile's permission differently: the tiles name it after the area on the Users page ("tile.assets"), and the
+  // Worker lists what a person may use as "<area>.view", dropping a tile's "tile." prefix (permissionList in access-catalogue.js: the
+  // Assets tile is "assets.view"). Both spellings are accepted here; a "tile.x" is looked up as "x.view". (Looking up "tile.x" as it
+  // stands never matched, which would hide every such tile from everyone, the owner included, once the Worker sends a list.)
+  function permissionKey(p) { return /^tile\./.test(p) ? p.slice(5) + ".view" : p; }
   function tileNeedsPermission(tile, session) {
     return !!(tile && typeof tile.permission === "string" && session && session.authenticated === true &&
-      Array.isArray(session.permissions) && session.permissions.indexOf(tile.permission) === -1);
+      Array.isArray(session.permissions) && session.permissions.indexOf(permissionKey(tile.permission)) === -1);
   }
 
   var helpers = {
-    tileNeedsPermission: tileNeedsPermission,
+    tileNeedsPermission: tileNeedsPermission, permissionKey: permissionKey,
     heroHeadline: heroHeadline, heroSubline: heroSubline, openItems: openItems, waitingItems: waitingItems, flightItems: flightItems,
     statusChips: statusChips, statusIssues: statusIssues, expiryRows: expiryRows, buildCapture: buildCapture, safeNotifyHref: safeNotifyHref, unreadCount: unreadCount, bellRows: bellRows, backupChip: backupChip, exportFileName: exportFileName,
     changedItemCount: changedItemCount, describeFeed: describeFeed, feedFromItems: feedFromItems, agoText: agoText, dueChip: dueChip,
@@ -514,13 +494,20 @@
     }).catch(function () { say("Couldn’t make the backup just now."); }).then(function () { btn.disabled = false; });
   }
 
+  // The Quick capture and Running out soon tiles (tile-capture.js, tile-expiry.js) do not fetch anything of their own: the status
+  // answer read here is handed to them on the tiles' bus. null = a guest, a failed call or not signed in (they say so); it is
+  // sent only once that is known, so the tiles do not flash a "log in" note while the page is still asking.
+  function publishStatus(value) {
+    if (window.BarnyardTiles && typeof window.BarnyardTiles.publish === "function") window.BarnyardTiles.publish("status", value);
+  }
+
   function renderStatus() {
-    var row = $("ov-status"), box = $("ov-expiry-box"), list = $("ov-expiry");
-    if (!row || !box || !list) return;
-    clear(row); clear(list);
+    var row = $("ov-status");
+    if (!row) return;
+    clear(row);
     var s = model.status;
     if (!s) {   // a guest, a failed call or not signed in: nothing to show
-      row.hidden = true; box.hidden = true;
+      row.hidden = true;
       var bellBox = $("ov-bell"); if (bellBox) bellBox.hidden = true;
       return;
     }
@@ -543,20 +530,6 @@
       row.appendChild(a);
     });
     row.hidden = false;
-    var cap = $("ov-capture");
-    if (cap) cap.hidden = false;
-    var rows = expiryRows(s.expiries);
-    rows.forEach(function (r) {
-      var li = h("li");
-      var a = h("a", null, r.label);
-      a.href = r.href;
-      li.appendChild(a);
-      li.appendChild(h("span", "when", r.due));
-      li.appendChild(chip(r.chip.text, r.chip.tone));
-      list.appendChild(li);
-    });
-    if (!rows.length) list.appendChild(h("li", "dim", "Nothing with a date in the next year. Give an Ops item a Due date and it shows here."));
-    box.hidden = false;
   }
 
   function setupBell() {
@@ -564,31 +537,11 @@
     if (read) read.addEventListener("click", markBellRead);
   }
 
-  function setupCapture() {
-    var form = $("ov-capture"), input = $("ov-cap-input"), kind = $("ov-cap-kind"), status = $("ov-cap-status");
-    if (!form) return;
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      var plan = buildCapture(kind.value, input.value);
-      if (!plan) { status.textContent = input.value.trim() ? "That is too long for this kind. Shorten it, or use a note." : "Type something first."; return; }
-      var btn = $("ov-cap-add");
-      btn.disabled = true;
-      status.textContent = "Saving…";
-      postJson(plan.path, plan.body, plan.base === "hub" ? HUB_API : API).then(function (r) {
-        input.value = "";
-        status.textContent = "";
-        if (window.BarnyardShell) window.BarnyardShell.toast(kind.value === "note" ? "Saved to your Notebook inbox" : kind.value === "proposal" ? "Proposal added" : "Added to the backlog");
-        if (plan.base === "ops") refresh();
-        btn.disabled = false;
-        return r;
-      }).catch(function (err) {
-        btn.disabled = false;
-        status.textContent = err && err.status === 401 ? "Your session has expired. Log in again."
-          : err && err.status === 422 ? "That looks like it holds a password or key, so it was not saved."
-          : err && err.status === 403 ? "Your account can’t save that here."
-          : "Couldn’t save it just now. Try again.";
-      });
-    });
+  // The Quick capture tile asks for the board to be read again after it files an Ops item.
+  function setupCaptureRefresh() {
+    if (window.BarnyardTiles && typeof window.BarnyardTiles.subscribe === "function") {
+      window.BarnyardTiles.subscribe("refresh", function () { if (model.state === "ok") refresh(); });
+    }
   }
 
   function renderAll() {
@@ -630,7 +583,7 @@
       return getJson("/recent?limit=30").then(function (res) { model.events = Array.isArray(res.events) ? res.events : []; }, function () { model.events = []; });
     }).then(function () {
       // Best effort and owner only: anything but a clean answer (a guest gets 403) just hides the row.
-      return getJson("/status", HUB_API).then(function (s) { model.status = s && s.ok ? s : null; }, function () { model.status = null; });
+      return getJson("/status", HUB_API).then(function (s) { model.status = s && s.ok ? s : null; }, function () { model.status = null; }).then(function () { publishStatus(model.status); });
     }).then(function () {
       if (!model.status) { model.bell = []; return; }
       // ?today= is this browser's own date, so "due today" in the bell means the owner's day (the Worker checks it is close to its own).
@@ -644,6 +597,8 @@
       else if (err && err.status === 403 && err.code === "board_disabled") model.state = "disabled";
       else if (err && err.status === 403) model.state = "forbidden";
       else model.state = model.state === "ok" ? "ok" : "error";
+      // The status call is never made when the board is refused, so say so to the tiles (not for a plain network failure).
+      if (err && (err.status === 401 || err.status === 403 || err.status === 404)) publishStatus(null);
       renderAll();
     });
   }
@@ -901,12 +856,12 @@
     try { stored = parseInt(window.localStorage.getItem(SEEN_KEY), 10) || 0; } catch (e) { stored = 0; }
     model.since = stored || (Date.now() - DAY_MS);
 
-    setupCapture();
+    setupCaptureRefresh();
     setupBell();
     renderAll();
     var authCheck = typeof window.barnyardAuthState === "function" ? window.barnyardAuthState() : Promise.resolve({ authenticated: false });
     authCheck.then(function (auth) {
-      if (!auth.authenticated) { model.state = "guest"; renderAll(); return; }
+      if (!auth.authenticated) { model.state = "guest"; renderAll(); publishStatus(null); return; }
       refresh().then(function () {
         try { window.localStorage.setItem(SEEN_KEY, String(Date.now())); } catch (e) { /* storage blocked: the count restarts each visit */ }
       });

@@ -448,4 +448,58 @@ test("normalizeSets: junk becomes null, bad layouts and picks are dropped, names
   r.layouts.forEach(function (l) { assertValid(l.tiles, 12, l.name); });
 });
 
+
+// ---- tiles that used to be fixed blocks (Quick capture, Running out soon): default-on tiles ---------------------------
+
+test("a registered tile can be default-on, with an order, and defaultIds lists them in that order", function () {
+  var a = B.register({ id: "qa-late", title: "Late", w: 12, h: 3, minH: 2, defaultOn: true, order: 7 });
+  var b = B.register({ id: "qa-early", title: "Early", w: 12, h: 2, minH: 2, defaultOn: true, order: 2 });
+  var plain = B.register({ id: "qa-plain", title: "Plain", w: 4, h: 4 });
+  assert.strictEqual(a.defaultOn, true); assert.strictEqual(a.order, 7);
+  assert.strictEqual(plain.defaultOn, undefined, "a tile that is not default-on carries no flag");
+  var ids = B.defaultIds().filter(function (id) { return /^qa-/.test(id); });
+  assert.deepStrictEqual(ids, ["qa-early", "qa-late"]);
+  assert.strictEqual(B.register({ id: "qa-odd", defaultOn: true, order: 500 }).order, 99, "an order is kept inside 0 to 99");
+  assert.strictEqual(B.register({ id: "qa-odd2", defaultOn: true }).order, 50, "and defaults to the middle");
+  ["qa-late", "qa-early", "qa-plain", "qa-odd", "qa-odd2"].forEach(function (id) { B.CATALOGUE.splice(B.CATALOGUE.findIndex(function (c) { return c.id === id; }), 1); });
+  assert.ok(b);
+});
+
+test("addAtTop puts the missing tiles at the top one under the other and moves nothing else relative to its neighbours", function () {
+  B.register({ id: "qt-cap", title: "Capture", w: 12, h: 2, minH: 2, defaultOn: true, order: 0 });
+  B.register({ id: "qt-exp", title: "Expiry", w: 12, h: 6, minH: 3, defaultOn: true, order: 1 });
+  var saved = [t("need", 0, 0, 6, 8), t("feed", 6, 0, 6, 8), t("todo", 0, 8, 3, 6), t("flight", 3, 8, 3, 7)];
+  var out = B.addAtTop(saved, ["qt-cap", "qt-exp"]);
+  assertValid(out, 12, "with the two on top");
+  assert.deepStrictEqual(out.slice(0, 2).map(box), ["qt-cap@0,0 12x2", "qt-exp@0,2 12x6"]);
+  var before = B.compact(saved);
+  before.forEach(function (o) {
+    var n = B.find(out, o.id);
+    assert.strictEqual(n.x, o.x, o.id + " keeps its column");
+    assert.strictEqual(n.y, o.y + 8, o.id + " moves down by exactly the room the two take");
+    assert.strictEqual(n.w + "x" + n.h, o.w + "x" + o.h, o.id + " keeps its size");
+  });
+  assert.deepStrictEqual(B.addAtTop(out, ["qt-cap", "qt-exp"]), out, "tiles already there stay exactly where they are");
+  var one = B.addAtTop([t("qt-exp", 0, 0, 12, 6), t("need", 0, 6, 6, 8)], ["qt-cap", "qt-exp"]);
+  assert.strictEqual(B.find(one, "qt-cap").y, 0, "only the missing one is added, at the top");
+  assert.strictEqual(B.find(one, "qt-exp").y, 2, "and the one already there flows down under it");
+  assertValid(one, 12, "one present");
+  assert.deepStrictEqual(B.addAtTop(saved, ["not-a-tile!"]).map(box), B.compact(saved).map(box), "an unknown id adds nothing");
+  assert.deepStrictEqual(B.addAtTop([], ["qt-cap"]).map(box), ["qt-cap@0,0 12x2"], "an empty board");
+  B.CATALOGUE.splice(B.CATALOGUE.findIndex(function (c) { return c.id === "qt-cap"; }), 1);
+  B.CATALOGUE.splice(B.CATALOGUE.findIndex(function (c) { return c.id === "qt-exp"; }), 1);
+});
+
+test("the default arrangement of a person who never customised, with the default-on tiles on top, is valid and keeps the page's order below", function () {
+  B.register({ id: "qd-cap", title: "Capture", w: 12, h: 2, minH: 2, defaultOn: true, order: 0 });
+  B.register({ id: "qd-exp", title: "Expiry", w: 12, h: 6, minH: 3, defaultOn: true, order: 1 });
+  var base = B.effective(null, DEFAULT_LIST, function () { return true; }, ["qd-cap", "qd-exp"]);
+  var withTop = B.addAtTop(base, B.defaultIds().filter(function (id) { return /^qd-/.test(id); }));
+  assertValid(withTop, 12, "default plus the two");
+  assert.deepStrictEqual(B.readingOrder(withTop).slice(0, 3), ["qd-cap", "qd-exp", "need"]);
+  assert.deepStrictEqual(B.readingOrder(withTop).slice(2), B.readingOrder(base), "everything below is in the order it always had");
+  B.CATALOGUE.splice(B.CATALOGUE.findIndex(function (c) { return c.id === "qd-cap"; }), 1);
+  B.CATALOGUE.splice(B.CATALOGUE.findIndex(function (c) { return c.id === "qd-exp"; }), 1);
+});
+
 console.log("\n" + passed + " passed");

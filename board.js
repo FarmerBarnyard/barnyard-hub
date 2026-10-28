@@ -26,6 +26,7 @@
   var WIDE_MIN = 960;       // container width at which the full 12-column board is shown
   var MID_MIN = 560;        // and the 6-column one
   var ROW_FALLBACK = 36;    // px, the row height in board.css (--board-row)
+  var SEEN_KEY = "barnyard-board-defaults";   // which saved layouts already know about the default-on tiles (this browser only)
 
   // ---- pure helpers -------------------------------------------------------------------------------
 
@@ -71,7 +72,14 @@
 
   function sameTiles(a, b) { return JSON.stringify(Layout.toBoard(a)) === JSON.stringify(Layout.toBoard(b)); }
 
-  var helpers = { columnsFor: columnsFor, stepsFor: stepsFor, cellAt: cellAt, sizeFrom: sizeFrom, rowsFor: rowsFor, keyIntent: keyIntent, mergeList: mergeList, sameTiles: sameTiles, WIDE_MIN: WIDE_MIN, MID_MIN: MID_MIN };
+  // The tiles to draw for a layout: `tiles` as the layout holds them, plus the default-on tiles (`ids`, in order) put at the top
+  // unless `seen` says this layout (`key`) was saved from Customise since they existed, in which case a missing one is hidden on purpose.
+  function withDefaultTiles(tiles, seen, key, ids) {
+    if (seen && seen[key]) return tiles;
+    return ids && ids.length ? Layout.addAtTop(tiles, ids) : tiles;
+  }
+
+  var helpers = { columnsFor: columnsFor, stepsFor: stepsFor, cellAt: cellAt, sizeFrom: sizeFrom, rowsFor: rowsFor, keyIntent: keyIntent, mergeList: mergeList, sameTiles: sameTiles, withDefaultTiles: withDefaultTiles, WIDE_MIN: WIDE_MIN, MID_MIN: MID_MIN };
 
   if (typeof document === "undefined") {
     if (typeof module !== "undefined" && module.exports) module.exports = helpers;
@@ -164,7 +172,25 @@
 
     // This kind of screen uses the standard arrangement, or a named layout the person saved for it (board-layout.js).
     function current() { return Layout.settingsFor(Theme.get(), S.cls); }
-    function saved() { var r = current(); return Layout.effective(r.board, r.widgets, shown, extraIds()); }
+    function saved() { var r = current(); return withDefaults(Layout.effective(r.board, r.widgets, shown, extraIds()), seenKey(r.layout)); }
+
+    // ---- tiles that used to be fixed blocks on the page (Quick capture, Running out soon) ----
+    //
+    // They are registered "defaultOn": part of the default arrangement, and put at the top, in their old places, for a layout that
+    // was saved before they were tiles. Which saved layouts already know about them is kept in this browser (key
+    // SEEN_KEY: "std" for the standard arrangement, "l:<id>" for a named layout), set when a layout is saved from Customise.
+    // Until then a layout that does not hold them is shown with them at the top, and nothing else moves (the saved layout
+    // itself is untouched). Once saved, a tile that is not in the layout is hidden on purpose and stays hidden. The rule for a
+    // second browser is the same: it shows them once at the top until its own first save.
+
+    function seenKey(layout) { return layout ? "l:" + layout.id : "std"; }
+    function seenMap() {
+      try { var v = JSON.parse(root.localStorage.getItem(SEEN_KEY) || "{}"); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch (e) { return {}; }
+    }
+    function markSeen(key) { try { var m = seenMap(); m[key] = 1; root.localStorage.setItem(SEEN_KEY, JSON.stringify(m)); } catch (e) { /* storage blocked: they show at the top again next time */ } }
+    function clearSeen(key) { try { var m = seenMap(); delete m[key]; root.localStorage.setItem(SEEN_KEY, JSON.stringify(m)); } catch (e) { /* as above */ } }
+    function defaultOnIds() { return Layout.defaultIds().filter(function (id) { return ext[id] && !restricted(id); }); }
+    function withDefaults(tiles, key) { return withDefaultTiles(tiles, seenMap(), key, defaultOnIds()); }
     function listMode() { return S.cols < 12; }
     function editCols() { return S.cols >= 12 ? 12 : 1; }
 
@@ -676,6 +702,7 @@
       var create = function () {
         var res = Layout.addLayout(Theme.get().boardSets, input.value, saved(), S.cls);
         if (res.error) { S.layoutMsg = LAYOUT_ERRORS[res.error] || "That didn't work."; render(); announce(S.layoutMsg); return; }
+        if (res.id) markSeen("l:" + res.id);   // saved from what is on screen, which already shows the default-on tiles
         setSets(res.sets, "Saved " + Layout.cleanName(input.value) + ". " + here.title + " now use it.", ".board-layouts .lay-new .lay-input");
       };
       input.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); create(); } });
@@ -718,10 +745,11 @@
         if (named) {
           // A named layout keeps its own arrangement and what it shows; the standard one and the widgets list are left alone.
           var res = Layout.writeLayout(s.boardSets, layoutId, working);
-          if (!res.error) Theme.set({ boardSets: res.sets });
+          if (!res.error) { Theme.set({ boardSets: res.sets }); markSeen(seenKey(named)); }
         } else {
           var list = mergeList(Layout.toWidgets(working, s.widgets), s.widgets, restricted);
           Theme.set({ widgets: list, board: Layout.toBoard(working) });
+          markSeen(seenKey(null));   // what is saved now says which tiles are shown: one that is missing is hidden on purpose
         }
       }
       render();
@@ -742,10 +770,11 @@
       var named = layoutId && Layout.findLayout(s.boardSets, layoutId);
       if (named) {
         // Only this named layout goes back to the standard arrangement; the standard one itself is not touched.
-        var res = Layout.writeLayout(s.boardSets, layoutId, Layout.effective(null, Theme.defaults().widgets, shown, extraIds()));
-        if (!res.error) Theme.set({ boardSets: res.sets });
+        var res = Layout.writeLayout(s.boardSets, layoutId, Layout.addAtTop(Layout.effective(null, Theme.defaults().widgets, shown, extraIds()), defaultOnIds()));
+        if (!res.error) { Theme.set({ boardSets: res.sets }); markSeen(seenKey(named)); }
       } else {
         Theme.set({ widgets: Theme.defaults().widgets, board: null });
+        clearSeen(seenKey(null));   // the standard arrangement is back, and it includes the default-on tiles at the top
       }
       render();
       say("Layout reset to the standard arrangement.");
