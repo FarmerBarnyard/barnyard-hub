@@ -217,7 +217,7 @@ test("the page never keeps the key: it is built into a read-only box, not stored
 });
 
 test("the alert switches are the five the Worker knows, each with words, in the order shown", function () {
-  assert.deepStrictEqual(Mon.ALERT_SWITCHES.map(function (a) { return a[0]; }), ["reporters", "resources", "vulns", "calendar", "digest", "report"]);
+  assert.deepStrictEqual(Mon.ALERT_SWITCHES.map(function (a) { return a[0]; }), ["reporters", "resources", "vulns", "calendar", "digest", "report", "inventory"]);
   Mon.ALERT_SWITCHES.forEach(function (a) { assert.ok(a[1].length > 20, a[0]); });
   assert.ok(/critical vulnerability/.test(Mon.ALERT_SWITCHES[2][1]));
   assert.ok(/Calendar reminder/.test(Mon.ALERT_SWITCHES[3][1]));

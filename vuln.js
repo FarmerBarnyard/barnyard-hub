@@ -82,6 +82,54 @@
   }
   function confidenceText(c) { return c === "confirmed" ? "Your version is affected" : "Might apply, worth checking"; }
 
+  // ---- the Devices section: what each server's daily inventory said ------------------------------------------------
+
+  var INVENTORY_STALE_HOURS = 36;
+  // "Ubuntu 24.04.1 LTS, kernel 6.8.0-45-generic, x86_64" (whatever of it is known)
+  function deviceLine(d) {
+    if (!d || !d.takenAt) return "";
+    var parts = [];
+    if (d.os && d.os.name) parts.push(d.os.name);
+    if (d.kernel) parts.push("kernel " + d.kernel);
+    if (d.arch) parts.push(d.arch);
+    return parts.join(", ");
+  }
+  // "Checked 5 h ago" / "No inventory yet"
+  function inventoryAgeText(takenAt, now) {
+    if (!takenAt) return "No inventory yet";
+    return "Inventory taken " + (agoText(takenAt, now) || "recently");
+  }
+  // older than 36 hours (a daily one is missing)
+  function inventoryStale(takenAt, now) {
+    if (!takenAt) return false;
+    return now - Number(takenAt) > INVENTORY_STALE_HOURS * 3600000;
+  }
+  // "3 security updates are waiting" / "No security updates waiting" / "" when the machine could not say
+  function pendingText(n) {
+    if (n === null || n === undefined) return "";
+    n = Number(n);
+    if (!(n >= 0)) return "";
+    return n === 0 ? "No security updates waiting" : n + (n === 1 ? " security update is waiting" : " security updates are waiting");
+  }
+  // "2 new, 1 updated, 0 removed since the one before"; "" when there was nothing to compare with
+  function inventoryDiffText(diff) {
+    var c = diff && diff.counts;
+    if (!c) return "";
+    return (c.added || 0) + " new, " + (c.changed || 0) + " updated, " + (c.removed || 0) + " removed since the one before";
+  }
+  // The unmatched list is long: show the first 40 until the person opens it all.
+  function unmatchedShown(list, open) {
+    list = Array.isArray(list) ? list : [];
+    return open ? list : list.slice(0, 40);
+  }
+  // Which findings are "possible because it is the distribution's own build": the Worker marks them in the snapshot.
+  function distroNote(snap, itemName) {
+    if (!snap || !snap.distro) return "";
+    var where = snap.device ? " on " + snap.device : "";
+    var waiting = snap.pendingSecurity === null || snap.pendingSecurity === undefined ? "" : " " + pendingText(snap.pendingSecurity) + (where ? where : "") + ".";
+    return "This is the distribution's own build" + where + ". It may already carry a fix that does not change the version number, so this only might apply. Check the distribution's security notice for " + (snap.id || "this CVE") + "." + waiting;
+  }
+
   // Only a plain http(s) address is ever turned into a link.
   function safeUrl(u) {
     u = typeof u === "string" ? u : u && typeof u.url === "string" ? u.url : "";
@@ -251,6 +299,9 @@
     environment_full: "Your register is full. Remove something you no longer run first.",
     infra_full: "You have reached the limit of servers. Remove one you no longer run first.",
     software_full: "You have reached the limit of software items. Remove one you no longer run first.",
+    inventory_managed: "The daily inventory of the server keeps this up to date, so it can't be edited by hand. Remove it to stop watching it; Devices lists it so you can watch it again.",
+    ignore_full: "You have stopped watching as many things as are allowed. Watch some again first.",
+    key_invalid: "That item can't be named. Reload the page.",
     reason_required: "Say why, so the record makes sense later.",
     reviewDate_required: "Pick a date to look at this risk again.",
     reviewDate_invalid: "That review date isn't a valid date.",
@@ -516,7 +567,9 @@
     staleSources: staleSources, staleWarning: staleWarning, hoursText: hoursText, SOURCE_NAMES: SOURCE_NAMES, sourcesText: sourcesText, nvdRunNote: nvdRunNote,
     bulkBody: bulkBody, bulkFilter: bulkFilter, bulkIds: bulkIds, bulkSummaryText: bulkSummaryText, bulkGroupLine: bulkGroupLine, bulkFailText: bulkFailText,
     bulkTotals: bulkTotals, bulkAdd: bulkAdd, bulkResultText: bulkResultText, bulkShouldContinue: bulkShouldContinue, BULK_MAX_IDS: BULK_MAX_IDS,
-    planPayload: planPayload, eventTitle: eventTitle, actorText: actorText, errorMessage: errorMessage, needsSignIn: needsSignIn, PERSON_STATES: PERSON_STATES
+    planPayload: planPayload, eventTitle: eventTitle, actorText: actorText, errorMessage: errorMessage, needsSignIn: needsSignIn, PERSON_STATES: PERSON_STATES,
+    deviceLine: deviceLine, inventoryAgeText: inventoryAgeText, inventoryStale: inventoryStale, pendingText: pendingText, inventoryDiffText: inventoryDiffText,
+    unmatchedShown: unmatchedShown, distroNote: distroNote, INVENTORY_STALE_HOURS: INVENTORY_STALE_HOURS
   };
 
   if (typeof document === "undefined") {
@@ -546,6 +599,9 @@
   }
   var api = {
     me: function () { return request("GET", "/me"); },
+    devices: function () { return request("GET", "/devices"); },
+    ignoreInventory: function (key) { return request("POST", "/devices/ignore", { key: key }); },
+    watchInventory: function (key) { return request("POST", "/devices/watch", { key: key }); },
     environment: function () { return request("GET", "/environment"); },
     addItem: function (b) { return request("POST", "/environment", b); },
     updateItem: function (id, b) { return request("PATCH", "/environment/" + id, b); },
@@ -616,6 +672,7 @@
   function mount(root) {
     var S = {
       view: "current", summary: null, env: null, catalog: null, detail: null, envForm: null, importOpen: false, busy: false, banner: null,
+      owner: false, devices: null, devicesLoading: false, devicesError: null, unmatchedOpen: {},
       current: { q: "", priority: "", severity: "", state: "", all: false, item: "", page: 1 },
       history: { q: "", priority: "", severity: "", state: "", item: "", page: 1 },
       catalogue: { q: "", zone: "", month: "", severity: "", kev: false, page: 1, months: null, open: "" },
@@ -721,7 +778,8 @@
     function drawTabs(host) {
       var tabs = el("div", "vn-tabs");
       tabs.setAttribute("role", "tablist");
-      [["current", "Current"], ["history", "History"], ["catalogue", "Catalogue"], ["env", "My environment"]].forEach(function (t) {
+      // Devices (what each server's daily inventory found) belongs to the owner's register: only the owner has servers that report
+      [["current", "Current"], ["history", "History"], ["catalogue", "Catalogue"], ["env", "My environment"]].concat(S.owner ? [["devices", "Devices"]] : []).forEach(function (t) {
         var b = el("button", null, t[1]);
         b.type = "button";
         b.setAttribute("role", "tab");
@@ -1243,10 +1301,137 @@
       }
     }
 
+    // ---- Devices: what each server's daily inventory found (the owner's register only)
+
+    function loadDevices(force) {
+      if (S.devicesLoading || (S.devices && !force)) return;
+      S.devicesLoading = true;
+      api.devices().then(function (d) { S.devices = d; S.devicesError = null; }, function (err) { S.devicesError = err; })
+        .then(function () { S.devicesLoading = false; if (S.view === "devices" && !S.detail) render(); });
+    }
+
+    // After watching or not watching something: the devices, the list of what is watched and the strip are all stale.
+    function refreshAfterWatch() {
+      return Promise.all([api.devices().then(function (d) { S.devices = d; S.devicesError = null; }), api.environment().then(function (e) { S.env = e; }), reloadSummary()])
+        .then(render, function (err) { S.banner = { text: errorMessage(err), tone: "alert", err: err }; render(); });
+    }
+
+    function drawDevices(host) {
+      if (!S.devices && !S.devicesError) { loadDevices(); host.appendChild(el("p", "dim", "Loading…")); return; }
+      if (S.devicesError) {
+        host.appendChild(message(errorMessage(S.devicesError), "alert", S.devicesError));
+        host.appendChild(button("Try again", "btn btn-sm", function () { S.devicesError = null; S.devices = null; render(); }));
+        return;
+      }
+      var now = Date.now();
+      (S.devices.devices || []).forEach(function (d) { host.appendChild(deviceCard(d, now)); });
+      var ignored = S.devices.ignored || [];
+      if (ignored.length) {
+        var box = el("div", "vn-card");
+        box.appendChild(el("h3", null, "Not watched"));
+        ignored.forEach(function (key) {
+          var row = el("div", "vn-sw");
+          row.appendChild(el("b", null, key.indexOf("pkg:") === 0 ? "Package " + key.slice(4) : key.indexOf("c:") === 0 ? "Container " + key.slice(2) : key));
+          var again = button("Watch again", "btn btn-sm", function () {
+            again.disabled = true;
+            api.watchInventory(key).then(function () { toast("It comes back with the next daily inventory."); return refreshAfterWatch(); },
+              function (err) { S.banner = { text: errorMessage(err), tone: "alert", err: err }; render(); });
+          });
+          row.appendChild(again);
+          box.appendChild(row);
+        });
+        host.appendChild(box);
+      }
+    }
+
+    function deviceCard(d, now) {
+      var card = el("div", "vn-card");
+      var head = el("div", "vn-host-head");
+      head.appendChild(el("h3", null, d.name));
+      if (!d.takenAt) {
+        head.appendChild(chip("No inventory yet", ""));
+        card.appendChild(head);
+        card.appendChild(el("p", "vn-note", "Run the reporter setup on this server again to start the daily inventory."));
+        return card;
+      }
+      if (inventoryStale(d.takenAt, now)) head.appendChild(chip("No inventory for over " + INVENTORY_STALE_HOURS + " hours", "alert"));
+      card.appendChild(head);
+      var facts = el("dl", "vn-facts");
+      function fact(k, v) { if (!v) return; facts.appendChild(el("dt", null, k)); facts.appendChild(el("dd", null, v)); }
+      fact("System", deviceLine(d));
+      fact("Taken", inventoryAgeText(d.takenAt, now).replace("Inventory taken ", ""));
+      fact("Updates", pendingText(d.pendingSecurity));
+      fact("Software", thousands(d.packages) + " installed, " + d.items + " watched");
+      fact("Since the one before", inventoryDiffText(d.diff));
+      if (d.docker === "unavailable") fact("Containers", "Not listed: the inventory may not ask Docker on this server (set BR_INVENTORY_DOCKER=1 in its reporter settings, then run the setup again).");
+      if (d.capped) fact("Limit", "Some software did not fit in your register. Remove something you no longer run.");
+      card.appendChild(facts);
+
+      var worst = el("div");
+      worst.appendChild(el("h4", null, "Worst open findings"));
+      if (!(d.topFindings || []).length) worst.appendChild(el("p", "vn-note", "No open findings from this server."));
+      (d.topFindings || []).forEach(function (f) { worst.appendChild(findingRow(f)); });
+      card.appendChild(worst);
+
+      var watched = el("details", "vn-details");
+      watched.appendChild(el("summary", null, "Watched from this server (" + (d.software || []).length + ")"));
+      (d.software || []).forEach(function (s) {
+        var row = el("div", "vn-sw");
+        row.appendChild(el("b", null, itemLabel(s.name, s.version)));
+        if (s.distro) row.appendChild(chip("Distribution build", ""));
+        if (s.open) {
+          var c = el("button", "chip alert", s.open + " open");
+          c.type = "button";
+          c.addEventListener("click", function () { S.view = "current"; S.current.item = s.id; S.current.all = true; S.current.page = 1; render(); });
+          row.appendChild(c);
+        } else if (s.matchState === "ok") row.appendChild(chip("No known issues", "ok"));
+        var stop = button("Stop watching", "btn btn-sm", function () {
+          stop.disabled = true;
+          api.ignoreInventory(s.key).then(function () { toast("Not watched any more. Its findings stay in History."); return refreshAfterWatch(); },
+            function (err) { S.banner = { text: errorMessage(err), tone: "alert", err: err }; render(); });
+        });
+        row.appendChild(stop);
+        watched.appendChild(row);
+      });
+      card.appendChild(watched);
+
+      var diff = d.diff || {};
+      if (diff.counts && (diff.counts.added || diff.counts.removed || diff.counts.changed)) {
+        var changes = el("details", "vn-details");
+        changes.appendChild(el("summary", null, "What changed (" + inventoryDiffText(diff).replace(" since the one before", "") + ")"));
+        (diff.changed || []).forEach(function (c) { changes.appendChild(el("div", "vn-unm", "Updated: " + c.name + " " + c.from + " to " + c.to)); });
+        (diff.added || []).forEach(function (c) { changes.appendChild(el("div", "vn-unm", "New: " + c.name + " " + c.version)); });
+        (diff.removed || []).forEach(function (c) { changes.appendChild(el("div", "vn-unm", "Removed: " + c.name + " " + c.version)); });
+        card.appendChild(changes);
+      }
+
+      var un = el("details", "vn-details");
+      un.appendChild(el("summary", null, "Unmatched software (" + thousands(d.unmatchedCount) + ")"));
+      un.appendChild(el("p", "vn-note", "Not on the list of software this can look up, so it is not checked. Nothing is hidden: this is all of it."));
+      var open = !!S.unmatchedOpen[d.device];
+      unmatchedShown(d.unmatched, open).forEach(function (u) {
+        var row = el("div", "vn-unm");
+        row.appendChild(el("span", null, u.name + " " + u.version));
+        if (u.kind === "package") {
+          var hide = button("Hide", "btn btn-sm", function () {
+            hide.disabled = true;
+            api.ignoreInventory("pkg:" + u.name).then(refreshAfterWatch, function (err) { S.banner = { text: errorMessage(err), tone: "alert", err: err }; render(); });
+          });
+          row.appendChild(hide);
+        } else row.appendChild(el("span", "vn-item-meta", "container"));
+        un.appendChild(row);
+      });
+      if ((d.unmatched || []).length > 40 && !open) un.appendChild(button("Show all " + d.unmatched.length, "btn btn-sm", function () { S.unmatchedOpen[d.device] = true; render(); }));
+      card.appendChild(un);
+      return card;
+    }
+
     function softwareRow(s) {
       var r = el("div", "vn-sw");
       r.appendChild(el("b", null, itemLabel(s.name || s.product, s.version)));
       if (s.vendor) r.appendChild(el("span", "vn-item-meta", s.vendor));
+      if (s.source === "inventory") r.appendChild(chip("From the daily inventory", ""));
+      if (s.distro) r.appendChild(chip("Distribution build", ""));
       if (s.open) {
         var c = el("button", "chip alert", s.open + " open");
         c.type = "button";
@@ -1260,9 +1445,12 @@
 
     function itemActions(item) {
       var box = el("span", "vn-item-actions");
-      box.appendChild(button("Edit", "btn btn-sm", function () { S.envForm = { kind: item.kind, item: item }; render(); }));
-      var rm = button("Remove", "btn btn-sm", function () {
-        if (rm.dataset.sure !== "1") { rm.dataset.sure = "1"; rm.textContent = "Sure? Remove"; setTimeout(function () { rm.dataset.sure = ""; rm.textContent = "Remove"; }, 4000); return; }
+      // software the daily inventory found is kept up to date by the inventory: it cannot be edited, only not watched
+      var found = item.kind === "software" && item.source === "inventory";
+      var label = found ? "Stop watching" : "Remove";
+      if (!found) box.appendChild(button("Edit", "btn btn-sm", function () { S.envForm = { kind: item.kind, item: item }; render(); }));
+      var rm = button(label, "btn btn-sm", function () {
+        if (rm.dataset.sure !== "1") { rm.dataset.sure = "1"; rm.textContent = "Sure? " + label; setTimeout(function () { rm.dataset.sure = ""; rm.textContent = label; }, 4000); return; }
         rm.disabled = true;
         api.removeItem(item.id).then(function () { toast("Removed. Its findings stay in History."); return Promise.all([api.environment().then(function (e) { S.env = e; }), reloadSummary()]); })
           .then(render, function (err) { S.banner = { text: errorMessage(err), tone: "alert", err: err }; render(); });
@@ -1441,6 +1629,7 @@
       fact("Status note", f.reason);
       if (f.state === "accepted" && f.reviewDate) fact("Look at again", f.reviewDate);
       about.appendChild(facts);
+      if (snap.distro) about.appendChild(message(distroNote(snap), "info"));
       var more = button("Read the full CVE record", "btn btn-sm", function () {
         more.disabled = true;
         api.cve(f.cveId).then(function (full) { more.replaceWith(cveCard(full)); }, function (err) { more.disabled = false; about.appendChild(message(errorMessage(err), "alert", err)); });
@@ -1620,6 +1809,7 @@
       if (S.view === "current") { if (S.bulk.panel) drawBulkPanel(body); else drawFindings("current", body); }
       else if (S.view === "history") drawHistory(body);
       else if (S.view === "catalogue") drawCatalogue(body);
+      else if (S.view === "devices" && S.owner) drawDevices(body);
       else drawEnv(body);
     }
 
@@ -1635,7 +1825,7 @@
     // Your summary and your list are fetched together and the page is drawn as soon as they are in. The catalogue's own
     // status comes after and only fills in one line (it used to hold the whole page back).
     Promise.all([
-      api.me().then(function (me) { S.summary = me.summary; }),
+      api.me().then(function (me) { S.summary = me.summary; S.owner = me.owner === true; }),
       api.environment().then(function (e) { S.env = e; })
     ]).then(function () {
       if (S.env && !S.env.items.length) S.view = "env";
