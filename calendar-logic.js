@@ -14,7 +14,7 @@
   var KINDS = [["secret", "Secret"], ["key", "Key"], ["token", "Token"], ["certificate", "Certificate"], ["domain", "Domain"], ["licence", "Licence"], ["account", "Account"], ["other", "Other"]];
   var STATES = [["known", "Date is known"], ["estimated", "Date is an estimate"], ["planned", "Planned rotation date"], ["needed", "Date still needed"], ["auto", "Renews itself"]];
   var STATE_BADGE = { known: "", estimated: "Estimated", planned: "Planned", needed: "Date needed", auto: "Renews itself" };
-  var VIEWS = [["today", "Today"], ["week", "Week"], ["month", "Month"], ["upcoming", "Upcoming"], ["todos", "To-dos"], ["renewals", "Renewals"]];
+  var VIEWS = [["today", "Today"], ["plan", "Plan"], ["week", "Week"], ["month", "Month"], ["upcoming", "Upcoming"], ["todos", "To-dos"], ["renewals", "Renewals"]];
   var RECURRENCES = [["", "Doesn’t repeat"], ["daily", "Every day"], ["weekdays", "Every weekday"], ["weekly", "Every week"], ["monthly", "Every month"], ["yearly", "Every year"]];
   var PRIORITIES = [["low", "Low"], ["normal", "Normal"], ["high", "High"]];
   var DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -588,6 +588,18 @@
     if (f.time && !f.due) return { error: "A time needs a date.", field: "time" };
     if (f.recur && !f.due) return { error: "A repeat needs a date to start from.", field: "recur" };
     var body = { title: title, notes: String(f.notes || "").trim(), due: f.due || "", time: f.time || "", priority: f.priority || "normal", recur: f.recur || "" };
+    // the day planner's fields: minutes it should take, what kind of work it is, and whether it needs a long block or fits a gap
+    if (f.estimate !== undefined) {
+      var est = String(f.estimate).trim();
+      if (est === "") body.estimate = 0;
+      else if (!/^\d{1,3}$/.test(est) || Number(est) > 720) return { error: "Give the estimate in minutes, from 0 to 720.", field: "estimate" };
+      else body.estimate = Number(est);
+    }
+    if (f.tag !== undefined) body.tag = String(f.tag || "").toLowerCase().replace(/[^a-z0-9 _-]/g, "").replace(/\s+/g, " ").trim().slice(0, 24);
+    if (f.focus !== undefined) {
+      if (["", "focus", "quick"].indexOf(f.focus || "") < 0) return { error: "Pick how it should be planned.", field: "focus" };
+      body.focus = f.focus || "";
+    }
     if (String(f.ref || "").trim()) {
       var r = parseRef(f.ref);
       if (!r || r.error) return { error: "That isn’t an Ops item or Knowledgebase article. Paste its id (it_… or ka_…) or its address.", field: "ref" };
