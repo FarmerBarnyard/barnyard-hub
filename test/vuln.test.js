@@ -353,7 +353,7 @@ test("every route the page calls exists on the Worker", function () {
   var worker = path.join(root, "..", "ClaudeRepo-vulnstore", "cloudflare-worker", "src", "vuln-routes.js");
   var calls = (js.match(/request\("(GET|POST|PATCH|DELETE)", "([^"]*)"/g) || []).map(function (c) { return /request\("(\w+)", "([^"]*)"/.exec(c).slice(1); });
   assert.ok(calls.length >= 15, "found the calls");
-  var known = { "/me": 1, "/environment": 1, "/refresh": 1, "/findings": 1, "/findings/approve": 1, "/history/summary": 1, "/catalog/status": 1, "/catalog/archive/months": 1, "/catalog/products": 1, "/catalog/search": 1, "/catalog/cve/": 1 };
+  var known = { "/me": 1, "/environment": 1, "/refresh": 1, "/findings": 1, "/findings/approve": 1, "/history/summary": 1, "/catalog/status": 1, "/catalog/archive/months": 1, "/catalog/products": 1, "/catalog/search": 1, "/catalog/cve/": 1, "/devices": 1, "/devices/ignore": 1, "/devices/watch": 1 };
   calls.forEach(function (c) {
     var p = c[1].replace(/\?.*/, "");
     var ok = known[p] || /^\/environment\/$/.test(p) || /^\/findings\/$/.test(p) || /^\/findings\/$/.test(p);
@@ -565,6 +565,79 @@ test("the NIST NVD row says what its last run did, including CVEs new to the cat
 test("the CVE card lists the sources among its facts", function () {
   var src = fs.readFileSync(path.join(root, "vuln.js"), "utf8");
   assert.ok(/fact\("Sources", sourcesText\(full\.sources\)\)/.test(src));
+});
+
+// ---- the Devices section (what each server's daily inventory found) ---------------------------------------------------
+
+test("a device is described by its system, how old its inventory is, and the updates waiting", function () {
+  var d = { takenAt: NOW - 5 * 3600000, os: { name: "Ubuntu 24.04.1 LTS" }, kernel: "6.8.0-45-generic", arch: "x86_64" };
+  assert.strictEqual(V.deviceLine(d), "Ubuntu 24.04.1 LTS, kernel 6.8.0-45-generic, x86_64");
+  assert.strictEqual(V.deviceLine({ takenAt: NOW, os: {}, kernel: "5.15.0" }), "kernel 5.15.0");
+  assert.strictEqual(V.deviceLine({ takenAt: null }), "", "nothing before the first inventory");
+  assert.strictEqual(V.deviceLine(null), "");
+  assert.strictEqual(V.inventoryAgeText(NOW - 5 * 3600000, NOW), "Inventory taken 5 h ago");
+  assert.strictEqual(V.inventoryAgeText(null, NOW), "No inventory yet");
+  assert.strictEqual(V.pendingText(0), "No security updates waiting");
+  assert.strictEqual(V.pendingText(1), "1 security update is waiting");
+  assert.strictEqual(V.pendingText(7), "7 security updates are waiting");
+  assert.strictEqual(V.pendingText(null), "", "a machine that could not say is not told as zero");
+  assert.strictEqual(V.pendingText(undefined), "");
+  assert.strictEqual(V.pendingText(-3), "");
+});
+
+test("an inventory older than 36 hours is stale, one that never came is not 'stale' (it is just missing)", function () {
+  assert.strictEqual(V.INVENTORY_STALE_HOURS, 36);
+  assert.strictEqual(V.inventoryStale(NOW - 35 * 3600000, NOW), false);
+  assert.strictEqual(V.inventoryStale(NOW - 37 * 3600000, NOW), true);
+  assert.strictEqual(V.inventoryStale(null, NOW), false);
+});
+
+test("what changed since yesterday reads as three counts, and nothing is said when there was nothing to compare with", function () {
+  assert.strictEqual(V.inventoryDiffText({ counts: { added: 2, changed: 1, removed: 0 } }), "2 new, 1 updated, 0 removed since the one before");
+  assert.strictEqual(V.inventoryDiffText({}), "");
+  assert.strictEqual(V.inventoryDiffText(null), "");
+});
+
+test("the unmatched list shows forty until the person opens it all, and never drops an entry", function () {
+  var list = [];
+  for (var i = 0; i < 100; i++) list.push({ name: "p" + i, version: "1", kind: "package" });
+  assert.strictEqual(V.unmatchedShown(list, false).length, 40);
+  assert.strictEqual(V.unmatchedShown(list, true).length, 100);
+  assert.deepStrictEqual(V.unmatchedShown(null, false), []);
+});
+
+test("a finding on a distribution build says it only might apply, and where to check", function () {
+  var n = V.distroNote({ id: "CVE-2026-109618", distro: true, device: "app02", pendingSecurity: 3 });
+  assert.ok(/distribution's own build on app02/.test(n));
+  assert.ok(/only might apply/.test(n));
+  assert.ok(/CVE-2026-109618/.test(n));
+  assert.ok(/3 security updates are waiting on app02/.test(n));
+  assert.ok(!/waiting/.test(V.distroNote({ id: "CVE-2026-1", distro: true, device: "app02", pendingSecurity: null })), "no count, no claim");
+  assert.strictEqual(V.distroNote({ id: "CVE-2026-1" }), "", "an ordinary finding has no such note");
+  assert.strictEqual(V.distroNote(null), "");
+});
+
+test("the Devices tab is the owner's only, loads its data when opened, and software the inventory found cannot be edited", function () {
+  var src = fs.readFileSync(path.join(root, "vuln.js"), "utf8");
+  assert.ok(/concat\(S\.owner \? \[\["devices", "Devices"\]\] : \[\]\)/.test(src), "only the owner sees the tab");
+  assert.ok(/S\.owner = me\.owner === true/.test(src));
+  assert.ok(/request\("GET", "\/devices"\)/.test(src));
+  assert.ok(/request\("POST", "\/devices\/ignore"/.test(src) && /request\("POST", "\/devices\/watch"/.test(src));
+  assert.ok(/found = item\.kind === "software" && item\.source === "inventory"/.test(src));
+  assert.ok(/if \(!found\) box\.appendChild\(button\("Edit"/.test(src), "no Edit on found software");
+  assert.ok(/Stop watching/.test(src));
+  assert.ok(/inventory_managed:/.test(src), "the refusal has words");
+  // nothing from the server goes in as markup: the new section builds text nodes only
+  var devices = src.slice(src.indexOf("function drawDevices"), src.indexOf("function softwareRow"));
+  assert.ok(devices.length > 500);
+  assert.ok(!/innerHTML|insertAdjacentHTML|document\.write/.test(devices), "no markup from the server");
+});
+
+test("the page keeps no blurb under its title and the Devices styles exist", function () {
+  var html = fs.readFileSync(path.join(root, "vulnerabilities.html"), "utf8");
+  assert.ok(!/<h1[^>]*>[^<]*<\/h1>\s*<p[\s>]/.test(html));
+  var css = fs.readFileSync(path.join(root, "vuln.css"), "utf8");
+  assert.ok(/\.vn-details/.test(css) && /\.vn-unm/.test(css));
 });
 
 console.log("\n" + passed + " passed");

@@ -132,3 +132,9 @@
 
 .vn-stale { margin-top: 6px; }
 .vn-stale:empty { display: none; }
+
+/* Devices: what each server's daily inventory found */
+.vn-details { border-top: 1px solid var(--line); padding-top: 8px; }
+.vn-details > summary { cursor: pointer; font-weight: 500; color: var(--fg-strong); min-height: 32px; display: flex; align-items: center; }
+.vn-details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.vn-unm { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 0; font-size: 13px; font-family: var(--font-mono); overflow-wrap: anywhere; }
