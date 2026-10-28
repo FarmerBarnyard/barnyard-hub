@@ -1,10 +1,9 @@
 /* Search page (search.html). Colours come from the shell's tokens so every theme works. */
-.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.search-form { display: flex; gap: 10px; max-width: 880px; margin: 8px 0 22px; }
+.search-form { display: flex; gap: 10px; margin: 8px 0 22px; }
 .search-form input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 10px 14px; border-radius: var(--radius, 10px); border: 1px solid var(--line); background: var(--surface, transparent); color: var(--fg-strong); }
 .search-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-#search-root { max-width: 880px; display: grid; gap: 26px; }
+#search-root { display: grid; gap: 26px; }
 .search-total { font-size: 14px; }
 .search-group .sec-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
 .search-group h2 { font: 600 17px var(--font-display); color: var(--fg-strong); }

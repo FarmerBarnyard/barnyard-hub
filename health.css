@@ -1,7 +1,6 @@
 /* System health page (health.html). Colours come from the shell's tokens so every theme works. */
-.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .hl-tools { display: flex; align-items: center; gap: 12px; font-size: 13px; }
-#health-root { max-width: 880px; display: grid; gap: 28px; margin-top: 8px; }
+#health-root { display: grid; gap: 28px; margin-top: 8px; }
 .hl-section .sec-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
 .hl-section h2 { font: 600 17px var(--font-display); color: var(--fg-strong); }
 .hl-section p { color: var(--fg); font-size: 14px; }

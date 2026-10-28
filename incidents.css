@@ -1,7 +1,6 @@
 /* Incidents page (incidents.html). Colours come from the shell's tokens so every theme works. */
-.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .inc-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
-#inc-root { max-width: 980px; display: grid; gap: 22px; margin-top: 8px; }
+#inc-root { display: grid; gap: 22px; margin-top: 8px; }
 .dim { color: var(--fg-dim); }
 
 .inc-strip { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); font-size: 15px; }
