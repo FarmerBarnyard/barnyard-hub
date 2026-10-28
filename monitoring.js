@@ -6,6 +6,9 @@
 //   PUT  /mon/settings    recipients (up to 3), business hours, which monitors email (needs a recent sign-in)
 //   POST /mon/test-email  a test message to the saved recipients (needs a recent sign-in, once a minute)
 //   POST /mon/check       run every check now (once every 30 seconds)
+//   POST /mon/test-push   a test push to the phone (ntfy; needs a recent sign-in, once a minute)
+//   POST /mon/test-digest the weekly digest email to the saved recipients now (needs a recent sign-in, once a minute)
+//   POST /mon/acknowledge { monitor } stops an outage's reminders until it recovers ({ monitor, undo: true } takes it back)
 // and, to fill the Security block, GET /hub/status (the daily check, what is about to expire) and GET /vuln/summary
 // (open findings by priority). Both are optional: if one fails its block says so and the rest still shows.
 //
@@ -101,7 +104,15 @@
       tone = "attn"; label = "Can't tell";
       line = "Checked " + agoText(m.lastCheck, now) + ". Nothing is wrong that the Worker can see, but it cannot confirm the state either.";
     }
-    return { id: m.id, name: m.name, group: m.group, tone: tone, label: label, line: line, detail: m.status === "up" ? "" : detailText(m.detail), alert: !!m.alert, fix: FIX[m.id] || null };
+    return { id: m.id, name: m.name, group: m.group, tone: tone, label: label, line: line, detail: m.status === "up" ? "" : detailText(m.detail), alert: !!m.alert, fix: FIX[m.id] || null, ack: ackModel(m, now) };
+  }
+
+  // What the Acknowledge control says for a monitor (or a report alert) that is down: null when it is not down or not one that
+  // emails (there are no reminders to stop). { acked, text } where acked is true once acknowledged.
+  function ackModel(m, now) {
+    if (!m || m.status !== "down" || m.alert === false) return null;
+    if (m.ack && m.ack.at) return { acked: true, text: "Acknowledged " + agoText(m.ack.at, now) + (m.ack.via === "push" ? " from the phone" : "") + ": no reminders until it is back up." };
+    return { acked: false, text: "" };
   }
 
   // The strip at the top: { tone, headline, detail }.
@@ -135,6 +146,40 @@
     if (why === "mail_not_configured") return { tone: "attn", text: "No email will be sent: the mail sender is not set up.", hint: "One of the secrets M365_MAIL_TENANT, M365_MAIL_CLIENT_ID or M365_MAIL_CLIENT_SECRET is missing or wrong, or MON_MAIL_FROM is not an email address." };
     if (why === "no_recipients") return { tone: "attn", text: "No email will be sent: nobody is set to receive alerts.", hint: "Add your address under Who is emailed." };
     return { tone: "", text: "Email status is not known.", hint: "" };
+  }
+
+  // The phone push line: { tone, text, hint }. `status.push` is { ready, blocked } and the settings hold push.{enabled, when, types}.
+  function pushStatus(status) {
+    var p = status && status.push, s = status && status.settings && status.settings.push;
+    if (!p || p.ready === false) {
+      var why = p && p.blocked;
+      var set = "Install the ntfy app on your phone, subscribe to a long random topic, then add the Worker secret NTFY_TOPIC with exactly that topic in Cloudflare (Workers, barnyard-live-prices, Settings, Variables and Secrets). Then press Send test push.";
+      if (why === "topic_invalid") return { tone: "attn", text: "Phone alerts are not working: the topic is not valid.", hint: "NTFY_TOPIC must be 16 to 64 letters, digits, dashes or underscores, with no spaces. Make a longer random one, subscribe to it in the app, and update the secret." };
+      if (why === "bad_ntfy_url") return { tone: "attn", text: "Phone alerts are not working: NTFY_URL is not valid.", hint: "It must be an https:// address with nothing after the host name, for example https://ntfy.sh. Remove the secret to use ntfy.sh." };
+      if (why === "token_invalid") return { tone: "attn", text: "Phone alerts are not working: NTFY_TOKEN does not look like a token.", hint: "Paste the access token exactly as ntfy shows it, or remove the secret if the topic is not protected." };
+      return { tone: "", text: "Phone alerts are not set up yet.", hint: set };
+    }
+    if (s && s.enabled === false) return { tone: "", text: "Phone alerts are set up but switched off.", hint: "Tick the box below to use them." };
+    var when = s && s.when === "always"
+      ? "Every alert of the kinds ticked below is pushed as it happens, whatever the hour."
+      : "A push goes only when email cannot carry an outage: outside working hours, or when email is not working.";
+    return { tone: "ok", text: "Phone alerts are set up.", hint: when };
+  }
+
+  // A failed test push or digest, in words.
+  function pushErrorText(r) {
+    var err = r && r.error;
+    if (err === "no_topic") return "The Worker secret NTFY_TOPIC is not set.";
+    if (err === "topic_invalid") return "NTFY_TOPIC is not a valid topic (16 to 64 letters, digits, dashes or underscores).";
+    if (err === "bad_ntfy_url") return "NTFY_URL is not valid: it must be an https:// address with no path.";
+    if (err === "token_invalid") return "NTFY_TOKEN does not look like a token.";
+    if (err === "refused") return "ntfy refused the push. If the topic is protected, check NTFY_TOKEN allows it.";
+    if (err === "rate_limited" && !(r && r.retryMs)) return "ntfy is slowing requests down. Try again in a minute.";
+    if (err === "timeout") return "ntfy did not answer in time. Try again in a minute.";
+    if (err === "unreachable") return "The Worker could not reach ntfy. Check NTFY_URL if you set one.";
+    if (err === "redirected") return "ntfy sent the Worker somewhere else, which it will not follow. Check NTFY_URL.";
+    if (/^http_\d+$/.test(String(err))) return "ntfy answered with an error (" + String(err).slice(5) + ").";
+    return mailErrorText(r);
   }
 
   // A failed test email or send, in words. `r` is the Worker's answer { error, detail?, status?, retryMs? }.
@@ -206,11 +251,12 @@
   // The history list: newest first. result "sent" is good; anything else is a failure word.
   function historyRows(history, tz) {
     return (Array.isArray(history) ? history : []).map(function (h) {
-      var ok = h.result === "sent";
-      return {
-        when: clockText(h.ts, tz), kind: h.kind === "test" ? "Test" : "Alert", subject: h.subject || "", ok: ok,
-        result: ok ? "Sent to " + h.recipients + (h.recipients === 1 ? " address" : " addresses") : "Failed (" + h.result + ")"
-      };
+      var kinds = { test: "Test", "test-push": "Test push", push: "Push", ack: "Acknowledged", digest: "Digest" };
+      var ok = h.result === "sent" || h.kind === "ack";
+      var result = ok ? "Sent to " + h.recipients + (h.recipients === 1 ? " address" : " addresses") : "Failed (" + h.result + ")";
+      if (h.kind === "push" || h.kind === "test-push") result = ok ? "Sent to the phone" : "Failed (" + h.result + ")";
+      if (h.kind === "ack") result = h.result === "push" ? "From the phone" : "From this page";
+      return { when: clockText(h.ts, tz), kind: kinds[h.kind] || "Alert", subject: h.subject || "", ok: ok, result: result };
     });
   }
 
@@ -246,7 +292,15 @@
     ["reporters", "A reporter goes quiet, or the site may have lost power or internet"],
     ["resources", "A disk is nearly full, memory or load is high, or a service stops"],
     ["vulns", "A new critical vulnerability affects something you run, with a monthly reminder while any are still open"],
-    ["calendar", "A daily Calendar reminder: to-dos due or overdue, and renewals 30 days, 7 days and on the day away"]
+    ["calendar", "A daily Calendar reminder: to-dos due or overdue, and renewals 30 days, 7 days and on the day away"],
+    ["digest", "A weekly summary on Monday morning: uptime, incidents, vulnerabilities, renewals, backups and what is waiting on you"]
+  ];
+  // What may be pushed to the phone (settings.push.types in the Worker).
+  var PUSH_TYPES = [
+    ["down", "Something goes down"],
+    ["recovered", "Something comes back up"],
+    ["vulns", "A new critical vulnerability"],
+    ["reminder", "The reminder every 4 hours while something is still down"]
   ];
   var REPORTER_DOCS = "https://github.com/FarmerBarnyard/ClaudeRepo/tree/main/reporter";
 
@@ -323,7 +377,8 @@
     return (Array.isArray(derived) ? derived : []).filter(function (d) { return d.status === "down"; }).map(function (d) {
       return {
         id: d.id, name: d.name, tone: d.grade === "notice" ? "attn" : "alert", label: d.grade === "notice" ? "Notice" : "Alert",
-        text: reasonText(d.detail) + (d.downSince ? " Since " + clockText(d.downSince) + " (" + durationText(now - d.downSince) + ")." : "")
+        text: reasonText(d.detail) + (d.downSince ? " Since " + clockText(d.downSince) + " (" + durationText(now - d.downSince) + ")." : ""),
+        ack: ackModel(d, now)
       };
     });
   }
@@ -344,6 +399,7 @@
     removeRecipient: removeRecipient, hoursBody: hoursBody, historyRows: historyRows, securityRows: securityRows, expiryRows: expiryRows,
     uptimeText: uptimeText, reportLines: reportLines, reporterCards: reporterCards, envLines: envLines, reasonText: reasonText,
     derivedRows: derivedRows, keyErrorText: keyErrorText, SERVERS: SERVERS, ALERT_SWITCHES: ALERT_SWITCHES,
+    ackModel: ackModel, pushStatus: pushStatus, pushErrorText: pushErrorText, PUSH_TYPES: PUSH_TYPES,
     ZONES: ZONES, DAY_NAMES: DAY_NAMES, DAY_ORDER: DAY_ORDER, MAX_RECIPIENTS: MAX_RECIPIENTS
   };
 
@@ -424,7 +480,9 @@
       li.appendChild(top);
       li.appendChild(h("p", "dim", t.line));
       if (t.detail) li.appendChild(h("p", "mo-why", t.detail));
+      if (t.ack && t.ack.acked) li.appendChild(h("p", "mo-note", t.ack.text));
       var foot = h("div", "mo-tile-foot");
+      if (t.ack) foot.appendChild(ackButton(t.id, t.name, t.ack.acked));
       if (t.fix) {
         var a = h("a", "sub", t.fix.text);
         a.href = t.fix.href;
@@ -435,6 +493,15 @@
       grid.appendChild(li);
     });
     return grid;
+  }
+
+  // "Acknowledge" (stop this outage's reminders) or, once acknowledged, "Undo".
+  function ackButton(id, name, acked) {
+    var b = h("button", "btn btn-sm", acked ? "Undo acknowledge" : "Acknowledge");
+    b.type = "button";
+    b.setAttribute("aria-label", (acked ? "Undo the acknowledgement of " : "Acknowledge the outage of ") + name);
+    b.addEventListener("click", function () { acknowledge(id, name, !acked); });
+    return b;
   }
 
   function flash(text, tone) {
@@ -642,6 +709,7 @@
         li.appendChild(h("span", "chip " + r.tone, r.label));
         li.appendChild(h("b", null, r.name));
         li.appendChild(h("span", "dim", r.text));
+        if (r.ack) li.appendChild(ackButton(r.id, r.name, r.ack.acked));
         dl.appendChild(li);
       });
       sec.appendChild(dl);
@@ -752,6 +820,42 @@
     });
     al.appendChild(gl);
 
+    // the phone (ntfy)
+    al.appendChild(h("h3", "mo-sub", "Phone alerts"));
+    var ps = pushStatus(st);
+    var pline = h("div", "mo-email " + ps.tone);
+    pline.appendChild(h("b", null, ps.text));
+    if (ps.hint) pline.appendChild(h("span", "dim", ps.hint));
+    al.appendChild(pline);
+    if (st.lastPush && st.lastPush.ok === false) al.appendChild(h("p", "mo-note", "The last push failed (" + st.lastPush.reason + ") " + agoText(st.lastPush.at, now) + "; it is tried again every 5 minutes."));
+    var pset = (s && s.push) || { enabled: true, when: "fallback", types: {} };
+    var pl = h("ul", "mo-list");
+    pl.setAttribute("role", "list");
+    var onLi = h("li"), onL = h("label", "mo-check"), onC = h("input");
+    onC.type = "checkbox"; onC.checked = pset.enabled !== false;
+    onC.addEventListener("change", function () { saveSettings({ push: { enabled: onC.checked } }, onC.checked ? "Phone alerts are on." : "Phone alerts are off."); });
+    onL.appendChild(onC); onL.appendChild(h("span", null, "Send alerts to my phone"));
+    onLi.appendChild(onL); pl.appendChild(onLi);
+    var whenLi = h("li"), whenL = h("label", "mo-check"), whenC = h("input");
+    whenC.type = "checkbox"; whenC.checked = pset.when === "always";
+    whenC.addEventListener("change", function () { saveSettings({ push: { when: whenC.checked ? "always" : "fallback" } }, whenC.checked ? "Every alert will also go to your phone." : "Your phone is used only when email cannot carry an outage."); });
+    whenL.appendChild(whenC); whenL.appendChild(h("span", null, "Also push alerts that email carries (otherwise only outages email cannot carry, such as at night)"));
+    whenLi.appendChild(whenL); pl.appendChild(whenLi);
+    PUSH_TYPES.forEach(function (g) {
+      var li = h("li"), l = h("label", "mo-check"), c = h("input");
+      c.type = "checkbox"; c.checked = !!(pset.types && pset.types[g[0]]);
+      c.addEventListener("change", function () { var body = { push: { types: {} } }; body.push.types[g[0]] = c.checked; saveSettings(body, c.checked ? "That will be pushed." : "That will not be pushed."); });
+      l.appendChild(c); l.appendChild(h("span", null, g[1]));
+      li.appendChild(l); pl.appendChild(li);
+    });
+    al.appendChild(pl);
+    var prow = h("div", "mo-row");
+    var tp = h("button", "btn btn-sm", "Send test push");
+    tp.type = "button"; tp.id = "mon-test-push";
+    tp.addEventListener("click", sendTestPush);
+    prow.appendChild(tp);
+    al.appendChild(prow);
+
     // per-monitor switches
     al.appendChild(h("h3", "mo-sub", "Email me when this goes down"));
     var ml = h("ul", "mo-list");
@@ -776,6 +880,10 @@
     test.type = "button"; test.id = "mon-test";
     test.addEventListener("click", sendTest);
     tools.appendChild(test);
+    var td = h("button", "btn btn-sm", "Send this week's digest now");
+    td.type = "button"; td.id = "mon-test-digest";
+    td.addEventListener("click", sendTestDigest);
+    tools.appendChild(td);
     al.appendChild(tools);
 
     al.appendChild(h("h3", "mo-sub", "What was sent"));
@@ -801,7 +909,7 @@
 
   function setBusy(on) {
     model.busy = on;
-    ["mon-check", "mon-test", "mon-refresh"].forEach(function (id) { var b = $(id); if (b) b.disabled = on; });
+    ["mon-check", "mon-test", "mon-test-push", "mon-test-digest", "mon-refresh"].forEach(function (id) { var b = $(id); if (b) b.disabled = on; });
   }
 
   function send(method, path, body) {
@@ -854,6 +962,42 @@
       if (r.status === 200 && r.body && r.body.ok) { flash("Test email sent to " + r.body.sent + (r.body.sent === 1 ? " address." : " addresses.") + " It should arrive within a minute.", "ok"); load(); return; }
       flash(mailErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
       load();
+    });
+  }
+
+  function sendTestPush() {
+    if (model.busy) return;
+    setBusy(true);
+    send("POST", "/test-push").then(function (r) {
+      setBusy(false);
+      if (r.status === 200 && r.body && r.body.ok) { flash("Test push sent. It should reach your phone within a few seconds.", "ok"); load(); return; }
+      flash(pushErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
+      load();
+    });
+  }
+
+  function sendTestDigest() {
+    if (model.busy) return;
+    setBusy(true);
+    send("POST", "/test-digest").then(function (r) {
+      setBusy(false);
+      if (r.status === 200 && r.body && r.body.ok) { flash("This week's digest was sent to " + r.body.sent + (r.body.sent === 1 ? " address." : " addresses.") + " It should arrive within a minute.", "ok"); load(); return; }
+      flash(mailErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
+      load();
+    });
+  }
+
+  // Acknowledge an outage (stop its reminders until it is back up), or take that back.
+  function acknowledge(id, name, on) {
+    if (model.busy) return;
+    setBusy(true);
+    var body = { monitor: id };
+    if (!on) body.undo = true;
+    send("POST", "/acknowledge", body).then(function (r) {
+      setBusy(false);
+      if (r.status === 200 && r.body && r.body.ok) { model.mon = r.body; render(); flash(on ? "Acknowledged. No more reminders about " + name + " until it is back up." : "Reminders about " + name + " are back on.", "ok"); }
+      else if (r.body && (r.body.error === "not_down")) { flash(name + " is not down any more.", ""); load(); }
+      else flash(mailErrorText(r.body && r.body.error ? r.body : { error: r.status ? "failed" : "offline" }), "alert");
     });
   }
 
