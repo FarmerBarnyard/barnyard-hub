@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Reports &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=870e98a5">
+<link rel="stylesheet" href="reports.css?v=7360f3f5">
+<script src="themes.js?v=e151fb94"></script>
+</head>
+<body data-shell="reports" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Reports</h1>
+      <p>The monthly IT report for the committee, built from Monitoring, vulnerabilities, backups, renewals, assets, changes and the Knowledgebase. Edit any sentence, then download it or have it emailed to you.</p>
+    </div>
+    <div class="rp-tools">
+      <label class="rp-month">Month <select id="rp-month" aria-label="Month"></select></label>
+      <button type="button" class="btn btn-sm btn-quiet" id="rp-refresh">Refresh</button>
+      <span class="dim" id="rp-stamp"></span>
+    </div>
+  </div>
+  <div id="rp-root" aria-live="polite">
+    <p class="dim">Loading&hellip;</p>
+  </div>
+</main>
+
+<script src="shell.js?v=d8a283b4"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="reports.js?v=f80ecf66"></script>
+</body>
+</html>
