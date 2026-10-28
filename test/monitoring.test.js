@@ -216,11 +216,77 @@ test("the page never keeps the key: it is built into a read-only box, not stored
   assert.ok(/delete r\.body\.key/.test(js), "the status copy kept in the page drops the key");
 });
 
-test("the alert switches are the four the Worker knows, each with words, in the order shown", function () {
-  assert.deepStrictEqual(Mon.ALERT_SWITCHES.map(function (a) { return a[0]; }), ["reporters", "resources", "vulns", "calendar"]);
+test("the alert switches are the five the Worker knows, each with words, in the order shown", function () {
+  assert.deepStrictEqual(Mon.ALERT_SWITCHES.map(function (a) { return a[0]; }), ["reporters", "resources", "vulns", "calendar", "digest"]);
   Mon.ALERT_SWITCHES.forEach(function (a) { assert.ok(a[1].length > 20, a[0]); });
   assert.ok(/critical vulnerability/.test(Mon.ALERT_SWITCHES[2][1]));
   assert.ok(/Calendar reminder/.test(Mon.ALERT_SWITCHES[3][1]));
+  assert.ok(/weekly summary/.test(Mon.ALERT_SWITCHES[4][1]));
+});
+
+test("the phone line says whether pushes can go, and what is missing, in words", function () {
+  var on = { push: { ready: true, blocked: null }, settings: { push: { enabled: true, when: "fallback", types: {} } } };
+  var ok = Mon.pushStatus(on);
+  assert.strictEqual(ok.tone, "ok"); assert.ok(/set up/.test(ok.text)); assert.ok(/only when email cannot carry an outage/.test(ok.hint));
+  assert.ok(/whatever the hour/.test(Mon.pushStatus({ push: { ready: true }, settings: { push: { enabled: true, when: "always" } } }).hint));
+  assert.ok(/switched off/.test(Mon.pushStatus({ push: { ready: true }, settings: { push: { enabled: false, when: "fallback" } } }).text));
+  var none = Mon.pushStatus({ push: { ready: false, blocked: "no_topic" }, settings: { push: {} } });
+  assert.strictEqual(none.tone, ""); assert.ok(/NTFY_TOPIC/.test(none.hint)); assert.ok(/ntfy app/.test(none.hint));
+  assert.ok(/not valid/.test(Mon.pushStatus({ push: { ready: false, blocked: "topic_invalid" } }).text));
+  assert.ok(/NTFY_URL/.test(Mon.pushStatus({ push: { ready: false, blocked: "bad_ntfy_url" } }).text));
+  assert.ok(/NTFY_TOKEN/.test(Mon.pushStatus({ push: { ready: false, blocked: "token_invalid" } }).text));
+  assert.strictEqual(Mon.pushStatus(null).tone, "", "an older Worker that says nothing about push reads as not set up");
+});
+
+test("a failed test push says what to check, never repeating a secret", function () {
+  var t = Mon.pushErrorText;
+  assert.ok(/NTFY_TOPIC is not set/.test(t({ error: "no_topic" })));
+  assert.ok(/NTFY_TOKEN allows it/.test(t({ error: "refused" })));
+  assert.ok(/did not answer in time/.test(t({ error: "timeout" })));
+  assert.ok(/could not reach ntfy/.test(t({ error: "unreachable" })));
+  assert.ok(/will not follow/.test(t({ error: "redirected" })));
+  assert.ok(/error \(500\)/.test(t({ error: "http_500" })));
+  assert.ok(/slowing requests down/.test(t({ error: "rate_limited" })));
+  assert.ok(/wait 30 seconds/.test(t({ error: "rate_limited", retryMs: 29100 })), "the page's own once-a-minute limit reads as before");
+  assert.ok(/Sign in again/i.test(t({ error: "recent_sign_in_required" })));
+  assert.ok(Mon.PUSH_TYPES.map(function (p) { return p[0]; }).join() === "down,recovered,vulns,reminder");
+});
+
+test("an outage can be acknowledged only while it is down and emails; an acknowledged one says so and can be undone", function () {
+  assert.strictEqual(Mon.ackModel({ status: "up", alert: true }, NOW), null);
+  assert.strictEqual(Mon.ackModel({ status: "unknown", alert: true }, NOW), null);
+  assert.strictEqual(Mon.ackModel({ status: "down", alert: false }, NOW), null, "a quiet site has no reminders to stop");
+  assert.deepStrictEqual(Mon.ackModel({ status: "down", alert: true, ack: null }, NOW), { acked: false, text: "" });
+  var a = Mon.ackModel({ status: "down", alert: true, ack: { at: NOW - 5 * MIN, via: "push" } }, NOW);
+  assert.strictEqual(a.acked, true); assert.ok(/Acknowledged 5 min ago from the phone: no reminders until it is back up/.test(a.text));
+  assert.ok(/Acknowledged 5 min ago:/.test(Mon.ackModel({ status: "down", alert: true, ack: { at: NOW - 5 * MIN, via: "hub" } }, NOW).text));
+  var tile = Mon.tileModel(mon({ status: "down", downSince: NOW - 25 * MIN, ack: { at: NOW - MIN, via: "hub" } }), NOW);
+  assert.strictEqual(tile.ack.acked, true);
+  assert.strictEqual(Mon.tileModel(mon(), NOW).ack, null);
+  var rows = Mon.derivedRows([{ id: "res-app02", name: "app02 disk or service", status: "down", grade: "outage", alert: true, detail: "", downSince: NOW - 10 * MIN, ack: null }, { id: "warn-app02", name: "app02 getting full", status: "down", grade: "notice", alert: true, detail: "", downSince: NOW - 10 * MIN }], NOW);
+  assert.deepStrictEqual(rows.map(function (r) { return r.ack && r.ack.acked; }), [false, false]);
+});
+
+test("the history names pushes, acknowledgements and digests, and an acknowledgement is not a failure", function () {
+  var rows = Mon.historyRows([
+    { ts: NOW, kind: "push", subject: "app02 is down", recipients: 0, result: "sent" },
+    { ts: NOW, kind: "test-push", subject: "Barnyard monitor: test push", recipients: 0, result: "refused" },
+    { ts: NOW, kind: "ack", subject: "Acknowledged: app02", recipients: 0, result: "push" },
+    { ts: NOW, kind: "ack", subject: "Acknowledged: vtt", recipients: 0, result: "hub" },
+    { ts: NOW, kind: "digest", subject: "Barnyard weekly digest: no incidents", recipients: 1, result: "sent" }
+  ], "Australia/Perth");
+  assert.deepStrictEqual(rows.map(function (r) { return r.kind; }), ["Push", "Test push", "Acknowledged", "Acknowledged", "Digest"]);
+  assert.deepStrictEqual(rows.map(function (r) { return r.ok; }), [true, false, true, true, true]);
+  assert.strictEqual(rows[0].result, "Sent to the phone"); assert.strictEqual(rows[1].result, "Failed (refused)");
+  assert.strictEqual(rows[2].result, "From the phone"); assert.strictEqual(rows[3].result, "From this page");
+  assert.strictEqual(rows[4].result, "Sent to 1 address");
+});
+
+test("the page posts the new routes and never keeps a topic", function () {
+  var js = fs.readFileSync(path.join(root, "monitoring.js"), "utf8");
+  ["/test-push", "/test-digest", "/acknowledge"].forEach(function (p) { assert.ok(js.indexOf('"' + p + '"') > -1, p); });
+  assert.ok(!/NTFY_TOPIC\s*=/.test(js) && !/topic\s*:/.test(js), "the page never asks for or stores the topic");
+  assert.ok(!/innerHTML/.test(js.replace(/\/\/.*$/gm, "")), "server text still reaches the page only through textContent");
 });
 
 console.log("\n" + passed + " tests passed");

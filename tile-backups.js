@@ -172,7 +172,7 @@
     }
 
     function load() {
-      return K.call("GET", "/reg/summary").then(function (r) {
+      return K.summary().then(function (r) {
         if (r.status === 200) { state.summary = r.body; paint(); return; }
         K.loadFailure(body, r, load);
       });
