@@ -3,7 +3,7 @@
 //
 // It is plain and explainable, not a black box. Given the open to-dos (with estimates, deadlines and priorities), the owner's events and
 // Google Calendar, the blocks already accepted, and the owner's working hours, it proposes where each to-do's time goes:
-//   * earliest deadline first, with a priority nudge (a high-priority to-do counts as due 3 days sooner, a low one 3 days later);
+//   * earliest deadline first, with a priority nudge (a high-priority to-do counts as due 2 days sooner, a low one 2 days later);
 //     a to-do with no date goes after the dated ones;
 //   * only inside working hours and outside lunch, never over an event or Google Calendar entry, never moving anything;
 //   * a focus block is at most `focusMin` long, then a break; every block leaves `bufferMin` of space; a day never takes more than `loadMin`;
@@ -25,7 +25,7 @@
   };
   var STEP = 5;          // minutes: blocks start and end on multiples of this
   var MIN_BLOCK = 15;    // the shortest slice of a to-do worth scheduling on its own
-  var PRIORITY_DAYS = { high: -3, normal: 0, low: 3 };
+  var PRIORITY_DAYS = { high: -2, normal: 0, low: 2 };
 
   // ---- small helpers -----------------------------------------------------------------------------------------------
 
@@ -208,10 +208,14 @@
       if (left < MIN_BLOCK && (covered[t.id] || 0) > 0) return;     // already planned
       if (left <= 0) return;
       var dueDays = t.due ? L.daysBetween(today, t.due) : null;
-      work.push({ task: t, left: ceilStep(Math.max(left, STEP)), need: n, key: (dueDays === null ? 60 : dueDays) + (PRIORITY_DAYS[t.priority] || 0), dueDays: dueDays });
+      // an overdue to-do outranks everything that is not (the longer overdue, the sooner); the rest are ordered by deadline plus the priority nudge
+      var key = dueDays !== null && dueDays < 0 ? -1000 + dueDays : (dueDays === null ? 60 : dueDays) + (PRIORITY_DAYS[t.priority] || 0);
+      work.push({ task: t, left: ceilStep(Math.max(left, STEP)), need: n, key: key, dueDays: dueDays });
     });
     work.sort(function (a, b) {
       if (a.key !== b.key) return a.key - b.key;
+      var da = a.dueDays === null ? 9999 : a.dueDays, db = b.dueDays === null ? 9999 : b.dueDays;
+      if (da !== db) return da - db;                                // the same standing: the sooner real deadline first
       var fa = a.task.focus === "focus" ? 0 : a.task.focus === "quick" ? 2 : 1, fb = b.task.focus === "focus" ? 0 : b.task.focus === "quick" ? 2 : 1;
       if (fa !== fb) return fa - fb;
       if (a.left !== b.left) return b.left - a.left;

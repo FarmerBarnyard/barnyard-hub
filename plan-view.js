@@ -218,6 +218,8 @@
       if (!isFinite(hrs) || hrs <= 0) { f.fail({ error: MESSAGES.loadMin_invalid, field: "loadHours" }); return; }
       out.loadMin = Math.round(hrs * 60);
       if (!out.days.length) { f.fail({ error: MESSAGES.days_invalid, field: "workStart" }); return; }
+      if (!ctx.L.isTime(out.workStart) || !ctx.L.isTime(out.workEnd) || out.workEnd <= out.workStart) { f.fail({ error: MESSAGES.work_hours_invalid, field: "workEnd" }); return; }
+      if (!out.lunchStart !== !out.lunchEnd || (out.lunchStart && (out.lunchEnd <= out.lunchStart || out.lunchStart < out.workStart || out.lunchEnd > out.workEnd))) { f.fail({ error: MESSAGES.lunch_invalid, field: "lunchEnd" }); return; }
       save.disabled = true;
       ctx.post("/settings", out).then(function (r) {
         ctx.model.plan.settings = r.settings; ctx.closeDrawer(); ctx.render(); ctx.toast("Plan settings saved.");
@@ -314,8 +316,8 @@
     var t = ctx.today();
     var card = ctx.h("section", "plan-day");
     var head = ctx.h("div", "plan-day-head");
-    var label = day.date === t ? "Today" : day.date === ctx.L.addDays(t, 1) ? "Tomorrow" : ctx.L.longDate(day.date).split(" ")[0];
-    head.appendChild(ctx.h("h3", null, label + " · " + ctx.L.shortDate(day.date)));
+    var near = day.date === t ? "Today" : day.date === ctx.L.addDays(t, 1) ? "Tomorrow" : "";
+    head.appendChild(ctx.h("h3", null, (near ? near + " · " : "") + ctx.L.shortDate(day.date)));
     if (day.working) {
       var meter = ctx.h("span", "plan-meter" + (day.full ? " full" : ""));
       meter.setAttribute("role", "img");
@@ -501,7 +503,9 @@
     }
     scopeDays.forEach(function (d, i) { wrap.appendChild(dayCard(ctx, d, result, i === 0)); });
 
-    var showReview = state.mode === "today" && (state.review || (scopeDays[0] && scopeDays[0].date === t && E.toMin(S.workEnd) !== null && nowMin() >= E.toMin(S.workEnd) - 30));
+    // the review appears by itself in the last half hour of the working day and after it (even when the plan on show is already tomorrow's)
+    var endMin = E.toMin(S.workEnd);
+    var showReview = state.mode === "today" && (state.review || (S.days.indexOf(ctx.L.weekday(t)) >= 0 && endMin !== null && nowMin() >= endMin - 30));
     if (showReview) wrap.appendChild(reviewBox(ctx, t));
 
     var foot = ctx.h("p", "plan-foot dim");

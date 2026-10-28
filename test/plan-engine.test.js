@@ -41,16 +41,16 @@ test("a to-do with no estimate is planned at the default length; time already wo
   assert.strictEqual(placed(p, c.id)[0].minutes, 15);
 });
 
-test("earliest deadline first, and a priority nudge of three days", function () {
+test("earliest deadline first, and a priority nudge of two days", function () {
   var late = task({ title: "late", estimate: 60, due: FRI }), soon = task({ title: "soon", estimate: 60, due: TUE });
   var p = plan({ tasks: [late, soon] });
   assert.ok(placed(p, soon.id)[0].start < placed(p, late.id)[0].start, "the sooner deadline is first");
-  var hi = task({ title: "hi", estimate: 60, due: THU, priority: "high" }), nor = task({ title: "nor", estimate: 60, due: TUE });
+  var hi = task({ title: "hi", estimate: 60, due: WED, priority: "high" }), nor = task({ title: "nor", estimate: 60, due: TUE });
   var q = plan({ tasks: [nor, hi] });
-  assert.ok(placed(q, hi.id)[0].start < placed(q, nor.id)[0].start, "high priority due Thursday counts as due Monday");
-  var lo = task({ estimate: 60, due: TUE, priority: "low" }), nor2 = task({ estimate: 60, due: THU });
+  assert.ok(placed(q, hi.id)[0].start < placed(q, nor.id)[0].start, "high priority due Wednesday counts as due Monday, ahead of a normal one due Tuesday");
+  var lo = task({ estimate: 60, due: TUE, priority: "low" }), nor2 = task({ estimate: 60, due: WED });
   var r = plan({ tasks: [lo, nor2] });
-  assert.ok(placed(r, nor2.id)[0].start < placed(r, lo.id)[0].start, "low priority due Tuesday counts as due Friday");
+  assert.ok(placed(r, nor2.id)[0].start < placed(r, lo.id)[0].start, "low priority due Tuesday counts as due Thursday, behind a normal one due Wednesday");
   var inbox = task({ estimate: 60, due: "" }), dated = task({ estimate: 60, due: FRI });
   var s = plan({ tasks: [inbox, dated] });
   assert.ok(placed(s, dated.id)[0].start < placed(s, inbox.id)[0].start, "to-dos with no date go after dated ones");
@@ -62,6 +62,9 @@ test("an overdue to-do goes in first, today, and is not called late", function (
   assert.strictEqual(placed(p, od.id)[0].date, MON);
   assert.strictEqual(placed(p, od.id)[0].start, m("08:00"));
   assert.deepStrictEqual(p.late, []);
+  var hi = task({ estimate: 30, due: MON, priority: "high" }), older = task({ estimate: 30, due: "2026-10-22" }), od2 = task({ estimate: 30, due: "2026-10-24" });
+  var q = plan({ tasks: [hi, od2, older] });
+  assert.deepStrictEqual([older, od2, hi].map(function (x) { return placed(q, x.id)[0].start; }).slice().sort(function (a, b) { return a - b; }), [older, od2, hi].map(function (x) { return placed(q, x.id)[0].start; }), "the longest overdue first, then the other overdue one, then the high-priority one due today");
 });
 
 test("events and Google Calendar entries are never overlapped, and leave the buffer around them", function () {
