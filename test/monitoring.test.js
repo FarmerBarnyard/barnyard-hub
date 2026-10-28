@@ -468,4 +468,54 @@ test("the page is two tabs with proper roles, and its source holds to the reques
   assert.ok(/EXTRAS_MS/.test(js) && /INCIDENTS_MS/.test(js), "the optional reads are rate-limited by age");
 });
 
+// ---- ntfy health, the test push's retry message, and services missing from a report -----------------------------------
+
+test("ntfy health reads as 'last OK' when fine, warns when failing, and says nothing when there is nothing to say", function () {
+  var tz = "Australia/Perth";
+  assert.strictEqual(Mon.pushHealthLine(null, tz, NOW), null, "null before the first push");
+  assert.strictEqual(Mon.pushHealthLine(undefined, tz, NOW), null, "absent while the Worker is older than the page");
+  assert.strictEqual(Mon.pushHealthLine({ lastOkAt: null, lastFailAt: null, failures: 0, failing: false }, tz, NOW), null);
+  var ok = Mon.pushHealthLine({ lastOkAt: NOW - 5 * MIN, lastFailAt: null, lastFailReason: null, failures: 0, failing: false }, tz, NOW);
+  assert.strictEqual(ok.tone, "ok"); assert.strictEqual(ok.failing, false);
+  assert.ok(/^ntfy: last OK \w{3} \d{1,2} \w{3} 13:55 \(5 min ago\)\.$/.test(ok.text), ok.text);
+  var bad = Mon.pushHealthLine({ lastOkAt: NOW - 3 * 3600e3, lastFailAt: NOW - MIN, lastFailReason: "unreachable", failures: 4, failing: true }, tz, NOW);
+  assert.strictEqual(bad.tone, "attn"); assert.strictEqual(bad.failing, true);
+  assert.ok(/ntfy is failing: last OK .*; 4 pushes in a row did not go through\./.test(bad.text), bad.text);
+  assert.ok(/could not reach ntfy/.test(bad.hint));
+  var one = Mon.pushHealthLine({ lastOkAt: null, lastFailAt: NOW, lastFailReason: "weird_code", failures: 1, failing: true }, tz, NOW);
+  assert.ok(/no push has gone through yet; 1 push in a row did not go through/.test(one.text));
+  assert.ok(/recorded: weird_code/.test(one.hint), "an unknown code is shown as a code, not as advice");
+  var safe = Mon.pushHealthLine({ lastOkAt: NOW, failing: true, failures: 2, lastFailReason: "<script>x</script>" }, tz, NOW);
+  assert.strictEqual(safe.hint, "", "a reason with odd characters is dropped");
+  assert.ok(!/@/.test(JSON.stringify([ok, bad, one])), "no address anywhere");
+});
+
+test("a rate-limited test push shows the Worker's sentence, or one built from retryAfter", function () {
+  assert.strictEqual(Mon.pushErrorText({ error: "rate_limited", retryAfter: 40, message: "ntfy is slowing requests down. Try again in 40 seconds." }), "ntfy is slowing requests down. Try again in 40 seconds.");
+  assert.strictEqual(Mon.pushErrorText({ error: "rate_limited", retryAfter: 12 }), "ntfy is slowing requests down. Try again in 12 seconds.");
+  assert.strictEqual(Mon.pushErrorText({ error: "rate_limited", retryAfter: 0 }), "ntfy is slowing requests down. Try again in 1 second.");
+  assert.strictEqual(Mon.pushErrorText({ error: "rate_limited", retryAfter: 9, message: new Array(300).join("x") }), "ntfy is slowing requests down. Try again in 9 seconds.", "a very long message is not shown");
+  assert.ok(/Too soon: wait 30 seconds/.test(Mon.pushErrorText({ error: "rate_limited", retryMs: 30000 })), "the Worker's own once-a-minute limit still reads as before");
+  assert.ok(/Try again in a minute/.test(Mon.pushErrorText({ error: "rate_limited" })), "an older Worker's answer still reads");
+});
+
+test("a service missing from a report is unknown, not down", function () {
+  var report = { services: [{ name: "cloudflared", up: true }, { name: "docker", up: false }] };
+  assert.deepStrictEqual(Mon.serviceStates(report, []), [{ name: "cloudflared", state: "up" }, { name: "docker", state: "down" }]);
+  var missing = Mon.serviceStates({ services: [{ name: "cloudflared", up: true }] }, ["cloudflared", "docker"]);
+  assert.deepStrictEqual(missing, [{ name: "cloudflared", state: "up" }, { name: "docker", state: "unknown" }]);
+  assert.deepStrictEqual(Mon.serviceStates({ services: [{ name: "x" }] }, []), [{ name: "x", state: "unknown" }], "no up flag is unknown too");
+  assert.deepStrictEqual(Mon.serviceStates(null, ["docker"]), [{ name: "docker", state: "unknown" }], "no report at all leaves each known service unknown");
+  assert.deepStrictEqual(Mon.serviceStates(null, []), []);
+  var brief = Mon.reporterBrief(Mon.reporterCards([rp()], NOW)[0], { services: [{ name: "cloudflared", up: true }] }, ["cloudflared", "ollama"]);
+  assert.deepStrictEqual(brief.services.map(function (s) { return s.name + ":" + s.state; }), ["cloudflared:up", "ollama:unknown"]);
+  assert.strictEqual(Mon.reporterBrief(Mon.reporterCards([rp()], NOW)[0], rp().report).services.length, 2, "known services are optional");
+});
+
+test("the page shows the push health and remembers services without storing anything", function () {
+  var js = fs.readFileSync(path.join(root, "monitoring.js"), "utf8").replace(/\/\/.*$/gm, "");
+  assert.ok(/st\.pushHealth/.test(js), "the Phone alerts block and the Dashboard read pushHealth");
+  assert.ok(/rememberServices/.test(js) && !/localStorage|sessionStorage/.test(js), "known services live in memory only");
+});
+
 console.log("\n" + passed + " tests passed");

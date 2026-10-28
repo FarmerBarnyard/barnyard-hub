@@ -106,6 +106,9 @@
 .mo-bar.alert .mo-bar-fill { background: var(--alert); }
 .mo-bar-n { text-align: right; font: 12px var(--font-mono); color: var(--fg-dim); font-variant-numeric: tabular-nums; }
 
+.mo-svcs { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.mo-svcs .chip { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+
 /* lists and forms (shared by both tabs) */
 .mo-list { list-style: none; margin: 0; padding: 0; }
 .mo-list li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; }

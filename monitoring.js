@@ -186,12 +186,32 @@
     if (err === "bad_ntfy_url") return "NTFY_URL is not valid: it must be an https:// address with no path.";
     if (err === "token_invalid") return "NTFY_TOKEN does not look like a token.";
     if (err === "refused") return "ntfy refused the push. If the topic is protected, check NTFY_TOKEN allows it.";
+    if (err === "rate_limited" && r && Number.isFinite(r.retryAfter) && r.retryAfter >= 0) {
+      // ntfy's own limit: the Worker says how long and gives a plain sentence; use its sentence when it is a short one
+      return typeof r.message === "string" && r.message.length > 0 && r.message.length <= 200 ? r.message : "ntfy is slowing requests down. Try again in " + Math.max(1, Math.round(r.retryAfter)) + (Math.max(1, Math.round(r.retryAfter)) === 1 ? " second." : " seconds.");
+    }
     if (err === "rate_limited" && !(r && r.retryMs)) return "ntfy is slowing requests down. Try again in a minute.";
     if (err === "timeout") return "ntfy did not answer in time. Try again in a minute.";
     if (err === "unreachable") return "The Worker could not reach ntfy. Check NTFY_URL if you set one.";
     if (err === "redirected") return "ntfy sent the Worker somewhere else, which it will not follow. Check NTFY_URL.";
     if (/^http_\d+$/.test(String(err))) return "ntfy answered with an error (" + String(err).slice(5) + ").";
     return mailErrorText(r);
+  }
+
+  // How ntfy has been doing, from the status's pushHealth { lastOkAt, lastFailAt, lastFailReason, failures, failing } (null until
+  // the first push, and absent while the Worker is older than this page): { tone, text, hint, failing } or null.
+  function pushHealthLine(ph, tz, now) {
+    if (!ph || typeof ph !== "object") return null;
+    var ok = ph.lastOkAt ? "last OK " + clockText(ph.lastOkAt, tz) + " (" + agoText(ph.lastOkAt, now) + ")" : "no push has gone through yet";
+    if (ph.failing) {
+      var reason = typeof ph.lastFailReason === "string" && /^[A-Za-z0-9_]{1,40}$/.test(ph.lastFailReason) ? ph.lastFailReason : "";
+      var why = reason ? pushErrorText({ error: reason }) : "";
+      if (/^That did not work/.test(why)) why = "The reason the Worker recorded: " + reason + ".";
+      var n = Number(ph.failures) || 0;
+      return { tone: "attn", failing: true, text: "ntfy is failing: " + ok + (n ? "; " + n + (n === 1 ? " push" : " pushes") + " in a row did not go through" : "") + ".", hint: why };
+    }
+    if (!ph.lastOkAt && !ph.lastFailAt) return null;
+    return { tone: ph.lastOkAt ? "ok" : "", failing: false, text: "ntfy: " + ok + ".", hint: "" };
   }
 
   // A failed test email or send, in words. `r` is the Worker's answer { error, detail?, status?, retryMs? }.
@@ -562,11 +582,25 @@
   }
 
   // A server's reporter as a compact row for the dashboard: { name, tone, label, line, bars: [{ label, pct, tone }], stale }.
-  function reporterBrief(card, report) {
+  function reporterBrief(card, report, known) {
     var bars = [];
     if (report && report.mem && Number.isFinite(report.mem.usedPct)) bars.push({ label: "Memory", pct: Math.round(report.mem.usedPct), tone: barTone(report.mem.usedPct) });
     (report && report.disks || []).slice(0, 2).forEach(function (d) { if (Number.isFinite(d.usedPct)) bars.push({ label: "Disk " + d.mount, pct: Math.round(d.usedPct), tone: barTone(d.usedPct) }); });
-    return { id: card.id, name: card.name, tone: card.tone, label: card.label, line: card.line, bars: bars, stale: card.label === "Silent" || card.label === "Key expired" };
+    return { id: card.id, name: card.name, tone: card.tone, label: card.label, line: card.line, bars: bars, services: serviceStates(report, known), stale: card.label === "Silent" || card.label === "Key expired" };
+  }
+
+  // A server's services as { name, state: "up" | "down" | "unknown" }. A service the report names is up or down. One the page has
+  // seen in an earlier report from this server but that this one leaves out is "unknown": a reporter leaves out a service whose
+  // check itself failed, which is not the same as the service being down.
+  function serviceStates(report, known) {
+    var out = [], seen = {};
+    ((report && report.services) || []).forEach(function (s) {
+      if (!s || typeof s.name !== "string") return;
+      seen[s.name] = true;
+      out.push({ name: s.name, state: s.up === true ? "up" : s.up === false ? "down" : "unknown" });
+    });
+    (Array.isArray(known) ? known : []).forEach(function (name) { if (!seen[name]) out.push({ name: name, state: "unknown" }); });
+    return out;
   }
   function barTone(p) { return p >= 95 ? "alert" : p >= 85 ? "attn" : "ok"; }
 
@@ -642,7 +676,7 @@
     TABS: TABS, TREND_DAYS: TREND_DAYS, STATUS_MS: STATUS_MS, EXTRAS_MS: EXTRAS_MS, INCIDENTS_MS: INCIDENTS_MS, CHECK_GAP_MS: CHECK_GAP_MS, MIN_REFRESH_MS: MIN_REFRESH_MS,
     tabFromHash: tabFromHash, hashForTab: hashForTab, nextTab: nextTab, counts: counts, overallState: overallState, uptimePct: uptimePct, pctText: pctText,
     sparkModel: sparkModel, sparkLabel: sparkLabel, cardModel: cardModel, groupCards: groupCards, incidentsChip: incidentsChip, timelineRows: timelineRows,
-    reporterBrief: reporterBrief, bestReports: bestReports, parseRetryAfter: parseRetryAfter, backoffMs: backoffMs, busyText: busyText, pollDue: pollDue,
+    reporterBrief: reporterBrief, bestReports: bestReports, serviceStates: serviceStates, pushHealthLine: pushHealthLine, parseRetryAfter: parseRetryAfter, backoffMs: backoffMs, busyText: busyText, pollDue: pollDue,
     nextPollIn: nextPollIn, extraDue: extraDue, checkWait: checkWait, checkLabel: checkLabel, settingsNeedsRead: settingsNeedsRead
   };
 
@@ -659,7 +693,8 @@
   // fetchedAt / hubAt / incAt: when each read last finished. attempt / backoffUntil: the backing-off after a busy answer.
   var model = {
     state: "loading", mon: null, hub: null, vuln: null, inc: null, tab: "dashboard", flash: null, busy: false, newKey: null,
-    fetchedAt: 0, hubAt: 0, incAt: 0, inflight: false, attempt: 0, backoffUntil: 0, note: "", checkUntil: 0, lastRefreshAt: 0, stale: false
+    fetchedAt: 0, hubAt: 0, incAt: 0, inflight: false, attempt: 0, backoffUntil: 0, note: "", checkUntil: 0, lastRefreshAt: 0, stale: false,
+    known: {}          // server id -> { service name: true } for every service a report from it has named, so one that goes missing reads as unknown
   };
   var pollTimer = null, checkTimer = null;
 
@@ -709,6 +744,7 @@
     if (r.status === 403) { model.state = "forbidden"; return false; }
     if (r.status === 200 && r.body && typeof r.body === "object") {
       model.mon = r.body; model.fetchedAt = now; model.attempt = 0; model.backoffUntil = 0; model.note = ""; model.stale = false; model.state = "ok";
+      rememberServices(r.body.reporters);
       return true;
     }
     // busy (429), unreachable (0, which is also what a Cloudflare rate-limit answer looks like) or a server error
@@ -719,6 +755,16 @@
     if (!model.mon) model.state = "error";
     else model.state = "ok";
     return false;
+  }
+
+  function rememberServices(reporters) {
+    (Array.isArray(reporters) ? reporters : []).forEach(function (r) {
+      var list = r && r.report && Array.isArray(r.report.services) ? r.report.services : [];
+      list.forEach(function (s) {
+        if (!s || typeof s.name !== "string" || !/^[A-Za-z0-9_.@:-]{1,60}$/.test(s.name)) return;
+        (model.known[r.server] = model.known[r.server] || {})[s.name] = true;
+      });
+    });
   }
 
   // The security block (vulnerabilities, what is about to expire) and the open-incident count: decoration, so each is read
@@ -977,6 +1023,15 @@
     if (st.pending) root.appendChild(h("p", "mo-note", st.pending + (st.pending === 1 ? " alert is" : " alerts are") + " waiting to be sent" + (st.inHours ? "." : " until working hours start.")));
     if (st.lastSend && st.lastSend.ok === false) root.appendChild(h("p", "mo-note", "The last send failed (" + st.lastSend.reason + ") " + agoText(st.lastSend.at, now) + "; it is tried again every 5 minutes."));
     if (ps.tone === "attn") root.appendChild(h("p", "mo-note", ps.text));
+    var phl = pushHealthLine(st.pushHealth, tz, now);
+    if (phl && phl.failing) {
+      var pw = h("p", "mo-setup");
+      pw.appendChild(h("b", null, phl.text + " "));
+      var pg = h("a", null, "Open Settings");
+      pg.href = "#settings";
+      pw.appendChild(pg);
+      root.appendChild(pw);
+    }
 
     // the monitors, grouped
     groupCards(st.monitors, now, st.trend).forEach(function (g) {
@@ -1020,7 +1075,7 @@
     var reports = bestReports(st.reporters);
     var ul = list("mo-rep");
     reporterCards(st.reporters, now).forEach(function (card) {
-      var b = reporterBrief(card, reports[card.id] || null);
+      var b = reporterBrief(card, reports[card.id] || null, Object.keys(model.known[card.id] || {}));
       var li = h("li", "mo-rep-row" + (b.tone ? " " + b.tone : ""));
       var top = h("div", "mo-rep-top");
       top.appendChild(h("b", null, b.name));
@@ -1041,6 +1096,17 @@
           bars.appendChild(row);
         });
         li.appendChild(bars);
+      }
+      if (b.services.length) {
+        var svc = h("div", "mo-svcs");
+        b.services.forEach(function (x) {
+          var tone = x.state === "up" ? "ok" : x.state === "down" ? "alert" : "";
+          var word = x.state === "up" ? "running" : x.state === "down" ? "NOT running" : "can’t tell";
+          var c = h("span", "chip" + (tone ? " " + tone : ""), x.name + ": " + word);
+          if (x.state === "unknown") c.title = "The report did not say. The check on the server may itself have failed, which is not the same as the service being down.";
+          svc.appendChild(c);
+        });
+        li.appendChild(svc);
       }
       ul.appendChild(li);
     });
@@ -1260,7 +1326,16 @@
     pline.appendChild(h("b", null, ps.text));
     if (ps.hint) pline.appendChild(h("span", "dim", ps.hint));
     al.appendChild(pline);
-    if (st.lastPush && st.lastPush.ok === false) al.appendChild(h("p", "mo-note", "The last push failed (" + st.lastPush.reason + ") " + agoText(st.lastPush.at, now) + "; it is tried again every 5 minutes."));
+    // how ntfy has actually been doing (the Worker's pushHealth; absent from an older Worker, null before the first push)
+    var phl = pushHealthLine(st.pushHealth, (s.businessHours && s.businessHours.tz) || "Australia/Perth", now);
+    if (phl) {
+      var hl = h("div", "mo-email " + phl.tone);
+      hl.setAttribute("role", phl.failing ? "alert" : "status");
+      hl.appendChild(h("b", null, phl.text));
+      if (phl.hint) hl.appendChild(h("span", "dim", phl.hint));
+      al.appendChild(hl);
+    }
+    if (st.lastPush && st.lastPush.ok === false && !(phl && phl.failing)) al.appendChild(h("p", "mo-note", "The last push failed (" + st.lastPush.reason + ") " + agoText(st.lastPush.at, now) + "; it is tried again every 5 minutes."));
     var pset = (s && s.push) || { enabled: true, when: "fallback", types: {} };
     var pl = list();
     var onLi = h("li");
@@ -1387,7 +1462,7 @@
   }
 
   // Used by every action that answers with a fresh status: keeps the page's copy and its clock in step.
-  function adopt(body) { model.mon = body; model.fetchedAt = Date.now(); model.stale = false; }
+  function adopt(body) { model.mon = body; model.fetchedAt = Date.now(); model.stale = false; rememberServices(body && body.reporters); }
 
   function busyAnswer(r) { return r.status === 429 || r.status === 0; }
 
