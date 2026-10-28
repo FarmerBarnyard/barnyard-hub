@@ -245,7 +245,8 @@
   var ALERT_SWITCHES = [
     ["reporters", "A reporter goes quiet, or the site may have lost power or internet"],
     ["resources", "A disk is nearly full, memory or load is high, or a service stops"],
-    ["vulns", "A new critical vulnerability affects something you run, with a monthly reminder while any are still open"]
+    ["vulns", "A new critical vulnerability affects something you run, with a monthly reminder while any are still open"],
+    ["calendar", "A daily Calendar reminder: to-dos due or overdue, and renewals 30 days, 7 days and on the day away"]
   ];
   var REPORTER_DOCS = "https://github.com/FarmerBarnyard/ClaudeRepo/tree/main/reporter";
 

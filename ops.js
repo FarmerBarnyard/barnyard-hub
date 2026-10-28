@@ -1184,17 +1184,19 @@
     }
 
     // Changes the owner's chat proposed, waiting for a decision (ops-pending.js). The tab exists only
-    // when the list can be read (the chat is on and this is the owner); it is refreshed once a minute.
+    // when the list can be read (the chat is on and this is the owner); it is refreshed once a minute, and not at all
+    // while the tab is hidden (it is read again as soon as the tab is shown).
     var pendingTimer = null;
     function loadPending() {
       if (!Pending) return;
       Pending.load().then(function (list) {
         state.pending = list;
         if (list === null) { clearInterval(pendingTimer); pendingTimer = null; if (state.tab === "pending") state.tab = "work"; }
-        else if (!pendingTimer) pendingTimer = setInterval(loadPending, 60000);
+        else if (!pendingTimer) pendingTimer = setInterval(function () { if (!document.hidden) loadPending(); }, 60000);
         render();
       });
     }
+    document.addEventListener("visibilitychange", function () { if (!document.hidden && pendingTimer) loadPending(); });
 
     // Start (or try again) an agent run for an item from its drawer.
     function runAction(kind, item, button) {
