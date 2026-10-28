@@ -16,8 +16,7 @@ function test(name, fn) { fn(); passed++; console.log("ok - " + name); }
 // and the privacy page (static legal text).
 var OUTSIDE_SHELL = ["view.html", "privacy.html"];
 // Stylesheets that may still carry a fixed-width page root or the title row until their page is reworked.
-//   monitoring.css: the Monitoring page is being redesigned as a dashboard.
-var CSS_EXCEPTIONS = ["monitoring.css"];
+var CSS_EXCEPTIONS = [];
 
 var pages = fs.readdirSync(root).filter(function (f) { return /\.html$/.test(f) && OUTSIDE_SHELL.indexOf(f) === -1; });
 
