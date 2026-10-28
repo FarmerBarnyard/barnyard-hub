@@ -251,7 +251,7 @@
   // The history list: newest first. result "sent" is good; anything else is a failure word.
   function historyRows(history, tz) {
     return (Array.isArray(history) ? history : []).map(function (h) {
-      var kinds = { test: "Test", "test-push": "Test push", push: "Push", ack: "Acknowledged", digest: "Digest" };
+      var kinds = { test: "Test", "test-push": "Test push", push: "Push", ack: "Acknowledged", digest: "Digest", report: "IT report" };
       var ok = h.result === "sent" || h.kind === "ack";
       var result = ok ? "Sent to " + h.recipients + (h.recipients === 1 ? " address" : " addresses") : "Failed (" + h.result + ")";
       if (h.kind === "push" || h.kind === "test-push") result = ok ? "Sent to the phone" : "Failed (" + h.result + ")";
@@ -293,7 +293,8 @@
     ["resources", "A disk is nearly full, memory or load is high, or a service stops"],
     ["vulns", "A new critical vulnerability affects something you run, with a monthly reminder while any are still open"],
     ["calendar", "A daily Calendar reminder: to-dos due or overdue, and renewals 30 days, 7 days and on the day away"],
-    ["digest", "A weekly summary on Monday morning: uptime, incidents, vulnerabilities, renewals, backups and what is waiting on you"]
+    ["digest", "A weekly summary on Monday morning: uptime, incidents, vulnerabilities, renewals, backups and what is waiting on you"],
+    ["report", "A monthly IT report for the committee on the first working day of the month, emailed to you to forward (see Reports)"]
   ];
   // What may be pushed to the phone (settings.push.types in the Worker).
   var PUSH_TYPES = [
