@@ -1,9 +1,8 @@
 /* Reports page (reports.html). Colours come from the shell's tokens so every theme works. */
-.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .rp-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
 .rp-month { display: flex; align-items: center; gap: 6px; }
 .rp-month select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
-#rp-root { max-width: 900px; display: grid; gap: 16px; margin-top: 8px; }
+#rp-root { display: grid; gap: 16px; margin-top: 8px; }
 .dim { color: var(--fg-dim); }
 
 .rp-strip { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; }

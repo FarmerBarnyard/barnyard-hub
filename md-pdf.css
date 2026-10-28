@@ -1,6 +1,5 @@
 /* Markdown to PDF (md-pdf.html). Colours come from the shell's tokens so every theme works.
    The @page rule is added by md-pdf.js (the CSP forbids inline <style>). */
-.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .dim { color: var(--fg-dim); }
 

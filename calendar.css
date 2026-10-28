@@ -1,6 +1,6 @@
 /* Calendar page (calendar.html). Colours come from the shell's tokens so every theme works. */
 .cal-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.cal-quick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; max-width: 880px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.cal-quick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 .cal-quick[hidden] { display: none; }
 .cal-quick-l { font-size: 13px; font-weight: 600; color: var(--fg-strong); }
 .cal-quick #cal-quick-title { flex: 1 1 220px; width: auto; }
@@ -16,7 +16,7 @@
 .cal-lead { color: var(--fg); margin-bottom: 18px; }
 .cal-warn { color: var(--attn); margin-bottom: 12px; font-size: 14px; }
 .cal-note { color: var(--fg-dim); margin-bottom: 12px; font-size: 13px; }
-.cal-section { margin-bottom: 26px; max-width: 880px; }
+.cal-section { margin-bottom: 26px; }
 .cal-section .sec-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
 .cal-section h2 { font: 600 17px var(--font-display); color: var(--fg-strong); }
 .cal-section > .btn { margin-top: 10px; }
@@ -140,7 +140,7 @@ textarea.cal-input { resize: vertical; }
 }
 
 /* The Plan view (plan-view.js) */
-.plan { display: grid; gap: 14px; max-width: 880px; }
+.plan { display: grid; gap: 14px; }
 .plan-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
 .plan-seg { display: inline-flex; gap: 6px; }
 .plan-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
