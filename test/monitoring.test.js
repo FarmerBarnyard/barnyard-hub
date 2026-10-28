@@ -289,4 +289,183 @@ test("the page posts the new routes and never keeps a topic", function () {
   assert.ok(!/innerHTML/.test(js.replace(/\/\/.*$/gm, "")), "server text still reaches the page only through textContent");
 });
 
+// ---- the dashboard: tabs, counts, uptime, sparklines, groups ----------------------------------------------------
+
+test("the tab comes from the URL hash and unknown hashes mean the Dashboard", function () {
+  assert.strictEqual(Mon.tabFromHash("#settings"), "settings");
+  assert.strictEqual(Mon.tabFromHash("#Settings"), "settings");
+  assert.strictEqual(Mon.tabFromHash("#dashboard"), "dashboard");
+  assert.strictEqual(Mon.tabFromHash(""), "dashboard");
+  assert.strictEqual(Mon.tabFromHash("#nonsense"), "dashboard");
+  assert.strictEqual(Mon.tabFromHash(undefined), "dashboard");
+  assert.strictEqual(Mon.hashForTab("settings"), "#settings");
+  assert.strictEqual(Mon.hashForTab("anything"), "#dashboard");
+});
+
+test("arrow keys move between the tabs, wrap, and Home and End jump", function () {
+  assert.strictEqual(Mon.nextTab("dashboard", "ArrowRight"), "settings");
+  assert.strictEqual(Mon.nextTab("settings", "ArrowRight"), "dashboard");
+  assert.strictEqual(Mon.nextTab("dashboard", "ArrowLeft"), "settings");
+  assert.strictEqual(Mon.nextTab("settings", "Home"), "dashboard");
+  assert.strictEqual(Mon.nextTab("dashboard", "End"), "settings");
+  assert.strictEqual(Mon.nextTab("dashboard", "Enter"), null);
+  assert.strictEqual(Mon.nextTab("bogus", "ArrowRight"), "settings");
+});
+
+test("the strip counts up, down and can't-tell, and names the overall state", function () {
+  var list = [mon(), mon({ id: "vtt", status: "up" }), mon({ id: "cld01", status: "unknown", lastCheck: NOW - MIN }), mon({ id: "s1", status: "unknown", lastCheck: null })];
+  assert.deepStrictEqual(Mon.counts(list), { up: 2, down: 0, unknown: 1, waiting: 1, total: 4 });
+  assert.strictEqual(Mon.overallState(list, []).key, "degraded");
+  assert.strictEqual(Mon.overallState([mon(), mon({ id: "vtt" })], []).key, "up");
+  assert.strictEqual(Mon.overallState([mon(), mon({ id: "vtt" })], []).label, "All up");
+  assert.strictEqual(Mon.overallState([mon(), mon({ id: "vtt", status: "down", downSince: NOW })], []).key, "down");
+  assert.strictEqual(Mon.overallState([mon({ status: "unknown", lastCheck: null })], []).key, "waiting");
+  assert.strictEqual(Mon.overallState([], []).key, "empty");
+  assert.strictEqual(Mon.overallState([mon()], [{ status: "down", grade: "outage" }]).key, "degraded", "a server's own report raising an alert is degraded");
+  assert.strictEqual(Mon.overallState([mon()], [{ status: "down", grade: "notice" }]).key, "up", "a notice alone is not");
+});
+
+test("uptime is the share of checks that did not fail, over the last N days, and says nothing when there were no checks", function () {
+  var daily = [[0, 0], [288, 0], [288, 3], [100, 100]];
+  assert.deepStrictEqual(Mon.uptimePct(daily, 2), { pct: 73.5, checks: 388 });
+  assert.strictEqual(Mon.uptimePct([[288, 0], [288, 0]], 7).pct, 100);
+  assert.strictEqual(Mon.uptimePct([[200, 1]], 7).pct, 99.5);
+  assert.strictEqual(Mon.uptimePct([[0, 0], [0, 0]], 7), null);
+  assert.strictEqual(Mon.uptimePct(null, 7), null);
+  assert.strictEqual(Mon.uptimePct([[10, 0], [10, 10]], 1).pct, 0, "only the last day when asked for one");
+  assert.strictEqual(Mon.pctText({ pct: 100 }), "100%");
+  assert.strictEqual(Mon.pctText({ pct: 99.8 }), "99.8%");
+  assert.strictEqual(Mon.pctText(null), "–");
+});
+
+test("a sparkline is a line through the days that have checks, the last point is marked, and a quiet day breaks the line", function () {
+  var s = Mon.sparkModel([[288, 0], [288, 0], [0, 0], [288, 29], [288, 0]], 120, 34);
+  assert.ok(s.hasData);
+  assert.strictEqual((s.line.match(/M/g) || []).length, 2, "two runs: before and after the day with no checks");
+  assert.strictEqual(s.days[2], null);
+  assert.ok(s.last && s.last.pct === 100 && s.last.x > 100, "the last point is the newest day");
+  assert.ok(s.days[0].y < s.days[3].y, "100% sits above a day under 90%");
+  assert.ok(s.days[3].y <= 34 - 3 + 0.001, "never outside the box");
+  var floor = Mon.sparkModel([[100, 60], [100, 0]], 120, 34);
+  assert.ok(Math.abs(floor.days[0].y - 31) < 0.01, "anything under 90% sits on the floor");
+  var none = Mon.sparkModel([[0, 0], [0, 0]], 120, 34);
+  assert.strictEqual(none.hasData, false); assert.strictEqual(none.line, ""); assert.strictEqual(none.last, null);
+  var single = Mon.sparkModel([[288, 0]], 120, 34);
+  assert.ok(single.hasData && single.area === "", "one day is a dot, not an area");
+  assert.strictEqual(Mon.sparkModel(null, 120, 34).hasData, false);
+  assert.ok(/Daily uptime for the last 3 days, oldest first: 100%, no checks, 90\.0%\./.test(Mon.sparkLabel([[10, 0], [0, 0], [10, 1]])));
+});
+
+test("each monitor becomes a card with its uptime, history and facts, grouped, empty groups left out", function () {
+  var trend = { days: [], series: { app02: [[288, 0], [288, 0], [288, 2]], vtt: [] } };
+  var c = Mon.cardModel(mon(), NOW, trend);
+  assert.strictEqual(c.uptimeText, "99.8%"); assert.ok(c.hasHistory);
+  assert.ok(/^Up for 1 h 30 min/.test(c.facts[0]) && /Checked 2 min ago/.test(c.facts[1]) && /180 ms/.test(c.facts[2]));
+  var none = Mon.cardModel(mon({ id: "vtt" }), NOW, trend);
+  assert.strictEqual(none.uptimeText, "–"); assert.strictEqual(none.hasHistory, false);
+  var down = Mon.cardModel(mon({ status: "down", downSince: NOW - 25 * MIN }), NOW, trend);
+  assert.ok(/^Down for 25 min/.test(down.facts[0])); assert.strictEqual(down.tone, "alert"); assert.deepStrictEqual(down.ack, { acked: false, text: "" });
+  var groups = Mon.groupCards([mon({ id: "site-a", group: "sites", name: "A" }), mon(), mon({ id: "x", group: "weird", name: "X" }), mon({ id: "svc", group: "services", name: "S" })], NOW, trend);
+  assert.deepStrictEqual(groups.map(function (g) { return g.id; }), ["servers", "sites", "services", "other"]);
+  assert.deepStrictEqual(Mon.groupCards([mon({ group: "servers" })], NOW, null).map(function (g) { return g.id; }), ["servers"]);
+  assert.deepStrictEqual(Mon.groupCards(null, NOW, null), []);
+});
+
+test("the open-incident count is shown only when the Incident Room answered", function () {
+  assert.strictEqual(Mon.incidentsChip(null), null);
+  assert.strictEqual(Mon.incidentsChip({ ok: false }), null);
+  assert.deepStrictEqual(Mon.incidentsChip({ ok: true, open: 0 }), { text: "No open incidents", tone: "ok", open: 0 });
+  assert.strictEqual(Mon.incidentsChip({ ok: true, open: 1 }).text, "1 open incident");
+  assert.strictEqual(Mon.incidentsChip({ ok: true, open: 3 }).tone, "alert");
+});
+
+test("the recent-alerts feed lists what was sent, with any live report alerts first, and never an address", function () {
+  var hist = [{ ts: NOW, kind: "alert", subject: "app02 is down", recipients: 1, result: "sent" }, { ts: NOW - 60 * MIN, kind: "push", subject: "app02 is down", recipients: 0, result: "refused" }];
+  var rows = Mon.timelineRows(hist, [], "Australia/Perth", NOW);
+  assert.strictEqual(rows.length, 2); assert.strictEqual(rows[0].live, false); assert.strictEqual(rows[1].tone, "alert");
+  var withLive = Mon.timelineRows(hist, [{ id: "res-app02", name: "app02 disk or service", status: "down", grade: "outage", detail: "disk95|/|96", downSince: NOW - 10 * MIN }], "Australia/Perth", NOW);
+  assert.strictEqual(withLive[0].live, true); assert.strictEqual(withLive[0].when, "now"); assert.ok(/96% full/.test(withLive[0].result));
+  assert.ok(!/@/.test(JSON.stringify(rows)), "no address in the feed");
+});
+
+test("a server's brief shows memory and disks as bars and flags a silent reporter", function () {
+  var cards = Mon.reporterCards([rp()], NOW);
+  var b = Mon.reporterBrief(cards[0], rp().report);
+  assert.deepStrictEqual(b.bars.map(function (x) { return x.label + " " + x.pct + " " + x.tone; }), ["Memory 42 ok", "Disk / 52 ok", "Disk /data 88 attn"]);
+  assert.strictEqual(b.stale, false);
+  var silent = Mon.reporterBrief(Mon.reporterCards([rp({ state: "silent", lastSeen: NOW - 30 * MIN })], NOW)[0], rp().report);
+  assert.strictEqual(silent.stale, true);
+  assert.deepStrictEqual(Mon.reporterBrief(cards[1], null).bars, []);
+  var best = Mon.bestReports([rp({ lastSeen: NOW - 10 * MIN, report: { mem: { usedPct: 10 } } }), rp({ id: "rp_x", lastSeen: NOW - MIN }), rp({ id: "rp_y", state: "revoked", lastSeen: NOW })]);
+  assert.strictEqual(best.app02.mem.usedPct, 41.5, "the most recent live key wins; a revoked one is ignored");
+});
+
+// ---- the request budget ------------------------------------------------------------------------------------------
+
+test("a busy answer waits as long as the server says, or backs off 1, 2, 4, 5 minutes", function () {
+  assert.strictEqual(Mon.parseRetryAfter("30"), 30);
+  assert.strictEqual(Mon.parseRetryAfter(12), 12);
+  assert.strictEqual(Mon.parseRetryAfter("Wed, 21 Oct 2026 07:28:30 GMT", Date.parse("Wed, 21 Oct 2026 07:28:00 GMT")), 30);
+  assert.strictEqual(Mon.parseRetryAfter(null), null);
+  assert.strictEqual(Mon.parseRetryAfter("soon"), null);
+  assert.strictEqual(Mon.backoffMs(1, 30), 30000);
+  assert.strictEqual(Mon.backoffMs(1, 1), 5000, "never under five seconds");
+  assert.strictEqual(Mon.backoffMs(1, 9999), 300000, "never over five minutes");
+  assert.deepStrictEqual([1, 2, 3, 4, 5, 9].map(function (n) { return Mon.backoffMs(n, null); }), [60000, 120000, 240000, 300000, 300000, 300000]);
+  assert.ok(/busy.*trying again in 45 s/.test(Mon.busyText(45000)));
+  assert.ok(/trying again in 3 min/.test(Mon.busyText(180000)));
+  assert.ok(!/error|fail/i.test(Mon.busyText(60000)), "calm wording");
+});
+
+test("the Dashboard asks again only when visible, on its tab, signed in, idle, not backing off, and a minute has passed", function () {
+  var base = { hidden: false, tab: "dashboard", state: "ok", busy: false, inflight: false, backoffUntil: 0, fetchedAt: NOW - 61000, now: NOW };
+  assert.strictEqual(Mon.pollDue(base), true);
+  assert.strictEqual(Mon.pollDue(Object.assign({}, base, { fetchedAt: NOW - 30000 })), false, "not within a minute");
+  assert.strictEqual(Mon.pollDue(Object.assign({}, base, { hidden: true })), false, "never while hidden");
+  assert.strictEqual(Mon.pollDue(Object.assign({}, base, { tab: "settings" })), false, "Settings does not poll");
+  assert.strictEqual(Mon.pollDue(Object.assign({}, base, { busy: true })), false);
+  assert.strictEqual(Mon.pollDue(Object.assign({}, base, { inflight: true })), false);
+  assert.strictEqual(Mon.pollDue(Object.assign({}, base, { state: "guest" })), false);
+  assert.strictEqual(Mon.pollDue(Object.assign({}, base, { backoffUntil: NOW + 5000 })), false, "not while backing off");
+  assert.strictEqual(Mon.pollDue(Object.assign({}, base, { backoffUntil: NOW - 1 })), true);
+  assert.strictEqual(Mon.pollDue(Object.assign({}, base, { fetchedAt: 0 })), true, "never read: now");
+  assert.strictEqual(Mon.nextPollIn(Object.assign({}, base, { fetchedAt: NOW - 20000 })), 40000);
+  assert.strictEqual(Mon.nextPollIn(Object.assign({}, base, { fetchedAt: NOW - 20000, backoffUntil: NOW + 90000 })), 90000, "a back-off outlasts the usual wait");
+  assert.strictEqual(Mon.nextPollIn(base), 1000, "overdue still waits a second, never zero");
+});
+
+test("the optional reads and the Check now button follow their own limits", function () {
+  assert.strictEqual(Mon.extraDue(0, NOW, Mon.EXTRAS_MS), true);
+  assert.strictEqual(Mon.extraDue(NOW - 9 * 60000, NOW, Mon.EXTRAS_MS), false);
+  assert.strictEqual(Mon.extraDue(NOW - 11 * 60000, NOW, Mon.EXTRAS_MS), true);
+  assert.strictEqual(Mon.extraDue(NOW - 4 * 60000, NOW, Mon.INCIDENTS_MS), false);
+  assert.strictEqual(Mon.checkWait(NOW + 24200, NOW), 25);
+  assert.strictEqual(Mon.checkWait(NOW - 1, NOW), 0);
+  assert.strictEqual(Mon.checkWait(0, NOW), 0);
+  assert.strictEqual(Mon.checkLabel(24), "Check now (24 s)");
+  assert.strictEqual(Mon.checkLabel(0), "Check now");
+  assert.strictEqual(Mon.CHECK_GAP_MS, 30000, "the Worker's own limit");
+  assert.strictEqual(Mon.settingsNeedsRead(0, NOW), true);
+  assert.strictEqual(Mon.settingsNeedsRead(NOW - 10000, NOW), false, "Settings reuses a recent answer");
+  assert.strictEqual(Mon.settingsNeedsRead(NOW - 31000, NOW), true);
+});
+
+test("the page is two tabs with proper roles, and its source holds to the request budget", function () {
+  var html = fs.readFileSync(path.join(root, "monitoring.html"), "utf8");
+  assert.ok(/role="tablist"/.test(html) && (html.match(/role="tab"/g) || []).length === 2, "a tablist with two tabs");
+  assert.ok(/id="tab-dashboard"[^>]*aria-selected="true"/.test(html) && /id="tab-settings"[^>]*aria-selected="false"[^>]*tabindex="-1"/.test(html), "roving tabindex starts on the Dashboard");
+  assert.ok(/id="mon-flash"[^>]*role="status"/.test(html), "messages sit outside the rebuilt panel");
+  assert.ok(!/id="mon-check"/.test(html), "Check now lives in the Dashboard strip");
+  var js = fs.readFileSync(path.join(root, "monitoring.js"), "utf8").replace(/\/\/.*$/gm, "");
+  assert.ok(!/setInterval/.test(js), "no fixed timer: polling is a timeout that is set only while visible, on the Dashboard");
+  assert.ok(/visibilitychange/.test(js) && /hashchange/.test(js) && /nextTab/.test(js));
+  assert.ok(/role", "tabpanel"/.test(js) && /aria-labelledby/.test(js));
+  var tests = js.slice(js.indexOf("function sendTest()"), js.indexOf("function acknowledge("));
+  assert.ok(tests.length > 200 && !/fetchStatus|load\(/.test(tests), "the test buttons do not read the status again");
+  assert.ok(/model\.stale = true/.test(tests), "they mark it stale so the Dashboard reads it when it next opens");
+  var fetchBody = js.slice(js.indexOf("function fetchStatus("), js.indexOf("function applyStatus("));
+  assert.ok(/getJson\(MON \+ "\/status"/.test(fetchBody) && !/hub\/status|vuln\/summary/.test(fetchBody), "the poll reads only /mon/status");
+  assert.ok(/EXTRAS_MS/.test(js) && /INCIDENTS_MS/.test(js), "the optional reads are rate-limited by age");
+});
+
 console.log("\n" + passed + " tests passed");
