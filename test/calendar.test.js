@@ -395,4 +395,26 @@ test("the page keeps only a speed copy and two preferences in this browser, and 
   assert.ok(/Showing the copy saved on this device/.test(js), "a cached view is marked as such");
 });
 
+test("the to-do form carries the day planner's fields: estimate in minutes, a tidy tag, and how to plan it", function () {
+  var b = Cal.taskBody({ title: "x", estimate: " 45 ", tag: "  Admin & Email  ", focus: "focus" }).body;
+  assert.deepStrictEqual([b.estimate, b.tag, b.focus], [45, "admin email", "focus"]);
+  assert.strictEqual(Cal.taskBody({ title: "x", estimate: "" }).body.estimate, 0, "empty means none");
+  assert.strictEqual(Cal.taskBody({ title: "x" }).body.estimate, undefined, "not sent when the form did not have the field");
+  var bad = function (o) { return Cal.taskBody(Object.assign({ title: "x" }, o)).field; };
+  assert.strictEqual(bad({ estimate: "soon" }), "estimate");
+  assert.strictEqual(bad({ estimate: "721" }), "estimate");
+  assert.strictEqual(bad({ estimate: "-5" }), "estimate");
+  assert.strictEqual(bad({ estimate: "2.5" }), "estimate");
+  assert.strictEqual(bad({ focus: "deep" }), "focus");
+  assert.strictEqual(Cal.taskBody({ title: "x", tag: "x".repeat(60) }).body.tag.length, 24);
+});
+
+test("the Plan view is a tab, and the page loads the planner before the calendar", function () {
+  assert.ok(Cal.VIEWS.some(function (v) { return v[0] === "plan" && v[1] === "Plan"; }));
+  assert.strictEqual(Cal.VIEWS[0][0], "today", "Today is still first");
+  var html = fs.readFileSync(path.join(root, "calendar.html"), "utf8");
+  var a = html.indexOf("planner-engine.js"), b = html.indexOf("plan-view.js"), c = html.indexOf("calendar.js?");
+  assert.ok(a > 0 && b > a && c > b, "engine, then view, then the page");
+});
+
 console.log(passed + " passed");

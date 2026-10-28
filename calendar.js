@@ -29,11 +29,12 @@
   var GOOGLE_API = "https://api.barnyard.site/calendar";
   var ACTIVE_VIEWS = L.VIEWS;
 
-  // `google` is the owner's Google Calendar (read only, from the Worker's /calendar; it sends about 8 days back and 10 ahead).
+  // `google` is the owner's Google Calendar (read only, from the Worker's /calendar; it sends about 8 days back and 90 ahead).
   // It is never kept in this browser: it is fetched fresh each time.
   var model = {
     state: "loading", planner: "loading", renewals: [], dueItems: [], tasks: [], events: [], google: [], googleState: "loading", partial: false, fromCache: false,
-    view: "today", kind: "all", month: null, weekOf: null
+    view: "today", kind: "all", month: null, weekOf: null,
+    plan: null            // the day planner's settings, accepted blocks, timer and learned ratios (from GET /planner/all); see plan-view.js
   };
   var lastFocus = null;
   var toastTimer = null;
@@ -95,6 +96,7 @@
       if (b.status === 200) {
         model.tasks = Array.isArray(b.data.tasks) ? b.data.tasks : [];
         model.events = Array.isArray(b.data.events) ? b.data.events : [];
+        if (b.data.plan && typeof b.data.plan === "object") model.plan = b.data.plan;
         model.planner = "ok";
       } else model.planner = b.status === 503 || b.status === 404 ? "unavailable" : "error";
       if (a.status !== 200 && b.status !== 200) { model.state = haveData ? "ok" : "error"; return; }
@@ -120,7 +122,11 @@
     recent_sign_in_required: "Sign in again to do that, then try once more.",
     unauthenticated: "You’re not signed in, so nothing was changed.", forbidden: "You’re not signed in as the owner, so nothing was changed.",
     tasks_full: "The to-do list is full (3,000). Clear the ticked ones first.", events_full: "There are too many events stored (1,500).",
-    not_found: "That has already gone. Refresh the page.", today_invalid: "This computer’s date is far from the server’s, so the change wasn’t made."
+    not_found: "That has already gone. Refresh the page.", today_invalid: "This computer’s date is far from the server’s, so the change wasn’t made.",
+    timer_busy: "Another focus timer is running. Finish or cancel it first.", no_timer: "There is no timer running.",
+    block_started: "That block has already started or finished, so it can’t be changed.", blocks_full: "There are too many planned blocks stored. Delete some old ones.",
+    task_not_open: "One of those to-dos was ticked off or deleted. Plan again.", estimate_invalid: "Give the estimate in minutes, from 0 to 720.",
+    minutes_invalid: "Give the time in whole minutes, from 1 to 720.", blocks_invalid: "That plan is too big to accept at once. Plan a shorter period."
   };
   function say(err) { return MESSAGES[err.code] || "Couldn’t save that just now. Nothing was changed."; }
 
@@ -193,6 +199,7 @@
     if (e.type === "renewal") { el.appendChild(chip(L.kindTitle(e.kind))); var bd = L.STATE_BADGE[e.state]; if (bd) el.appendChild(chip(bd)); }
     if (e.type === "task") {
       if (e.ref.priority === "high") el.appendChild(chip("High", "alert"));
+      if (e.ref.estimate) el.appendChild(chip(e.ref.estimate + " min"));
       if (e.ref.recur) el.appendChild(chip(L.repeatText(e.ref.recur)));
       var rc = refChip(e.ref.ref);
       if (rc) el.appendChild(rc);
@@ -430,6 +437,21 @@
     }
   }
 
+  // ---- the Plan view (plan-view.js draws it; this hands it what it may use) ------------------------------------------
+
+  function planContext() {
+    return {
+      model: model, L: L, today: today, h: h, clear: clear, chip: chip, toast: toast, say: say, render: render,
+      post: plan, openDrawer: openDrawer, closeDrawer: closeDrawer, field: field, input: input, select: select, formShell: formShell, fact: fact,
+      openTask: openTask, openTaskForm: openTaskForm, applyTask: applyTask, snooze: snooze, tick: tick
+    };
+  }
+  function renderPlan(root, t) {
+    var PV = window.BarnyardPlanView;
+    if (!PV) { root.appendChild(h("p", "cal-warn", "The planner didn’t load. Reload the page.")); return; }
+    PV.render(root, planContext());
+  }
+
   function renderTabs() {
     var box = $("cal-tabs");
     clear(box);
@@ -458,6 +480,7 @@
   function render() {
     renderTabs();
     renderFilter();
+    if (model.view !== "plan" && window.BarnyardPlanView) window.BarnyardPlanView.stop();     // the focus timer's clock only ticks on the Plan view
     var root = $("cal-root");
     $("cal-quick").hidden = !(model.state === "ok" && model.planner === "ok");
     if (model.state === "loading") return;
@@ -474,6 +497,7 @@
     else if (model.view === "week") renderWeek(root, t);
     else if (model.view === "month") renderMonth(root, t);
     else if (model.view === "upcoming") renderUpcoming(root, t);
+    else if (model.view === "plan") renderPlan(root, t);
     else if (model.view === "todos") renderTodos(root, t);
     else renderRenewals(root, t);
     var n = L.dueCount(data(), t);
@@ -583,11 +607,22 @@
     fact(body, "Notes", task.notes);
     if (task.ref) fact(body, task.ref.kind === "ops" ? "Ops item" : "Knowledgebase article", task.ref.id, L.refHref(task.ref));
     if (task.recur && task.doneCount) fact(body, "Done so far", task.doneCount + (task.doneCount === 1 ? " time" : " times"));
+    if (task.estimate) fact(body, "Estimate", task.estimate + " min" + (task.spent ? " · worked " + task.spent + " min so far" : ""));
+    else if (task.spent) fact(body, "Worked so far", task.spent + " min");
+    if (task.tag) fact(body, "Kind of work", task.tag);
+    if (task.focus) fact(body, "Planned as", task.focus === "focus" ? "Needs focus (a long block)" : "Quick (fits in a gap)");
     var actions = h("div", "cal-actions");
     var tickBtn = h("button", "btn btn-primary btn-sm", task.status === "done" ? "Mark not done" : "Done");
     tickBtn.type = "button";
     tickBtn.addEventListener("click", function () { tick(task, task.status !== "done"); closeDrawer(); });
     actions.appendChild(tickBtn);
+    if (task.status === "open" && window.BarnyardPlanView) {
+      var startBtn = h("button", "btn btn-sm", "Start timer"); startBtn.type = "button";
+      startBtn.addEventListener("click", function () { closeDrawer(); window.BarnyardPlanView.startTimer(planContext(), task); });
+      var logBtn = h("button", "btn btn-sm", "Log time"); logBtn.type = "button";
+      logBtn.addEventListener("click", function () { window.BarnyardPlanView.openLog(planContext(), task); });
+      actions.appendChild(startBtn); actions.appendChild(logBtn);
+    }
     if (task.status === "open") {
       [["today", "Today"], ["tomorrow", "Tomorrow"], ["nextweek", "Next week"]].forEach(function (s) {
         if (s[0] === "today" && task.due === t) return;
@@ -669,9 +704,9 @@
     var isNew = !task;
     var body = openDrawer(isNew ? "Add a to-do" : "Edit to-do");
     var f;
-    var title, due, time, prio, recur, notes, ref;
+    var title, due, time, prio, recur, notes, ref, est, tag, focus;
     f = formShell(function (err, save) {
-      var res = L.taskBody({ title: title.value, due: due.value, time: time.value, priority: prio.value, recur: recur.value, notes: notes.value, ref: ref.value });
+      var res = L.taskBody({ title: title.value, due: due.value, time: time.value, priority: prio.value, recur: recur.value, notes: notes.value, ref: ref.value, estimate: est.value, tag: tag.value, focus: focus.value });
       if (res.error) { f.fail(res); return; }
       save.disabled = true;
       var req = isNew ? plan("/task", res.body) : plan("/task/update", Object.assign({ id: task.id }, res.body));
@@ -681,6 +716,17 @@
     due = field(f.form, "f-due", "Date", input("date", isNew ? presetDate || "" : task.due), "Leave empty to keep it in the Inbox.");
     time = field(f.form, "f-time", "Time (optional)", input("time", isNew ? "" : task.time));
     prio = field(f.form, "f-priority", "Priority", select(L.PRIORITIES, isNew ? "normal" : task.priority));
+    est = field(f.form, "f-estimate", "How long will it take? (minutes)", input("text", isNew || !task.estimate ? "" : String(task.estimate), 3), "The planner uses this to fit it into your day. Leave empty to use your default.");
+    est.inputMode = "numeric";
+    tag = field(f.form, "f-tag", "Kind of work (optional)", input("text", isNew ? "" : task.tag, 24), "One or two words, like admin or writing. The planner learns how long each kind really takes you.");
+    var learnHint = h("span", "dim cal-hint");
+    tag.parentNode.appendChild(learnHint);
+    function showLearned() {
+      var E = window.BarnyardPlanEngine, r = model.plan && model.plan.ratios;
+      learnHint.textContent = E && r ? E.learnedText(r, tag.value.toLowerCase().replace(/[^a-z0-9 _-]/g, "").trim()) : "";
+    }
+    tag.addEventListener("input", showLearned); showLearned();
+    focus = field(f.form, "f-focus", "Plan it as", select([["", "Normal"], ["focus", "Needs focus: a long block, earliest gaps first"], ["quick", "Quick: fits in a small gap"]], isNew ? "" : task.focus));
     recur = field(f.form, "f-recur", "Repeat", select(L.RECURRENCES, isNew ? "" : task.recur), "A repeating to-do moves to its next date when you tick it.");
     notes = field(f.form, "f-notes", "Notes", textarea(isNew ? "" : task.notes, 3, 4000));
     ref = field(f.form, "f-ref", "Link to an Ops item or article (optional)", input("text", isNew || !task.ref ? "" : task.ref.id, 300), "Paste an id (it_… or ka_…) or its address.");
@@ -786,7 +832,7 @@
       dropTask(task.id);
       render();
       toast("Deleted “" + task.title + "”.", "Undo", function () {
-        plan("/task", { title: task.title, notes: task.notes, due: task.due, time: task.time, priority: task.priority, recur: task.recur, ref: task.ref ? task.ref.id : "" })
+        plan("/task", { title: task.title, notes: task.notes, due: task.due, time: task.time, priority: task.priority, recur: task.recur, ref: task.ref ? task.ref.id : "", estimate: task.estimate || 0, tag: task.tag || "", focus: task.focus || "" })
           .then(function (r) { applyTask(r.task); render(); }, function (e) { toast(say(e)); });
       });
     }, function (e) { toast(say(e)); });
@@ -894,10 +940,12 @@
     else if (ev.key === "ArrowLeft" && (model.view === "month" || model.view === "week")) stepPeriod(-1);
     else if (ev.key === "ArrowRight" && (model.view === "month" || model.view === "week")) stepPeriod(1);
     else if (ev.key === "w") setView("week");
+    else if (ev.key === "p") setView("plan");
   }
 
   function boot() {
     readPrefs();
+    if (/^#plan\b/.test(window.location.hash)) model.view = "plan";        // the Overview tile links to calendar.html#plan
     var d = new Date();
     model.month = { year: d.getFullYear(), month: d.getMonth() };
     $("cal-add-event").addEventListener("click", function () { openEventForm(null); });

@@ -1,0 +1,56 @@
+/* Reports page (reports.html). Colours come from the shell's tokens so every theme works. */
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.rp-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+.rp-month { display: flex; align-items: center; gap: 6px; }
+.rp-month select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+#rp-root { max-width: 900px; display: grid; gap: 16px; margin-top: 8px; }
+.dim { color: var(--fg-dim); }
+
+.rp-strip { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; }
+.rp-strip.ok { background: var(--ok-soft); border-color: transparent; }
+.rp-strip.warn { background: var(--attn-soft, var(--panel-2)); border-color: var(--attn); }
+.rp-link { margin-left: auto; font-size: 13px; }
+
+.rp-flash { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); font-size: 14px; }
+.rp-flash.ok { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+.rp-flash.alert { background: var(--alert-soft); border-color: transparent; color: var(--alert); }
+
+.rp-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+.rp-paper { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 22px 24px; display: grid; gap: 4px; }
+.rp-title { font: 600 24px var(--font-display); color: var(--fg-strong); margin: 0; }
+.rp-sub { margin: 0 0 6px; font-size: 13px; }
+
+.rp-section { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 10px; display: grid; gap: 8px; }
+.rp-section h2 { font: 600 17px var(--font-display); color: var(--fg-strong); margin: 0; }
+.rp-section.later { opacity: .7; }
+.rp-section.unavailable h2::after { content: " (could not be read)"; font-weight: 400; font-size: 13px; color: var(--alert); }
+.rp-edit { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); resize: vertical; min-height: 3.4em; width: 100%; box-sizing: border-box; }
+.rp-sentence { display: none; margin: 0; }
+.rp-meta { margin: 0; font-size: 12.5px; }
+button.linklike { background: none; border: 0; padding: 0; font: inherit; color: var(--accent, var(--fg-strong)); text-decoration: underline; cursor: pointer; }
+
+.rp-facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 0; font-size: 14px; }
+.rp-facts dt { color: var(--fg-dim); }
+.rp-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.rp-tablewrap { overflow-x: auto; }
+.rp-table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.rp-table th, .rp-table td { text-align: left; padding: 5px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.rp-table th { background: var(--panel-2); font-weight: 600; }
+.rp-table td { font-variant-numeric: tabular-nums; }
+.rp-listtitle { margin: 4px 0 0; font-weight: 600; font-size: 14px; }
+.rp-list { margin: 0; padding-left: 20px; font-size: 14px; }
+
+/* Printing the page itself: the shell, the buttons and the editing boxes go; the sentences print as plain paragraphs. */
+@media print {
+  .side, .bg, .page-head, .rp-strip, .rp-flash, .rp-actions, .rp-meta, .rp-edit, .rp-later, .rp-section.later, .rp-link { display: none !important; }
+  .app { display: block !important; }
+  body, .content, main { background: #fff !important; color: #111 !important; margin: 0 !important; padding: 0 !important; max-width: none !important; }
+  .rp-paper { border: 0; padding: 0; background: #fff; color: #111; }
+  .rp-title, .rp-section h2 { color: #111; }
+  .rp-sentence { display: block; }
+  .rp-section { break-inside: avoid; }
+  .rp-table th { background: #eee; }
+  .rp-table th, .rp-table td { border-bottom-color: #ccc; }
+  .dim { color: #444; }
+}
