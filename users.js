@@ -111,7 +111,8 @@
     throttled: "Microsoft asked us to slow down; it will work on the next try",
     unavailable: "Microsoft could not be reached; it will work on the next try",
     too_large: "a group is larger than the list this page reads in one go",
-    empty: "Microsoft returned nobody at all, which usually means the app lost its permission"
+    empty: "Microsoft returned nobody at all, which usually means the app lost its permission",
+    ids_only: "Microsoft returned ids but no names: the Graph app needs the User.ReadBasic.All permission (application) with admin consent, then press Read again"
   };
   function reasonText(reason, detail) {
     var t = REASON_TEXT[reason] || "an unexpected problem";

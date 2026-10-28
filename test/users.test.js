@@ -166,6 +166,9 @@ test("the note about the Entra read: not set up (naming the missing settings), n
   assert.ok(/last good read, 2 days ago/.test(bad.lines[1]));
   var forbidden = U.directoryNote({ configured: true, status: { last: { ok: false, at: NOW, reason: "forbidden" } } }, NOW);
   assert.ok(/GroupMember\.Read\.All.*admin consent/.test(forbidden.lines[0]));
+  var bare = U.directoryNote({ configured: true, status: { last: { ok: false, at: NOW, reason: "ids_only" } } }, NOW);
+  assert.ok(/ids but no names/.test(bare.lines[0]) && /User\.ReadBasic\.All/.test(bare.lines[0]) && /press Read again/.test(bare.lines[0]), bare.lines[0]);
+  assert.strictEqual(bare.tone, "warn");
   var good = U.directoryNote({ configured: true, status: { members: 12, removed: 1, last: { ok: true, at: NOW - 7200000, partial: false, held: 0, limits: [], groups: [] } } }, NOW);
   assert.strictEqual(good.tone, "");
   assert.ok(/read 2 h ago: 12 people in them, 1 recently left/.test(good.lines[0]), good.lines[0]);
