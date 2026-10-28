@@ -132,9 +132,30 @@
   }
   function list() { return Object.keys(tiles).map(function (k) { return tiles[k]; }); }
 
+  // A tiny bus for what the page has already fetched, so a tile does not fetch it again. The Overview publishes the owner's
+  // status answer ("status", which carries the dated list) and listens for "refresh" (the Capture tile asks for the board to be
+  // read again after it files an Ops item). subscribe() replays the latest value at once, so a tile drawn late still gets it.
+  var topics = {};
+  function topic(name) { return topics[name] || (topics[name] = { value: undefined, has: false, subs: [] }); }
+  function publish(name, value) {
+    var t = topic(name);
+    t.value = value; t.has = true;
+    t.subs.slice().forEach(function (fn) { try { fn(value); } catch (e) { /* one listener failing must not stop the rest */ } });
+  }
+  function subscribe(name, fn) {
+    var t = topic(name);
+    t.subs.push(fn);
+    if (t.has) { try { fn(t.value); } catch (e) { /* as above */ } }
+    return function () { t.subs = t.subs.filter(function (f) { return f !== fn; }); };
+  }
+  function latest(name) { var t = topics[name]; return t && t.has ? t.value : undefined; }
+
   helpers.register = register;
   helpers.list = list;
   helpers.tiles = tiles;
+  helpers.publish = publish;
+  helpers.subscribe = subscribe;
+  helpers.latest = latest;
 
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
   if (typeof document === "undefined") { root.BarnyardTiles = helpers; return; }

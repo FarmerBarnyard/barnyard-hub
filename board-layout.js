@@ -71,6 +71,10 @@
     // An optional permission id (from the user manager): the tile is hidden when the signed-in person's permissions
     // are known and do not include it. No permission set means it is always offered.
     if (typeof entry.permission === "string" && /^[a-z0-9][a-z0-9._:-]{0,47}$/.test(entry.permission)) clean.permission = entry.permission;
+    // A tile that was on the page before it became a tile (Quick capture, Running out soon) is "defaultOn": it is part of the
+    // default arrangement and, for a person whose saved layout was made before it existed, is put back at the top once (see
+    // addAtTop here and board.js). `order` says which comes first among those.
+    if (entry.defaultOn) { clean.defaultOn = true; clean.order = between(isInt(entry.order) ? entry.order : 50, 0, 99); }
     for (var i = 0; i < CATALOGUE.length; i++) if (CATALOGUE[i].id === clean.id) { CATALOGUE[i] = clean; return clean; }
     CATALOGUE.push(clean);
     return clean;
@@ -260,6 +264,27 @@
     return placed;
   }
 
+  // The ids of the default-on tiles (see register), in the order they go at the top of the board.
+  function defaultIds() {
+    return CATALOGUE.filter(function (c) { return c.defaultOn; }).sort(function (a, b) { return (a.order - b.order) || (a.id < b.id ? -1 : 1); }).map(function (c) { return c.id; });
+  }
+
+  // Puts each of `ids` that is not on the board yet at the top, one under the other at its starting size, and lets everything else
+  // flow down below them. Tiles already on the board stay exactly where they are. Used to bring back the tiles that used to be fixed
+  // blocks above the board, in their old places, for a layout saved before they were tiles.
+  function addAtTop(tiles, ids) {
+    var y = 0, fresh = [];
+    (ids || []).forEach(function (id) {
+      var s = spec(id);
+      if (!s || find(tiles, id)) return;
+      fresh.push({ id: id, x: 0, y: y, w: Math.min(s.w, COLS), h: s.h });
+      y += s.h;
+    });
+    if (!fresh.length) return copyAll(tiles);
+    var down = tiles.map(function (t) { return { id: t.id, x: t.x, y: t.y + y, w: t.w, h: t.h }; });
+    return compact(fresh.concat(down));
+  }
+
   // Sets the tile's height to fit `rows` rows of content (forced inside its limits).
   function fit(tiles, id, rows) {
     var t = find(tiles, id);
@@ -446,7 +471,7 @@
     COLS: COLS, MAX_ROWS: MAX_ROWS, MAX_TILES: MAX_TILES, CATALOGUE: CATALOGUE, spec: spec, register: register,
     clampTile: clampTile, overlaps: overlaps, lowestFree: lowestFree, settle: settle, compact: compact,
     normalizeBoard: normalizeBoard, toBoard: toBoard, fromWidgets: fromWidgets, effective: effective, toWidgets: toWidgets,
-    move: move, resize: resize, nudge: nudge, grow: grow, remove: remove, add: add, fit: fit, reorder: reorder,
+    move: move, resize: resize, nudge: nudge, grow: grow, remove: remove, add: add, addAtTop: addAtTop, defaultIds: defaultIds, fit: fit, reorder: reorder,
     toColumns: toColumns, readingOrder: readingOrder, describe: describe, find: find
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
