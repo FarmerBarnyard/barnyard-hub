@@ -279,7 +279,7 @@
     ["cve_list", "CVE.org list of every CVE", 3, "The CVE catalogue has not taken new CVEs for"],
     ["kev", "CISA exploited list", 9, "The exploited-in-the-wild list has not updated for"],
     ["epss", "Exploit-likelihood scores (EPSS)", 30, "The exploit-likelihood scores have not updated for"],
-    ["nvd", "NVD scores and affected versions", 9, "The NVD scores and affected versions have not updated for"],
+    ["nvd", "NIST NVD scores, CVEs and affected versions", 9, "The NIST NVD scores and affected versions have not updated for"],
     ["archive", "Move of older CVEs to the archive", 30, "The move of older CVEs to the archive has not run for"]
   ];
 
@@ -328,8 +328,24 @@
       { label: "Older, in the archive", value: thousands(c.archive) },
       { label: "Exploited in the wild", value: thousands(s.kev) },
       { label: "With a score", value: thousands(s.enriched) },
+      { label: "Only in the NIST NVD so far", value: thousands(s.nvdOnly) },
       { label: "With an exploit likelihood", value: thousands(s.withEpss) }
     ];
+  }
+
+  // Where a CVE record came from, from the catalogue's "sources" list ("cve5", "nvd"): "CVE.org and NIST NVD", "NIST NVD", "".
+  var SOURCE_LABELS = { cve5: "CVE.org", nvd: "NIST NVD" };
+  function sourcesText(list) {
+    if (!Array.isArray(list)) return "";
+    var names = list.map(function (k) { return SOURCE_LABELS[k]; }).filter(Boolean);
+    return names.join(" and ");
+  }
+
+  // What the NIST NVD's last run did, from the detail the catalogue kept: "Last run scored 212 CVEs, 3 of them new to the catalogue."
+  function nvdRunNote(detail) {
+    if (!detail || typeof detail.applied !== "number") return "";
+    var n = detail.applied, made = typeof detail.created === "number" ? detail.created : 0;
+    return ". Last run scored " + thousands(n) + (n === 1 ? " CVE" : " CVEs") + (made ? ", " + thousands(made) + " of them new to the catalogue" : "") + ".";
   }
 
   // One row per feed the catalogue is built from: { title, tone, text }. A feed that has never run says so; one that
@@ -343,7 +359,7 @@
       if (s.ok === false) return { title: n[1], tone: "alert", text: "Failed" + (s.error ? ": " + String(s.error).slice(0, 160) : "") + (when ? ". Last worked " + when + "." : ".") };
       var d = toDate(s.lastOk);
       if (d && (now - d.getTime()) / 3600000 > n[2]) return { title: n[1], tone: "alert", text: "Overdue: last updated " + when + " (it should be at least every " + hoursText(n[2]) + ")." };
-      return { title: n[1], tone: "ok", text: when ? "Updated " + when : "Updated" };
+      return { title: n[1], tone: "ok", text: (when ? "Updated " + when : "Updated") + (n[0] === "nvd" ? nvdRunNote(s.detail) : "") };
     });
   }
 
@@ -497,7 +513,7 @@
     agoText: agoText, thousands: thousands, scoreText: scoreText, scoreTone: scoreTone, epssText: epssText, confidenceText: confidenceText,
     safeUrl: safeUrl, itemLabel: itemLabel, softwareLabel: softwareLabel, autoName: autoName, nameBase: nameBase, matchText: matchText, itemTree: itemTree, queryString: queryString,
     pageCount: pageCount, barPercent: barPercent, planBadge: planBadge, canEditPlan: canEditPlan, canApprove: canApprove, planDraft: planDraft,
-    staleSources: staleSources, staleWarning: staleWarning, hoursText: hoursText, SOURCE_NAMES: SOURCE_NAMES,
+    staleSources: staleSources, staleWarning: staleWarning, hoursText: hoursText, SOURCE_NAMES: SOURCE_NAMES, sourcesText: sourcesText, nvdRunNote: nvdRunNote,
     bulkBody: bulkBody, bulkFilter: bulkFilter, bulkIds: bulkIds, bulkSummaryText: bulkSummaryText, bulkGroupLine: bulkGroupLine, bulkFailText: bulkFailText,
     bulkTotals: bulkTotals, bulkAdd: bulkAdd, bulkResultText: bulkResultText, bulkShouldContinue: bulkShouldContinue, BULK_MAX_IDS: BULK_MAX_IDS,
     planPayload: planPayload, eventTitle: eventTitle, actorText: actorText, errorMessage: errorMessage, needsSignIn: needsSignIn, PERSON_STATES: PERSON_STATES
@@ -1078,6 +1094,7 @@
       var facts = el("dl", "vn-facts");
       function fact(k, v) { if (!v) return; facts.appendChild(el("dt", null, k)); facts.appendChild(el("dd", null, v)); }
       fact("Score", scoreText(full));
+      fact("Sources", sourcesText(full.sources));
       cvssRows(rec.cvss).forEach(function (c) { fact(c.label, c.text + (c.how ? ". " + c.how + "." : "")); });
       if (full.kev) fact("Exploited", "Yes" + (full.kevAdded ? ", added " + fmtDate(full.kevAdded) : "") + (full.kevInfo && full.kevInfo.due ? ", fix due " + fmtDate(full.kevInfo.due) : "") + (full.kevInfo && full.kevInfo.ransomware ? ", used in ransomware: " + full.kevInfo.ransomware : ""));
       fact("Exploit chance", epssText(full.epss) ? epssText(full.epss).replace("EPSS ", "") + " in the next 30 days" : "");

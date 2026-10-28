@@ -97,7 +97,7 @@ test("the catalogue's headline numbers read in order, with thousands separators"
   var t = V.catalogTiles({ total: 413119, counts: { recent: 17172, archive: 395947 }, kev: 1754, enriched: 20000, withEpss: 300000 });
   assert.deepStrictEqual(t.map(function (x) { return x.label + "=" + x.value; }), [
     "CVEs in all=413,119", "Published in the last 30 days=17,172", "Older, in the archive=395,947", "Exploited in the wild=1,754",
-    "With a score=20,000", "With an exploit likelihood=300,000"]);
+    "With a score=20,000", "Only in the NIST NVD so far=0", "With an exploit likelihood=300,000"]);
   assert.strictEqual(V.catalogTiles(null)[0].value, "0", "an unreadable status shows zeros, not a crash");
 });
 
@@ -502,7 +502,7 @@ test("the Catalogue tab marks an overdue feed, not only a failed one", function 
   assert.strictEqual(by["CVE.org list of every CVE"].tone, "alert");
   assert.match(by["CVE.org list of every CVE"].text, /^Overdue: last updated 6 h ago \(it should be at least every 3 hours\)\./);
   assert.strictEqual(by["CISA exploited list"].tone, "ok");
-  assert.match(by["NVD scores and affected versions"].text, /^Failed: timeout/);
+  assert.match(by["NIST NVD scores, CVEs and affected versions"].text, /^Failed: timeout/);
   assert.strictEqual(by["Exploit-likelihood scores (EPSS)"].text, "Not run yet");
 });
 
@@ -531,6 +531,40 @@ test("the page has a Severity drop-down beside Priority and clears it with the o
   assert.ok(/aria-label", "Severity"/.test(src));
   assert.ok(/F\.severity = ""/.test(src), "Clear filters also clears severity");
   assert.ok(/severity: F\.severity/.test(src), "the list request carries it");
+});
+
+console.log("\n" + passed + " passed");
+
+test("the catalogue shows how many CVEs only the NIST NVD has named so far", function () {
+  var tile = V.catalogTiles({ total: 10, nvdOnly: 1234 }).filter(function (x) { return x.label === "Only in the NIST NVD so far"; })[0];
+  assert.strictEqual(tile.value, "1,234");
+  assert.strictEqual(V.catalogTiles({ total: 10 }).filter(function (x) { return x.label === "Only in the NIST NVD so far"; })[0].value, "0", "an older catalogue that does not report it shows zero");
+});
+
+test("a CVE says which sources it came from, in plain words", function () {
+  assert.strictEqual(V.sourcesText(["cve5"]), "CVE.org");
+  assert.strictEqual(V.sourcesText(["cve5", "nvd"]), "CVE.org and NIST NVD");
+  assert.strictEqual(V.sourcesText(["nvd"]), "NIST NVD");
+  assert.strictEqual(V.sourcesText(["bogus"]), "", "an unknown source is left out, not shown raw");
+  assert.strictEqual(V.sourcesText(undefined), "", "an older catalogue sends none");
+  assert.strictEqual(V.sourcesText(null), "");
+});
+
+test("the NIST NVD row says what its last run did, including CVEs new to the catalogue", function () {
+  var now = Date.UTC(2026, 9, 28, 12, 0, 0);
+  var row = function (detail) {
+    return V.sourceRows({ nvd: { ok: true, lastOk: new Date(now - 60 * 60000).toISOString(), detail: detail } }, now)[3];
+  };
+  assert.strictEqual(row({ seen: 215, applied: 212, created: 3, pages: 1 }).text, "Updated 1 h ago. Last run scored 212 CVEs, 3 of them new to the catalogue.");
+  assert.strictEqual(row({ seen: 1, applied: 1, created: 0, pages: 1 }).text, "Updated 1 h ago. Last run scored 1 CVE.");
+  assert.strictEqual(row({ seen: 5, applied: 5, pages: 1 }).text, "Updated 1 h ago. Last run scored 5 CVEs.", "a run from before filing existed has no created count");
+  assert.strictEqual(row(undefined).text, "Updated 1 h ago");
+  assert.strictEqual(V.nvdRunNote("junk"), "");
+});
+
+test("the CVE card lists the sources among its facts", function () {
+  var src = fs.readFileSync(path.join(root, "vuln.js"), "utf8");
+  assert.ok(/fact\("Sources", sourcesText\(full\.sources\)\)/.test(src));
 });
 
 console.log("\n" + passed + " passed");
