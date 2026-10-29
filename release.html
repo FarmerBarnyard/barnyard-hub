@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Release board &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=870e98a5">
+<link rel="stylesheet" href="release.css?v=5ddaca95">
+<script src="themes.js?v=e151fb94"></script>
+</head>
+<body data-shell="release" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Release board</h1>
+    </div>
+    <div class="rel-tools">
+      <button type="button" class="btn btn-sm btn-quiet" id="rel-refresh">Refresh</button>
+      <span class="dim" id="rel-stamp"></span>
+    </div>
+  </div>
+  <div id="rel-flash" class="rel-flash" hidden role="status"></div>
+  <div id="rel-root" aria-live="polite">
+    <p class="dim">Loading&hellip;</p>
+  </div>
+</main>
+
+<script src="shell.js?v=3ca53ddc"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="release-logic.js?v=86070c00"></script>
+<script src="release.js?v=2a1e3117"></script>
+</body>
+</html>
