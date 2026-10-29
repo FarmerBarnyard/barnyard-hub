@@ -1,0 +1,26 @@
+[Unit]
+Description=Barnyard inventory: the daily list of what is installed on this server
+Documentation=https://github.com/FarmerBarnyard/ClaudeRepo/tree/main/reporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# The key is in this root-only file; systemd (PID 1) reads it before dropping privileges.
+EnvironmentFile=/etc/barnyard-reporter/env
+ExecStart=/usr/local/bin/barnyard-inventory
+TimeoutStartSec=120
+# The same fixed unprivileged user as the reporter (install.sh writes the Group= line this machine has: nogroup on Debian and Ubuntu,
+# nobody on Red Hat family systems).
+User=nobody
+Group=nogroup
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+MemoryMax=128M

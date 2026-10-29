@@ -1,2 +1,4 @@
 # The bash helper must keep Unix line endings, or it breaks when run on macOS or Linux.
 agent-kit/*.sh text eol=lf
+# The reporter the install steps on the Monitoring page download. These files must stay byte-for-byte the same as ClaudeRepo/reporter (test/my-monitoring.test.js checks it when that checkout is next to this one).
+reporter-kit/** text eol=lf
