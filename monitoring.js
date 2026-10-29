@@ -693,7 +693,7 @@
   // newKey: the key just made, held here only until the owner is done with it (it is never stored anywhere).
   // fetchedAt / hubAt / incAt: when each read last finished. attempt / backoffUntil: the backing-off after a busy answer.
   var model = {
-    state: "loading", mon: null, hub: null, vuln: null, inc: null, tab: "dashboard", flash: null, busy: false, newKey: null,
+    state: "loading", mon: null, hub: null, vuln: null, inc: null, people: null, mine: false, tab: "dashboard", flash: null, busy: false, newKey: null,
     fetchedAt: 0, hubAt: 0, incAt: 0, inflight: false, attempt: 0, backoffUntil: 0, note: "", checkUntil: 0, lastRefreshAt: 0, stale: false,
     known: {}          // server id -> { service name: true } for every service a report from it has named, so one that goes missing reads as unknown
   };
@@ -731,6 +731,8 @@
     model.inflight = true;
     return getJson(MON + "/status", {}).then(function (r) {
       model.inflight = false;
+      // The Worker keeps this page's data for the hub owner: for anyone else it answers 403, and the person's own space is the page.
+      if (r.status === 403 && !model.mine && window.BarnyardMyMonitoring) { model.mine = true; window.BarnyardMyMonitoring.start(); return false; }
       var ok = applyStatus(r);
       render();
       schedule();
@@ -780,6 +782,8 @@
     if (force || extraDue(model.incAt, now, INCIDENTS_MS)) {
       model.incAt = now;
       jobs.push(getJson(INC, {}).then(function (r) { model.inc = r.status === 200 ? r.body : null; }));
+      // who has their own Monitoring space (names and counts); read as often as the incident count
+      jobs.push(getJson(MON + "/people", {}).then(function (r) { model.people = r.status === 200 && r.body && r.body.enabled ? r.body : null; }));
     }
     if (!jobs.length) return Promise.resolve();
     return Promise.all(jobs).then(function () { if (model.tab === "dashboard" && model.state === "ok") render(); });
@@ -1050,6 +1054,10 @@
     root.appendChild(cols);
 
     root.appendChild(securityBox(now));
+    // other people's own Monitoring spaces (my-monitoring.js): only when someone has one
+    if (model.people && Array.isArray(model.people.people) && model.people.people.length && window.BarnyardMyMonitoring) {
+      root.appendChild(window.BarnyardMyMonitoring.peopleBox(model.people, { onRemove: removeSpace }));
+    }
   }
 
   function alertsTimeline(st, tz, now) {
@@ -1578,7 +1586,20 @@
   }
 
   // The Refresh button: one read, no more than once every few seconds, and the optional reads too.
+  // Takes one person's own space away (the owner's People list). Needs a recent sign-in; asks first.
+  function removeSpace(space, name) {
+    if (model.busy) return;
+    if (typeof window.confirm === "function" && !window.confirm("Remove " + name + "'s Monitoring? Everything they watch and every key they made is deleted.")) return;
+    setBusy(true);
+    send("POST", "/people/remove", { space: space }).then(function (r) {
+      setBusy(false);
+      if (r.status === 200 && r.body && r.body.ok) { model.people = r.body.enabled ? r.body : null; render(); flash(name + "’s Monitoring was removed.", "ok"); }
+      else flash(keyErrorText(r.body && r.body.error ? r.body : { error: "failed" }), "alert");
+    });
+  }
+
   function refresh() {
+    if (model.mine && window.BarnyardMyMonitoring) { window.BarnyardMyMonitoring.refresh(); return; }
     var now = Date.now();
     if (model.inflight || now - model.lastRefreshAt < MIN_REFRESH_MS) return;
     model.lastRefreshAt = now;
@@ -1634,7 +1655,25 @@
     var authCheck = typeof window.barnyardAuthState === "function" ? window.barnyardAuthState() : Promise.resolve({ authenticated: false });
     authCheck.then(function (auth) {
       if (!auth.authenticated) { model.state = "guest"; render(); return; }
-      fetchStatus({ force: true });
+      // The hub owner gets the page below; everyone else gets their own separate space (my-monitoring.js). An unknown answer
+      // (an older Worker, no session yet) keeps the owner's page, which the Worker refuses to anyone who is not the owner.
+      whoIsKnown().then(function (who) {
+        if (who && who.owner === false && window.BarnyardMyMonitoring) { model.mine = true; window.BarnyardMyMonitoring.start(); return; }
+        fetchStatus({ force: true });
+      });
+    });
+  }
+
+  // The signed-in person, once the shell has asked who they are (a few seconds at most).
+  function whoIsKnown() {
+    return new Promise(function (resolve) {
+      var T = window.Theme;
+      if (!T || !T.who) { resolve(null); return; }
+      var done = false;
+      function finish(s) { if (!done) { done = true; resolve(s || null); } }
+      T.who.onChange(finish);
+      T.who.load();
+      setTimeout(function () { finish(T.who.get()); }, 4000);
     });
   }
 

@@ -1,0 +1,57 @@
+/* Release board page (release.html). Colours come from the shell's tokens so every theme works. */
+.rel-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+#rel-root { display: grid; gap: 20px; margin-top: 8px; }
+.dim { color: var(--fg-dim); }
+.small { font-size: 12px; }
+.mono { font-family: var(--font-mono, monospace); font-size: 12px; }
+
+.rel-flash { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.rel-flash[hidden] { display: none; }
+.rel-flash.ok { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+.rel-flash.alert { background: var(--alert-soft); border-color: transparent; color: var(--alert); }
+.rel-off { padding: 14px 16px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); margin: 0; }
+
+/* the loud line: main is red or a deploy failed */
+.rel-headline { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 16px; padding: 16px 20px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); }
+.rel-headline b { font: 700 22px var(--font-display); color: var(--fg-strong); }
+.rel-headline.ok { background: var(--ok-soft); border-color: transparent; }
+.rel-headline.ok b { color: var(--ok); }
+.rel-headline.alert { background: var(--alert-soft); border: 2px solid var(--alert); }
+.rel-headline.alert b { color: var(--alert); font-size: 26px; }
+.rel-headline.attn { background: var(--attn-soft); border-color: transparent; }
+
+.rel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 16px; align-items: start; }
+.rel-card { display: grid; gap: 10px; padding: 16px 18px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); }
+.rel-card.alert { border: 2px solid var(--alert); }
+.rel-card.attn { border-color: var(--attn); }
+.rel-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.rel-name { font: 600 18px var(--font-display); color: var(--fg-strong); text-decoration: none; }
+.rel-name:hover, .rel-link:hover { text-decoration: underline; }
+.rel-link { color: inherit; text-decoration: none; }
+.rel-card h3, .rel-setup h3 { font: 600 14px var(--font-display); color: var(--fg-strong); margin: 4px 0 0; }
+.rel-setup h2 { font: 600 20px var(--font-display); color: var(--fg-strong); margin: 0; }
+.rel-setup { display: grid; gap: 10px; padding: 18px 20px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); max-width: 80ch; }
+.rel-lead { margin: 0; }
+.rel-steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.rel-perms, .rel-repolist, .rel-failing { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.rel-perms li b { margin-right: 8px; }
+
+.rel-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.rel-chip-label { opacity: .7; margin-right: 2px; }
+.rel-main, .rel-deploy, .rel-attn, .rel-error, .rel-none { margin: 0; font-size: 14px; }
+.rel-attn { color: var(--attn); }
+.rel-error { color: var(--attn); }
+.rel-red { padding: 10px 12px; border-radius: 10px; background: var(--alert-soft); color: var(--alert); display: grid; gap: 6px; }
+.rel-red b { font-size: 14px; }
+.rel-failing { color: var(--fg); font-size: 13px; }
+
+.rel-scroll { overflow-x: auto; }
+.rel-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.rel-table th, .rel-table td { text-align: left; padding: 7px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+.rel-table thead th { border-top: 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-dim); font-weight: 600; }
+.rel-by { white-space: nowrap; }
+.rel-stale { color: var(--attn); font-weight: 600; }
+
+.rel-note { display: grid; gap: 8px; }
+.rel-note-text { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); resize: vertical; }
+.rel-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
