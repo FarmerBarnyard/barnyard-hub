@@ -1,0 +1,53 @@
+/* Microsoft 365 page (m365.html). Colours come from the shell's tokens so every theme works. */
+.m3-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+#m3-root { display: grid; gap: 22px; margin-top: 8px; }
+.dim { color: var(--fg-dim); }
+.small { font-size: 12px; }
+
+.m3-flash { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); font-size: 14px; }
+.m3-flash[hidden] { display: none; }
+.m3-flash.ok { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+.m3-flash.alert { background: var(--alert-soft); border-color: transparent; color: var(--alert); }
+
+.m3-banner { padding: 12px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); display: grid; gap: 6px; font-size: 14px; }
+.m3-banner b { font: 600 16px var(--font-display); color: var(--fg-strong); }
+.m3-banner.attn { background: var(--attn-soft); border-color: transparent; }
+.m3-banner.alert { background: var(--alert-soft); border-color: transparent; }
+.m3-banner p { margin: 0; }
+
+.m3-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.m3-stat { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); display: grid; gap: 2px; }
+.m3-stat b { font: 600 26px var(--font-display); color: var(--fg-strong); font-variant-numeric: tabular-nums; }
+.m3-stat span { font-size: 12px; color: var(--fg-dim); }
+.m3-stat.ok b { color: var(--ok); }
+.m3-stat.attn b { color: var(--attn); }
+.m3-stat.alert b { color: var(--alert); }
+
+.m3-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px; align-items: start; }
+.m3-card { padding: 16px 18px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); display: grid; gap: 10px; min-width: 0; }
+.m3-card h2 { font: 600 18px var(--font-display); color: var(--fg-strong); margin: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.m3-card h3 { font: 600 14px var(--font-display); color: var(--fg-strong); margin: 6px 0 0; }
+.m3-card p { margin: 0; font-size: 14px; }
+.m3-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; font-size: 14px; }
+.m3-head b { font: 600 16px var(--font-display); color: var(--fg-strong); }
+.m3-head.ok b { color: var(--ok); }
+.m3-head.attn b { color: var(--attn); }
+.m3-head.alert b { color: var(--alert); }
+
+.m3-scroll { overflow-x: auto; }
+.m3-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.m3-table th, .m3-table td { text-align: left; padding: 7px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+.m3-table thead th { border-top: 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-dim); font-weight: 600; }
+.m3-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.m3-table .attn { color: var(--attn); font-weight: 600; }
+.m3-table .alert { color: var(--alert); font-weight: 600; }
+.m3-sub { display: block; font-size: 12px; color: var(--fg-dim); word-break: break-all; }
+
+.m3-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.m3-list li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.m3-steps { margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 14px; max-width: 76ch; }
+.m3-perms { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.m3-perms code { font-family: var(--font-mono, monospace); font-size: 12px; background: var(--panel-2); padding: 1px 6px; border-radius: 6px; }
+
+.m3-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.m3-form input { flex: 1 1 260px; font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
