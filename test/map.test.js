@@ -238,4 +238,30 @@ test("map.html loads the rules before the page, and only from this site", functi
   assert.ok(!/ style=/.test(html), "no inline style attribute");
 });
 
+test("the sidebar has a Blast radius entry: owner only, pointing at map.html, with its own icon and palette words", function () {
+  var shell = fs.readFileSync(path.join(root, "shell.js"), "utf8");
+  var items = shell.match(/\{ id: "[a-z]+", title: "[^"]+", group: "[^"]*", icon: "[a-z]+"[^}]*\}/g) || [];
+  var entry = items.filter(function (it) { return /id: "map"/.test(it); });
+  assert.strictEqual(entry.length, 1, "exactly one menu entry for the map");
+  var e = entry[0];
+  assert.ok(/title: "Blast radius"/.test(e) && /group: "Work"/.test(e));
+  assert.ok(/path: "map\.html"/.test(e) && /local: "map\.html"/.test(e), "points at the hub's map.html, here and from the other sites");
+  assert.ok(/ownerOnly: true/.test(e), "shown to the owner alone, and hidden until that is known");
+  assert.ok(!/perm:/.test(e), "no perm: the Worker has no map area and the owner is never capped");
+  assert.ok(/keywords: "[^"]*dependencies[^"]*"/.test(e), "the palette finds it by 'dependencies'");
+  var icon = /icon: "([a-z]+)"/.exec(e)[1];
+  assert.ok(new RegExp("\\n\\s+" + icon + ": '<").test(shell), "the icon " + icon + " is drawn");
+  assert.notStrictEqual(icon, "map", "not the Campaign icon");
+  // it sits in the Work group, between Services and Users, so the group stays together
+  assert.ok(shell.indexOf('id: "services"') < shell.indexOf('id: "map"') && shell.indexOf('id: "map"') < shell.indexOf('id: "users"'));
+});
+
+test("the sidebar highlights Blast radius on map.html, and the palette matches a page's own words", function () {
+  var shell = fs.readFileSync(path.join(root, "shell.js"), "utf8");
+  assert.ok(/map\\\.html\$\/\.test\(location\.pathname\)\) return "map"/.test(shell), "inferCurrent knows map.html");
+  var html = fs.readFileSync(path.join(root, "map.html"), "utf8");
+  assert.ok(/<body data-shell="map"/.test(html), "map.html says which menu item it is, so Overview is not lit instead");
+  assert.ok(/keywords: "open " \+ p\.id \+ \(p\.keywords \? " " \+ p\.keywords : ""\)/.test(shell), "palette keywords include the entry's own");
+});
+
 console.log("\n" + passed + " passed");
