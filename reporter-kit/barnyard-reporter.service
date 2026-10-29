@@ -1,0 +1,27 @@
+[Unit]
+Description=Barnyard reporter: one small report to the Worker
+Documentation=https://github.com/FarmerBarnyard/ClaudeRepo/tree/main/reporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# The key is in this root-only file; systemd (PID 1) reads it before dropping privileges.
+EnvironmentFile=/etc/barnyard-reporter/env
+ExecStart=/usr/local/bin/barnyard-reporter
+TimeoutStartSec=45
+# A fixed unprivileged user, NOT DynamicUser: inside a DynamicUser sandbox `systemctl is-active` cannot reach systemd
+# ("Transport endpoint is not connected"), so every service looked down. install.sh writes the group this machine has
+# (nogroup on Debian and Ubuntu, nobody on Red Hat family systems) over the Group= line below.
+User=nobody
+Group=nogroup
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+MemoryMax=64M
