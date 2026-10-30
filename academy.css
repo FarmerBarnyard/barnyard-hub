@@ -1,0 +1,82 @@
+/* Academy page (academy.html). Colours come from the shell's tokens so every theme works. */
+.ac-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#ac-root { display: grid; gap: 18px; margin-top: 8px; min-width: 0; }
+.small { font-size: 12px; }
+
+.ac-flash { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); font-size: 14px; }
+.ac-flash[hidden] { display: none; }
+.ac-flash.ok { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+.ac-flash.alert { background: var(--alert-soft); border-color: transparent; color: var(--alert); }
+
+.ac-back { font-size: 13px; color: var(--fg-dim); text-decoration: none; width: fit-content; }
+.ac-back:hover { color: var(--fg-strong); text-decoration: underline; }
+
+.ac-banner { padding: 12px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 14px; }
+.ac-banner b { font: 600 16px var(--font-display); color: var(--fg-strong); }
+.ac-banner.attn { background: var(--attn-soft); border-color: transparent; }
+.ac-banner.ok { background: var(--ok-soft); border-color: transparent; }
+
+.ac-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; align-items: start; }
+.ac-card { padding: 16px 18px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); display: grid; gap: 10px; min-width: 0; }
+.ac-card h2 { font: 600 18px var(--font-display); color: var(--fg-strong); }
+.ac-card h3 { font: 600 15px var(--font-display); color: var(--fg-strong); }
+.ac-card p { font-size: 14px; }
+a.ac-course { text-decoration: none; color: inherit; }
+a.ac-course:hover { border-color: var(--accent); }
+
+progress { width: 100%; height: 8px; accent-color: var(--accent); }
+
+.ac-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ac-confirm { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+.ac-lessons { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ac-lesson { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); }
+.ac-lesson.done { border-left: 3px solid var(--ok); }
+.ac-lesson-main { display: grid; gap: 4px; min-width: 0; flex: 1 1 260px; }
+.ac-lesson-title { font-weight: 600; color: var(--fg-strong); text-decoration: none; overflow-wrap: anywhere; }
+.ac-lesson-title:hover { text-decoration: underline; }
+.ac-lesson-side { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.ac-form { display: grid; gap: 10px; }
+.ac-field { display: grid; gap: 4px; }
+.ac-label { font-size: 12px; color: var(--fg-dim); }
+.ac-form input[type="text"], .ac-form textarea, .ac-form select, .ac-qform input[type="text"], .ac-qform textarea, .ac-qform select, .ac-quiz input[type="text"] {
+  width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); min-width: 0;
+}
+.ac-form textarea, .ac-qform textarea { resize: vertical; }
+
+.ac-body .ac-md { font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; max-width: 78ch; }
+.ac-body .ac-md h1, .ac-body .ac-md h2, .ac-body .ac-md h3 { margin: 18px 0 8px; font-family: var(--font-display); color: var(--fg-strong); }
+.ac-body .ac-md p { margin: 0 0 10px; }
+.ac-body .ac-md pre { overflow-x: auto; padding: 10px 12px; border-radius: 8px; background: var(--panel-2); }
+.ac-body .ac-md table { border-collapse: collapse; display: block; overflow-x: auto; }
+.ac-body .ac-md th, .ac-body .ac-md td { border: 1px solid var(--line); padding: 4px 8px; }
+
+.ac-qlist { display: grid; gap: 12px; }
+.ac-q { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); display: grid; gap: 8px; }
+.ac-q.draft { border-style: dashed; border-color: var(--attn); }
+.ac-q-top { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.ac-q-top b { overflow-wrap: anywhere; flex: 1 1 260px; }
+.ac-q-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.ac-right { color: var(--ok); }
+.ac-qform { display: grid; gap: 10px; padding: 12px 14px; border-radius: 12px; border: 1px dashed var(--line); }
+.ac-qform h4 { font: 600 14px var(--font-display); color: var(--fg-strong); margin: 0; }
+.ac-qform div[hidden] { display: none; }
+
+.ac-quiz { gap: 14px; }
+.ac-qitem { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 8px; margin: 0; min-width: 0; }
+.ac-qitem legend { padding: 0 6px; font-weight: 600; color: var(--fg-strong); overflow-wrap: anywhere; }
+.ac-opt { display: flex; gap: 8px; align-items: flex-start; padding: 6px 4px; cursor: pointer; }
+.ac-opt input { margin-top: 4px; }
+.ac-feedback.ok { color: var(--ok); }
+.ac-feedback.alert { color: var(--alert); }
+.ac-feedback b { display: block; }
+
+.ac-table-wrap { overflow-x: auto; }
+.ac-table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.ac-table th, .ac-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.ac-table th { font-size: 12px; color: var(--fg-dim); font-weight: 500; }
+
+@media (max-width: 560px) {
+  .ac-lesson { align-items: flex-start; }
+}
