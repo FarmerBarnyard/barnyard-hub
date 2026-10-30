@@ -201,19 +201,19 @@ test("the page is wired up: the same CSP as the other pages, scripts from this s
 
 test("every menu item names a permission the Worker can take away, and the Users item is the owner's alone", function () {
   var shell = fs.readFileSync(path.join(root, "shell.js"), "utf8");
-  var items = shell.match(/\{ id: "[a-z]+", title: "[^"]+", group: "[^"]*", icon: "[a-z]+"[^}]*\}/g) || [];
+  var items = shell.match(/\{ id: "[a-z0-9]+", title: "[^"]+", group: "[^"]*", icon: "[a-z]+"[^}]*\}/g) || [];
   assert.ok(items.length >= 11, "the nav table was found");
   // The one exception: Blast radius (the dependency map). It is the owner's alone and the Worker has no area for it, so there is
   // nothing the Users page could take away; it must stay ownerOnly and carry no perm.
   items.forEach(function (it) {
     if (/id: "map"/.test(it)) { assert.ok(/ownerOnly: true/.test(it) && !/perm:/.test(it), "the map is owner-only with no Worker area: " + it); return; }
-    assert.ok(/perm: "[a-z]+\.view"/.test(it), "no permission on: " + it);
+    assert.ok(/perm: "[a-z0-9]+\.view"/.test(it), "no permission on: " + it);
   });
   var users = items.filter(function (it) { return /id: "users"/.test(it); })[0];
   assert.ok(users && /ownerOnly: true/.test(users) && /perm: "users\.view"/.test(users));
-  // the same ids the Worker's catalogue uses (access-catalogue.js): overview, ops, vuln, calendar, monitoring, incidents, reports, services, release, users, chat, study, notebook, kb, campaign, stocks
-  var known = ["overview", "ops", "vuln", "calendar", "monitoring", "incidents", "reports", "services", "release", "users", "chat", "study", "notebook", "kb", "campaign", "stocks"];
-  items.forEach(function (it) { var m = /perm: "([a-z]+)\.view"/.exec(it); if (!m) return; assert.ok(known.indexOf(m[1]) !== -1, "unknown area " + m[1]); });
+  // the same ids the Worker's catalogue uses (access-catalogue.js): overview, ops, vuln, calendar, monitoring, incidents, reports, services, m365, release, users, chat, study, notebook, kb, campaign, stocks
+  var known = ["overview", "ops", "vuln", "calendar", "monitoring", "incidents", "reports", "services", "m365", "release", "users", "chat", "study", "notebook", "kb", "campaign", "stocks"];
+  items.forEach(function (it) { var m = /perm: "([a-z0-9]+)\.view"/.exec(it); if (!m) return; assert.ok(known.indexOf(m[1]) !== -1, "unknown area " + m[1]); });
 });
 
 console.log("\n" + passed + " passed");
