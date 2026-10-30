@@ -1,4 +1,4 @@
-/* Incidents page (incidents.html). Colours come from the shell's tokens so every theme works. */
+/* Incidents tab of the Monitoring page (monitoring.html). Colours come from the shell's tokens so every theme works. */
 .inc-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
 #inc-root { display: grid; gap: 22px; margin-top: 8px; }
 .dim { color: var(--fg-dim); }

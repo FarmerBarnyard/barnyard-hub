@@ -1,4 +1,4 @@
-// The Reports page (reports.html): the monthly IT report for the committee. The owner's page, like Monitoring.
+// The Reports tab of the Monitoring page (monitoring.html#reports): the monthly IT report for the committee. The owner's page, like Monitoring.
 //
 // Reads and writes /reports/* on the Worker (ClaudeRepo's cloudflare-worker/src/reports-routes.js, owner only):
 //   GET  /reports/status    the months to pick, the month the next email is for, whether email can go out
@@ -341,7 +341,16 @@
     });
   }
 
-  function boot() {
+  // ---- the Monitoring page's Reports tab -----------------------------------------------------------------------
+  // monitoring.js loads this file the first time the tab is opened and calls start() each time it is shown. The page does not
+  // poll, so there is nothing to stop; the report on screen (and any sentences not saved yet) stays as it was when the tab is
+  // closed and opened again. The Refresh button and the month picker are in monitoring.html; they are wired once.
+
+  var wired = false, ready = false, pending = false;
+
+  function wire() {
+    if (wired) return;
+    wired = true;
     var rf = $("rp-refresh"), sel = $("rp-month");
     if (rf) rf.addEventListener("click", function () { model.flash = null; loadAll(); });
     if (sel) sel.addEventListener("change", function () {
@@ -349,13 +358,24 @@
       model.month = sel.value; model.flash = null; model.report = null; model.drafts = {};
       render(); loadReport().then(render);
     });
+  }
+
+  function start() {
+    wire();
+    if (ready || pending) return;
+    pending = true;
     var authCheck = typeof window.barnyardAuthState === "function" ? window.barnyardAuthState() : Promise.resolve({ authenticated: false });
     authCheck.then(function (auth) {
+      pending = false;
       if (!auth.authenticated) { model.state = "guest"; render(); return; }
+      ready = true;
       render(); loadAll();
     });
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+  function stop() {}
+
+  window.BarnyardTabs = window.BarnyardTabs || {};
+  window.BarnyardTabs.reports = { start: start, stop: stop };
   window.BarnyardReports = helpers;
 })();

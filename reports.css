@@ -1,4 +1,4 @@
-/* Reports page (reports.html). Colours come from the shell's tokens so every theme works. */
+/* Reports tab of the Monitoring page (monitoring.html). Colours come from the shell's tokens so every theme works. */
 .rp-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
 .rp-month { display: flex; align-items: center; gap: 6px; }
 .rp-month select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
@@ -27,7 +27,7 @@
 .rp-edit { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); resize: vertical; min-height: 3.4em; width: 100%; box-sizing: border-box; }
 .rp-sentence { display: none; margin: 0; }
 .rp-meta { margin: 0; font-size: 12.5px; }
-button.linklike { background: none; border: 0; padding: 0; font: inherit; color: var(--accent, var(--fg-strong)); text-decoration: underline; cursor: pointer; }
+#pane-reports button.linklike { background: none; border: 0; padding: 0; font: inherit; color: var(--accent, var(--fg-strong)); text-decoration: underline; cursor: pointer; }
 
 .rp-facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 0; font-size: 14px; }
 .rp-facts dt { color: var(--fg-dim); }

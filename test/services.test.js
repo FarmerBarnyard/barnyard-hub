@@ -216,17 +216,17 @@ test("what the server sends only ever reaches the page as text, and the page has
     assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function/.test(src), f + " builds markup from strings");
     assert.ok(!/setAttribute\(\s*["']style["']/.test(src), f + " sets a style attribute");
   });
-  var page = fs.readFileSync(path.join(root, "services.html"), "utf8");
+  var page = fs.readFileSync(path.join(root, "monitoring.html"), "utf8");
   assert.ok(/Content-Security-Policy/.test(page) && /style-src 'self'/.test(page) && /script-src 'self'/.test(page));
-  assert.ok(!/\sstyle=|\sonclick=|<script>[^<]/.test(page), "services.html has an inline script or style");
+  assert.ok(!/\sstyle=|\sonclick=|<script>[^<]/.test(page), "monitoring.html has an inline script or style");
+  ["svc-root", "svc-refresh", "svc-stamp", "svc-flash"].forEach(function (id) { assert.ok(page.indexOf('id="' + id + '"') > -1, id); });
   assert.ok(/connect-src 'self' https:\/\/api\.barnyard\.site/.test(page));
 });
 
-test("the menu has the Services item for the owner, with a permission the Worker can take away, and a page name the shell recognises", function () {
+test("Services is a Monitoring tab found by the search, for the owner, with a permission the Worker can take away", function () {
   var shell = fs.readFileSync(path.join(root, "shell.js"), "utf8");
   var it = (shell.match(/\{ id: "services"[^}]*\}/) || [""])[0];
-  assert.ok(/ownerOnly: true/.test(it) && /perm: "services\.view"/.test(it) && /path: "services\.html"/.test(it), it);
-  assert.ok(/services\\\.html\$\/\.test\(location\.pathname\)\) return "services"/.test(shell));
+  assert.ok(/ownerOnly: true/.test(it) && /perm: "services\.view"/.test(it) && /path: "monitoring\.html#services"/.test(it) && /nav: false/.test(it), it);
   assert.ok(/gauge: '/.test(shell));
   var index = fs.readFileSync(path.join(root, "index.html"), "utf8");
   assert.ok(/<script src="tile-services\.js/.test(index));

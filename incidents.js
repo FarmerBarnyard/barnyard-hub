@@ -1,4 +1,4 @@
-// The Incidents page (incidents.html): what Monitoring opened, how it went, what changed just before, the guide to follow,
+// The Incidents tab of the Monitoring page (monitoring.html#incidents): what Monitoring opened, how it went, what changed just before, the guide to follow,
 // and the review afterwards. The owner's page, like Monitoring.
 //
 // Reads and writes /incidents/* on the Worker (ClaudeRepo's cloudflare-worker/src/incident-routes.js, owner only):
@@ -163,16 +163,19 @@
     return b;
   }
 
-  // "#inc_abcd1234" -> "inc_abcd1234"; anything else -> "".
+  // "#incidents/inc_abcd1234" (the address on the Monitoring page) or the old "#inc_abcd1234" -> "inc_abcd1234"; anything else -> "".
   function idFromHash(hash) {
-    var m = /^#(inc_[a-z0-9]{8})$/.exec(String(hash || ""));
+    var m = /^#(?:incidents\/)?(inc_[a-z0-9]{8})$/.exec(String(hash || ""));
     return m ? m[1] : "";
   }
+  // The address of one incident, and of the list, on the Monitoring page.
+  function hashForId(id) { return "#incidents/" + id; }
+  var LIST_HASH = "#incidents";
 
   var helpers = {
     agoText: agoText, durationText: durationText, clockText: clockText, severityTone: severityTone, incidentLine: incidentLine, listRows: listRows,
     summaryLine: summaryLine, timelineRows: timelineRows, changesRows: changesRows, checklistModel: checklistModel, errorText: errorText,
-    openBody: openBody, idFromHash: idFromHash, safeLocalHref: safeLocalHref, safeKbHref: safeKbHref, SEVERITIES: SEVERITIES, SEVERITY_ABOUT: SEVERITY_ABOUT, ERRORS: ERRORS
+    openBody: openBody, idFromHash: idFromHash, hashForId: hashForId, LIST_HASH: LIST_HASH, safeLocalHref: safeLocalHref, safeKbHref: safeKbHref, SEVERITIES: SEVERITIES, SEVERITY_ABOUT: SEVERITY_ABOUT, ERRORS: ERRORS
   };
 
   if (typeof document === "undefined") {
@@ -315,7 +318,7 @@
       var li = h("li", "inc-row " + r.status + " " + r.severity.toLowerCase());
       var top = h("div", "inc-row-top");
       top.appendChild(h("span", "inc-name", r.name));
-      var a = h("a", "inc-link", r.title); a.href = "#" + r.id;
+      var a = h("a", "inc-link", r.title); a.href = hashForId(r.id);
       top.appendChild(a);
       top.appendChild(h("span", "chip " + r.tone, r.status === "open" ? r.severity : "Resolved"));
       li.appendChild(top);
@@ -350,7 +353,7 @@
 
   function renderDetail(root) {
     var d = model.detail;
-    var back = h("a", "inc-back", "All incidents"); back.href = "#";
+    var back = h("a", "inc-back", "All incidents"); back.href = LIST_HASH;
     root.appendChild(back);
     if (!d) { root.appendChild(h("p", "dim", "Loading the incident…")); return; }
     var now = Date.now();
@@ -541,7 +544,7 @@
 
   function openIncident(body) {
     if (!body.title) { flash(ERRORS.title_required, "alert"); return; }
-    write("/open", body, "Incident opened.", function (b) { model.showForm = false; if (b && b.incident) { model.view = "detail"; model.id = b.incident.id; model.detail = null; model.changes = model.check = null; location.hash = b.incident.id; } });
+    write("/open", body, "Incident opened.", function (b) { model.showForm = false; if (b && b.incident) { model.view = "detail"; model.id = b.incident.id; model.detail = null; model.changes = model.check = null; location.hash = hashForId(b.incident.id); } });
   }
   function addNote(text) { write("/note", { id: model.id, text: text }, "Note added."); }
   function changeSeverity(sev) { write("/severity", { id: model.id, severity: sev }, "Severity is now " + sev + "."); }
@@ -569,23 +572,55 @@
     if (model.state === "ok" || model.state === "loading") loadAll();
   }
 
-  function boot() {
+  // ---- the Monitoring page's Incidents tab ------------------------------------------------------------------
+  // monitoring.js loads this file the first time the tab is opened and calls start() each time it is shown and stop() each
+  // time another tab is chosen, so nothing is read or polled while the tab is closed. The page's own buttons are in
+  // monitoring.html; they are wired once.
+
+  var wired = false, active = false, ready = false, pending = false, timer = null;
+
+  function wire() {
+    if (wired) return;
+    wired = true;
     var rf = $("inc-refresh"), nw = $("inc-new");
     if (rf) rf.addEventListener("click", function () { loadAll(); });
-    if (nw) nw.addEventListener("click", function () { model.view = "list"; model.id = ""; model.showForm = true; if (location.hash) location.hash = ""; render(); });
+    if (nw) nw.addEventListener("click", function () { model.view = "list"; model.id = ""; model.showForm = true; if (location.hash !== LIST_HASH) location.hash = LIST_HASH; render(); });
+  }
+
+  function poll() {
+    if (timer) return;
+    // a hidden tab asks for nothing, and a tab being typed in is not repainted under the owner's hands
+    timer = setInterval(function () {
+      var typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+      if (!document.hidden && model.state === "ok" && !model.busy && !typing) loadAll();
+    }, POLL_MS);
+  }
+
+  function start() {
+    wire();
+    active = true;
+    window.removeEventListener("hashchange", route);
     window.addEventListener("hashchange", route);
+    if (ready) { route(); poll(); return; }
+    if (pending) return;
+    pending = true;
     var authCheck = typeof window.barnyardAuthState === "function" ? window.barnyardAuthState() : Promise.resolve({ authenticated: false });
     authCheck.then(function (auth) {
+      pending = false;
       if (!auth.authenticated) { model.state = "guest"; render(); return; }
-      route();
-      // a hidden tab asks for nothing, and a tab being typed in is not repainted under the owner's hands
-      setInterval(function () {
-        var typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-        if (!document.hidden && model.state === "ok" && !model.busy && !typing) loadAll();
-      }, POLL_MS);
+      ready = true;
+      if (active) { route(); poll(); }
     });
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+  function stop() {
+    active = false;
+    clearInterval(timer);
+    timer = null;
+    window.removeEventListener("hashchange", route);
+  }
+
+  window.BarnyardTabs = window.BarnyardTabs || {};
+  window.BarnyardTabs.incidents = { start: start, stop: stop };
   window.BarnyardIncidents = helpers;
 })();

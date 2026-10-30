@@ -3,34 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; base-uri 'self'; form-action 'none';">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex">
 <title>Reports &middot; Barnyard</title>
-<link rel="stylesheet" href="shell.css?v=870e98a5">
-<link rel="stylesheet" href="reports.css?v=8248790a">
-<script src="themes.js?v=e151fb94"></script>
+<noscript><meta http-equiv="refresh" content="0; url=monitoring.html#reports"></noscript>
 </head>
-<body data-shell="reports" data-wide>
-
-<main id="page" class="content">
-  <div class="page-head">
-    <div>
-      <h1>Reports</h1>
-    </div>
-    <div class="rp-tools">
-      <label class="rp-month">Month <select id="rp-month" aria-label="Month"></select></label>
-      <button type="button" class="btn btn-sm btn-quiet" id="rp-refresh">Refresh</button>
-      <span class="dim" id="rp-stamp"></span>
-    </div>
-  </div>
-  <div id="rp-root" aria-live="polite">
-    <p class="dim">Loading&hellip;</p>
-  </div>
-</main>
-
-<script src="shell.js?v=805deabd"></script>
-<script src="auth-gate.js?v=a1b7693a"></script>
-<script src="reports.js?v=f80ecf66"></script>
+<body data-shell="monitor" data-to="reports">
+<p>Reports is now a tab on the Monitoring page. <a href="monitoring.html#reports">Open Reports</a>.</p>
+<script src="legacy-redirect.js?v=535addde"></script>
 </body>
 </html>

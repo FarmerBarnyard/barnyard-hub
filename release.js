@@ -1,4 +1,4 @@
-// The Release board page (release.html): for each repository, is main red, what is live, the open pull requests and a rollback note.
+// The Release board tab of the Monitoring page (monitoring.html#release): for each repository, is main red, what is live, the open pull requests and a rollback note.
 // The owner's page, like Services and Incidents.
 //
 // Reads and writes /release/* on the Worker (ClaudeRepo's cloudflare-worker/src/release-routes.js, owner only):
@@ -250,19 +250,49 @@
     load(true).then(function () { model.busy = false; if (b) b.disabled = false; render(); });
   }
 
-  function boot() {
+  // ---- the Monitoring page's Release board tab ---------------------------------------------------------------
+  // monitoring.js loads this file the first time the tab is opened and calls start() each time it is shown and stop() each
+  // time another tab is chosen, so nothing is read or polled while the tab is closed. The Refresh button is in
+  // monitoring.html; it is wired once.
+
+  var wired = false, active = false, ready = false, pending = false, timer = null;
+
+  function wire() {
+    if (wired) return;
+    wired = true;
     var rf = $("rel-refresh");
     if (rf) rf.addEventListener("click", refreshNow);
+  }
+
+  function poll() {
+    if (timer) return;
+    timer = setInterval(function () {
+      var typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+      if (!document.hidden && model.state === "ok" && !model.busy && !model.saving && !typing) load(false).then(render);
+    }, POLL_MS);
+  }
+
+  function start() {
+    wire();
+    active = true;
+    if (ready) { load(false).then(render); poll(); return; }
+    if (pending) return;
+    pending = true;
     var authCheck = typeof window.barnyardAuthState === "function" ? window.barnyardAuthState() : Promise.resolve({ authenticated: false });
     authCheck.then(function (auth) {
+      pending = false;
       if (!auth.authenticated) { model.state = "guest"; render(); return; }
-      load(false).then(render);
-      setInterval(function () {
-        var typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-        if (!document.hidden && model.state === "ok" && !model.busy && !model.saving && !typing) load(false).then(render);
-      }, POLL_MS);
+      ready = true;
+      if (active) { load(false).then(render); poll(); }
     });
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+  function stop() {
+    active = false;
+    clearInterval(timer);
+    timer = null;
+  }
+
+  window.BarnyardTabs = window.BarnyardTabs || {};
+  window.BarnyardTabs.release = { start: start, stop: stop };
 })();

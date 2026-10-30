@@ -13,9 +13,13 @@
 // (open findings by priority) and GET /incidents/summary (the open-incident count). All three are optional: if one
 // fails its block says so and the rest still shows.
 //
-// Two tabs, chosen by the URL hash (#dashboard, #settings): the Dashboard (a status strip, a card per monitor with its
-// 7-day uptime and a 14-day sparkline, recent alerts, the servers' reporters, security and renewals) and Settings (every
-// control: recipients, working hours, switches, phone alerts, reporter keys, the test buttons).
+// Tabs, chosen by the URL hash (#dashboard, #services, #incidents, #reports, #release, #settings): the Dashboard (a status
+// strip, a card per monitor with its 7-day uptime and a 14-day sparkline, recent alerts, the servers' reporters, security and
+// renewals), Settings (every control: recipients, working hours, switches, phone alerts, reporter keys, the test buttons), and,
+// for the hub owner only, the Services, Incidents, Reports and Release board pages that used to be separate. Each of those four
+// is its own script (services.js, incidents.js, reports.js, release.js + release-logic.js), loaded the first time its tab is
+// opened: it draws into its own panel in monitoring.html, is started when the tab is shown and stopped when another is chosen,
+// so a closed tab reads and polls nothing. An open incident is #incidents/<id>.
 //
 // Request budget (the owner hit Cloudflare's rate limit on /mon/ with the old page, which asked for three things every
 // minute and again after every button): the Dashboard reads /mon/status once when it opens and then once a minute, only
@@ -430,7 +434,18 @@
 
   // ---- the dashboard's own helpers (tabs, counts, uptime, sparklines, groups, backoff) ------------------------
 
-  var TABS = ["dashboard", "settings"];
+  // The tabs in the order they show. Dashboard and Settings are Monitoring's own; the other four are pages that used to have their
+  // own link in the menu. Each needs the permission its page always needed and is for the hub owner only (the Worker refuses anyone
+  // else), so a person who may only see Monitoring sees Dashboard and Settings and nothing more.
+  var TABS = ["dashboard", "services", "incidents", "reports", "release", "settings"];
+  var BASE_TABS = ["dashboard", "settings"];
+  // perm: the permission the Users page can take away. pane: its panel in monitoring.html. files: the scripts it loads, in order.
+  var EXT_TABS = {
+    services: { perm: "services.view", title: "Services", pane: "pane-services", files: ["services.js"] },
+    incidents: { perm: "incidents.view", title: "Incidents", pane: "pane-incidents", files: ["incidents.js"] },
+    reports: { perm: "reports.view", title: "Reports", pane: "pane-reports", files: ["reports.js"] },
+    release: { perm: "release.view", title: "Release board", pane: "pane-release", files: ["release-logic.js", "release.js"] }
+  };
   var TREND_DAYS = 14;
   var STATUS_MS = 60000;            // how often the Dashboard asks for the status while it is open and visible
   var EXTRAS_MS = 10 * 60000;       // the security block (vulnerabilities, expiries) is read this often at most
@@ -439,21 +454,36 @@
   var MIN_REFRESH_MS = 5000;        // the Refresh button will not ask again within this
   var SETTINGS_STALE_MS = 30000;    // opening Settings reads the status again only if the last read is older than this
 
-  // "#settings" -> "settings"; anything else (no hash, "#dashboard", rubbish) -> "dashboard".
-  function tabFromHash(hash) {
-    var h = String(hash || "").replace(/^#/, "").toLowerCase();
-    return TABS.indexOf(h) !== -1 ? h : "dashboard";
+  // The tabs this person has, in order: Dashboard and Settings always, and an extra one only for the owner who has its permission.
+  // who: the shell's session (owner true/false); permits(who, perm): its permission check. Fails closed when who is not known.
+  function extTabsFor(who, permits) {
+    if (!who || who.owner !== true) return [];
+    return Object.keys(EXT_TABS).filter(function (t) {
+      try { return typeof permits !== "function" || permits(who, EXT_TABS[t].perm) !== false; } catch (e) { return false; }
+    });
+  }
+  function allowedTabs(ext) {
+    var more = Array.isArray(ext) ? ext : [];
+    return TABS.filter(function (t) { return BASE_TABS.indexOf(t) !== -1 || more.indexOf(t) !== -1; });
+  }
+
+  // "#settings" -> "settings"; "#incidents/inc_abcd1234" -> "incidents"; a tab this person does not have, no hash, "#dashboard" or
+  // rubbish -> "dashboard". `allowed` is the person's tabs (allowedTabs); without it only Dashboard and Settings count.
+  function tabFromHash(hash, allowed) {
+    var h = String(hash || "").replace(/^#/, "").toLowerCase().split("/")[0];
+    return (Array.isArray(allowed) ? allowed : BASE_TABS).indexOf(h) !== -1 ? h : "dashboard";
   }
   function hashForTab(tab) { return "#" + (TABS.indexOf(tab) !== -1 ? tab : "dashboard"); }
 
   // The tab a key moves to: arrows wrap, Home and End jump. null for any other key.
-  function nextTab(current, key) {
-    var i = TABS.indexOf(current);
+  function nextTab(current, key, allowed) {
+    var list = Array.isArray(allowed) ? allowed : BASE_TABS;
+    var i = list.indexOf(current);
     if (i === -1) i = 0;
-    if (key === "ArrowRight" || key === "ArrowDown") return TABS[(i + 1) % TABS.length];
-    if (key === "ArrowLeft" || key === "ArrowUp") return TABS[(i + TABS.length - 1) % TABS.length];
-    if (key === "Home") return TABS[0];
-    if (key === "End") return TABS[TABS.length - 1];
+    if (key === "ArrowRight" || key === "ArrowDown") return list[(i + 1) % list.length];
+    if (key === "ArrowLeft" || key === "ArrowUp") return list[(i + list.length - 1) % list.length];
+    if (key === "Home") return list[0];
+    if (key === "End") return list[list.length - 1];
     return null;
   }
 
@@ -674,7 +704,7 @@
     ackModel: ackModel, pushStatus: pushStatus, pushErrorText: pushErrorText, PUSH_TYPES: PUSH_TYPES,
     ZONES: ZONES, DAY_NAMES: DAY_NAMES, DAY_ORDER: DAY_ORDER, MAX_RECIPIENTS: MAX_RECIPIENTS,
     // the dashboard
-    TABS: TABS, TREND_DAYS: TREND_DAYS, STATUS_MS: STATUS_MS, EXTRAS_MS: EXTRAS_MS, INCIDENTS_MS: INCIDENTS_MS, CHECK_GAP_MS: CHECK_GAP_MS, MIN_REFRESH_MS: MIN_REFRESH_MS,
+    TABS: TABS, BASE_TABS: BASE_TABS, EXT_TABS: EXT_TABS, extTabsFor: extTabsFor, allowedTabs: allowedTabs, TREND_DAYS: TREND_DAYS, STATUS_MS: STATUS_MS, EXTRAS_MS: EXTRAS_MS, INCIDENTS_MS: INCIDENTS_MS, CHECK_GAP_MS: CHECK_GAP_MS, MIN_REFRESH_MS: MIN_REFRESH_MS,
     tabFromHash: tabFromHash, hashForTab: hashForTab, nextTab: nextTab, counts: counts, overallState: overallState, uptimePct: uptimePct, pctText: pctText,
     sparkModel: sparkModel, sparkLabel: sparkLabel, cardModel: cardModel, groupCards: groupCards, incidentsChip: incidentsChip, timelineRows: timelineRows,
     reporterBrief: reporterBrief, bestReports: bestReports, serviceStates: serviceStates, pushHealthLine: pushHealthLine, parseRetryAfter: parseRetryAfter, backoffMs: backoffMs, busyText: busyText, pollDue: pollDue,
@@ -693,7 +723,7 @@
   // newKey: the key just made, held here only until the owner is done with it (it is never stored anywhere).
   // fetchedAt / hubAt / incAt: when each read last finished. attempt / backoffUntil: the backing-off after a busy answer.
   var model = {
-    state: "loading", mon: null, hub: null, vuln: null, inc: null, people: null, mine: false, tab: "dashboard", flash: null, busy: false, newKey: null,
+    state: "loading", mon: null, hub: null, vuln: null, inc: null, people: null, mine: false, tab: "dashboard", ext: [], flash: null, busy: false, newKey: null,
     fetchedAt: 0, hubAt: 0, incAt: 0, inflight: false, attempt: 0, backoffUntil: 0, note: "", checkUntil: 0, lastRefreshAt: 0, stale: false,
     known: {}          // server id -> { service name: true } for every service a report from it has named, so one that goes missing reads as unknown
   };
@@ -879,10 +909,14 @@
     for (var i = 0; i < nodes.length; i++) if (nodes[i].getAttribute("data-fk") === key) { try { nodes[i].focus({ preventScroll: true }); } catch (e) { nodes[i].focus(); } return; }
   }
 
+  function isExt(tab) { return !!EXT_TABS[tab]; }
+
   function updateTabs() {
+    var allowed = allowedTabs(model.ext);
     TABS.forEach(function (t) {
       var b = $("tab-" + t);
       if (!b) return;
+      if (isExt(t)) b.hidden = allowed.indexOf(t) === -1;
       var on = model.tab === t;
       b.setAttribute("aria-selected", on ? "true" : "false");
       b.tabIndex = on ? 0 : -1;
@@ -890,9 +924,91 @@
     });
   }
 
+  // On a phone the six tabs scroll sideways inside their bar: bring the open one into view (only the bar moves, never the page).
+  function revealTab() {
+    var list = $("mon-tabs"), b = $("tab-" + model.tab);
+    if (!list || !b || list.hidden || list.scrollWidth <= list.clientWidth) return;
+    var lr = list.getBoundingClientRect(), br = b.getBoundingClientRect();
+    if (br.left < lr.left) list.scrollLeft -= lr.left - br.left + 8;
+    else if (br.right > lr.right) list.scrollLeft += br.right - lr.right + 8;
+  }
+
+  // Shows the panel of the open tab and hides the others: Dashboard and Settings share #mon-main (what monitoring.js draws),
+  // each of the other four has a panel of its own (drawn by its own script).
+  function showPanes() {
+    var ext = isExt(model.tab);
+    var main = $("mon-main"), tools = $("mon-tools");
+    if (main) main.hidden = ext;
+    if (tools) tools.hidden = ext;
+    Object.keys(EXT_TABS).forEach(function (t) {
+      var p = $(EXT_TABS[t].pane);
+      if (p) p.hidden = model.tab !== t;
+    });
+  }
+
+  // ---- the four pages that live in tabs (services.js, incidents.js, reports.js, release.js) -------------------------
+
+  var loaded = {};   // tab -> the promise of its scripts, so they are fetched once
+
+  // The address of a script as monitoring.html names it (with its cache stamp), held inert in a <template> so nothing is
+  // fetched until a tab is opened.
+  function scriptUrl(file) {
+    var tpl = $("mon-lazy"), found = file;
+    if (tpl && tpl.content) {
+      Array.prototype.forEach.call(tpl.content.querySelectorAll("script"), function (s) {
+        var src = s.getAttribute("src") || "";
+        if (src.split("?")[0] === file) found = src;
+      });
+    }
+    return found;
+  }
+
+  function loadScript(file) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = scriptUrl(file);
+      s.onload = function () { resolve(); };
+      s.onerror = function () { reject(new Error("load")); };
+      document.head.appendChild(s);
+    });
+  }
+
+  // The tab's scripts, in order, once. A failed load can be tried again by opening the tab again.
+  function loadExt(tab) {
+    if (loaded[tab]) return loaded[tab];
+    var p = EXT_TABS[tab].files.reduce(function (chain, file) { return chain.then(function () { return loadScript(file); }); }, Promise.resolve());
+    loaded[tab] = p;
+    p.catch(function () { delete loaded[tab]; });
+    return p;
+  }
+
+  function startExt(tab) {
+    loadExt(tab).then(function () {
+      if (model.tab !== tab) return;   // another tab was chosen while the script was coming
+      var m = window.BarnyardTabs && window.BarnyardTabs[tab];
+      if (m && typeof m.start === "function") m.start();
+    }, function () {
+      var pane = $(EXT_TABS[tab].pane), box = pane && pane.querySelector("[aria-live]");
+      if (!box) return;
+      clear(box);
+      box.appendChild(h("p", "dim", "Couldn’t load this tab. Check your connection, then open it again."));
+    });
+  }
+
+  function stopExt(tab) {
+    var m = window.BarnyardTabs && window.BarnyardTabs[tab];
+    if (m && typeof m.stop === "function") m.stop();
+  }
+
   function render() {
     var root = $("mon-root"), tabs = $("mon-tabs");
-    if (tabs) tabs.hidden = true;
+    // The owner's extra tabs stay reachable whatever the monitoring answer was (switched off, busy, unreachable); only a
+    // signed-out page, or someone with their own space, has no tab bar for them.
+    var bar = model.ext.length > 0 && !model.mine && model.state !== "guest" && model.state !== "forbidden";
+    if (tabs) tabs.hidden = !bar;
+    if (bar) updateTabs();
+    showPanes();
+    if (isExt(model.tab)) return;   // that tab draws itself; nothing here is on screen
     if (model.state === "loading") return;
     if (model.state === "guest") { message("Log in to see monitoring.", "Log in", typeof window.barnyardLoginUrl === "function" ? window.barnyardLoginUrl() : null); return; }
     if (model.state === "forbidden") { message("This page is for the person who runs the hub."); return; }
@@ -962,7 +1078,7 @@
     if (c.ack) foot.appendChild(ackButton(c.id, c.name, c.ack.acked));
     if (c.label === "Down" && incidentsOpen) {
       var inc = h("a", "sub", "View the incident");
-      inc.href = "incidents.html";
+      inc.href = hashForTab("incidents");
       foot.appendChild(inc);
     }
     if (c.fix) {
@@ -1002,7 +1118,7 @@
     stats.appendChild(stat("up", c.up, c.up ? "ok" : ""));
     stats.appendChild(stat("down", c.down, c.down ? "alert" : ""));
     stats.appendChild(stat("can’t tell", c.unknown + c.waiting, c.unknown ? "attn" : ""));
-    if (chip) stats.appendChild(stat(chip.open === 1 ? "open incident" : "open incidents", chip.open, chip.open ? "alert" : "", "incidents.html"));
+    if (chip) stats.appendChild(stat(chip.open === 1 ? "open incident" : "open incidents", chip.open, chip.open ? "alert" : "", hashForTab("incidents")));
     hero.appendChild(stats);
     var last = (st.monitors || []).reduce(function (a, m) { return Math.max(a, m.lastCheck || 0); }, 0);
     var act = h("div", "mo-hero-act");
@@ -1610,10 +1726,19 @@
   // ---- tabs -----------------------------------------------------------------
 
   function setTab(tab) {
-    if (TABS.indexOf(tab) === -1) tab = "dashboard";
+    if (allowedTabs(model.ext).indexOf(tab) === -1) tab = "dashboard";
     var changed = model.tab !== tab;
+    var was = model.tab;
     model.tab = tab;
+    if (changed && isExt(was)) stopExt(was);
     render();
+    if (changed) revealTab();
+    if (isExt(tab)) {
+      // the Dashboard's poll waits while another tab is open; the tab's own script starts (and polls) from here
+      clearTimeout(pollTimer);
+      if (changed) startExt(tab);
+      return;
+    }
     if (!changed && model.state !== "ok") return;
     clearTimeout(pollTimer);
     if (model.state !== "ok") return;
@@ -1632,14 +1757,14 @@
       b.addEventListener("click", function () { if (location.hash !== hashForTab(t)) location.hash = hashForTab(t); else setTab(t); });
     });
     list.addEventListener("keydown", function (ev) {
-      var to = nextTab(model.tab, ev.key);
+      var to = nextTab(model.tab, ev.key, allowedTabs(model.ext));
       if (!to) return;
       ev.preventDefault();
       var b = $("tab-" + to);
       if (b) b.focus();
       location.hash = hashForTab(to);
     });
-    window.addEventListener("hashchange", function () { setTab(tabFromHash(location.hash)); });
+    window.addEventListener("hashchange", function () { setTab(tabFromHash(location.hash, allowedTabs(model.ext))); });
   }
 
   function boot() {
@@ -1659,6 +1784,11 @@
       // (an older Worker, no session yet) keeps the owner's page, which the Worker refuses to anyone who is not the owner.
       whoIsKnown().then(function (who) {
         if (who && who.owner === false && window.BarnyardMyMonitoring) { model.mine = true; window.BarnyardMyMonitoring.start(); return; }
+        // The owner's extra tabs, now that who they are is known; a link straight to one (#incidents/inc_abcd1234) opens it.
+        var T = window.BarnyardTheme;
+        model.ext = extTabsFor(who, T && T.who ? T.who.permits : null);
+        var want = tabFromHash(location.hash, allowedTabs(model.ext));
+        if (want !== model.tab) { model.tab = want; render(); revealTab(); if (isExt(want)) startExt(want); }
         fetchStatus({ force: true });
       });
     });
@@ -1667,7 +1797,7 @@
   // The signed-in person, once the shell has asked who they are (a few seconds at most).
   function whoIsKnown() {
     return new Promise(function (resolve) {
-      var T = window.Theme;
+      var T = window.BarnyardTheme;   // themes.js names it BarnyardTheme (this used to ask for window.Theme, which nothing defines, so the person was never known)
       if (!T || !T.who) { resolve(null); return; }
       var done = false;
       function finish(s) { if (!done) { done = true; resolve(s || null); } }

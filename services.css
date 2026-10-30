@@ -1,9 +1,9 @@
-/* Services page (services.html). Colours come from the shell's tokens so every theme works. */
+/* Services tab of the Monitoring page (monitoring.html). Colours come from the shell's tokens so every theme works. */
 .svc-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
 #svc-root { display: grid; gap: 28px; margin-top: 8px; }
 .dim { color: var(--fg-dim); }
-.small { font-size: 12px; }
-.mono { font-family: var(--font-mono, monospace); font-size: 12px; }
+#pane-services .small { font-size: 12px; }
+#pane-services .mono { font-family: var(--font-mono, monospace); font-size: 12px; }
 
 .svc-flash { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; font-size: 14px; max-width: 1040px; }
 .svc-flash[hidden] { display: none; }

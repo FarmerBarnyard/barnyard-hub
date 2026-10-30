@@ -1,4 +1,4 @@
-/* Monitoring page (monitoring.html): a Dashboard tab and a Settings tab. Colours come from the shell's tokens so every theme works. */
+/* Monitoring page (monitoring.html): a Dashboard tab, a Settings tab and, for the owner, the Services, Incidents, Reports and Release board tabs. Colours come from the shell's tokens so every theme works. */
 .mo-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
 #mon-root { margin-top: 14px; }
 .mo-pane { display: grid; gap: 22px; min-width: 0; }
@@ -6,7 +6,7 @@
 
 /* tabs */
 .mo-tabs { display: inline-flex; gap: 2px; padding: 3px; margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
-.mo-tabs[hidden] { display: none; }
+.mo-tabs[hidden], .mo-tab[hidden] { display: none; }
 .mo-tab { height: 32px; padding: 0 16px; border: 0; border-radius: 7px; background: transparent; color: var(--fg-dim); font: 500 14px var(--font-body, inherit); cursor: pointer; }
 .mo-tab:hover { color: var(--fg-strong); }
 .mo-tab.on { background: var(--accent); color: var(--accent-ink); }
@@ -160,3 +160,13 @@
   .mo-input, .mo-hours .btn, .mo-row .btn { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .mo-card, .mo-hero, .mo-tab { transition: none; } }
+
+/* the Services, Incidents, Reports and Release board tabs: each panel holds the page's own tool row, then what its script draws */
+.mo-ext { margin-top: 14px; display: grid; gap: 12px; min-width: 0; }
+.mo-ext[hidden] { display: none; }
+#mon-main[hidden], #mon-tools[hidden] { display: none; }
+@media (max-width: 640px) {
+  /* six tabs do not fit a phone's width: the row scrolls sideways instead of squeezing the labels */
+  .mo-tabs { overflow-x: auto; max-width: 100%; box-sizing: border-box; }
+  .mo-tab { flex: 1 0 auto; white-space: nowrap; }
+}

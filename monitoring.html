@@ -8,7 +8,11 @@
 <meta name="robots" content="noindex">
 <title>Monitoring &middot; Barnyard</title>
 <link rel="stylesheet" href="shell.css?v=870e98a5">
-<link rel="stylesheet" href="monitoring.css?v=629a9b1e">
+<link rel="stylesheet" href="monitoring.css?v=1107c91c">
+<link rel="stylesheet" href="services.css?v=06a72e7b">
+<link rel="stylesheet" href="incidents.css?v=46bddbb7">
+<link rel="stylesheet" href="reports.css?v=76694c0e">
+<link rel="stylesheet" href="release.css?v=e8a4e94d">
 <script src="themes.js?v=e151fb94"></script>
 </head>
 <body data-shell="monitor" data-wide>
@@ -18,24 +22,84 @@
     <div>
       <h1>Monitoring</h1>
     </div>
-    <div class="mo-tools">
+    <div class="mo-tools" id="mon-tools">
       <button type="button" class="btn btn-sm btn-quiet" id="mon-refresh">Refresh</button>
       <span class="dim" id="mon-stamp"></span>
     </div>
   </div>
-  <div id="mon-flash" class="mo-flash" role="status" hidden></div>
   <div class="mo-tabs" id="mon-tabs" role="tablist" aria-label="Monitoring sections" hidden>
     <button type="button" class="mo-tab on" id="tab-dashboard" role="tab" aria-selected="true" aria-controls="mon-panel">Dashboard</button>
+    <button type="button" class="mo-tab" id="tab-services" role="tab" aria-selected="false" aria-controls="pane-services" tabindex="-1" hidden>Services</button>
+    <button type="button" class="mo-tab" id="tab-incidents" role="tab" aria-selected="false" aria-controls="pane-incidents" tabindex="-1" hidden>Incidents</button>
+    <button type="button" class="mo-tab" id="tab-reports" role="tab" aria-selected="false" aria-controls="pane-reports" tabindex="-1" hidden>Reports</button>
+    <button type="button" class="mo-tab" id="tab-release" role="tab" aria-selected="false" aria-controls="pane-release" tabindex="-1" hidden>Release board</button>
     <button type="button" class="mo-tab" id="tab-settings" role="tab" aria-selected="false" aria-controls="mon-panel" tabindex="-1">Settings</button>
   </div>
-  <div id="mon-root">
-    <p class="dim">Loading&hellip;</p>
+  <div id="mon-main">
+    <div id="mon-flash" class="mo-flash" role="status" hidden></div>
+    <div id="mon-root">
+      <p class="dim">Loading&hellip;</p>
+    </div>
   </div>
+
+  <!-- The four pages that used to have their own link. Each panel is filled in by its own script the first time its tab is opened. -->
+  <section class="mo-ext" id="pane-services" role="tabpanel" aria-labelledby="tab-services" hidden>
+    <div class="svc-tools">
+      <button type="button" class="btn btn-sm btn-quiet" id="svc-refresh">Refresh</button>
+      <span class="dim" id="svc-stamp"></span>
+    </div>
+    <div id="svc-flash" class="svc-flash" hidden role="status"></div>
+    <div id="svc-root" aria-live="polite">
+      <p class="dim">Loading&hellip;</p>
+    </div>
+  </section>
+
+  <section class="mo-ext" id="pane-incidents" role="tabpanel" aria-labelledby="tab-incidents" hidden>
+    <div class="inc-tools">
+      <button type="button" class="btn btn-sm" id="inc-new">Open an incident</button>
+      <button type="button" class="btn btn-sm btn-quiet" id="inc-refresh">Refresh</button>
+      <span class="dim" id="inc-stamp"></span>
+    </div>
+    <div id="inc-root" aria-live="polite">
+      <p class="dim">Loading&hellip;</p>
+    </div>
+  </section>
+
+  <section class="mo-ext" id="pane-reports" role="tabpanel" aria-labelledby="tab-reports" hidden>
+    <div class="rp-tools">
+      <label class="rp-month">Month <select id="rp-month" aria-label="Month"></select></label>
+      <button type="button" class="btn btn-sm btn-quiet" id="rp-refresh">Refresh</button>
+      <span class="dim" id="rp-stamp"></span>
+    </div>
+    <div id="rp-root" aria-live="polite">
+      <p class="dim">Loading&hellip;</p>
+    </div>
+  </section>
+
+  <section class="mo-ext" id="pane-release" role="tabpanel" aria-labelledby="tab-release" hidden>
+    <div class="rel-tools">
+      <button type="button" class="btn btn-sm btn-quiet" id="rel-refresh">Refresh</button>
+      <span class="dim" id="rel-stamp"></span>
+    </div>
+    <div id="rel-flash" class="rel-flash" hidden role="status"></div>
+    <div id="rel-root" aria-live="polite">
+      <p class="dim">Loading&hellip;</p>
+    </div>
+  </section>
 </main>
 
-<script src="shell.js?v=805deabd"></script>
+<!-- Held inert here (a template is never fetched or run) so the files carry their cache stamps; monitoring.js adds each one to the page when its tab is first opened. -->
+<template id="mon-lazy">
+  <script src="services.js?v=f1872bc0"></script>
+  <script src="incidents.js?v=fba67cfc"></script>
+  <script src="reports.js?v=5a66098e"></script>
+  <script src="release-logic.js?v=86070c00"></script>
+  <script src="release.js?v=b9a1c50d"></script>
+</template>
+
+<script src="shell.js?v=0b462865"></script>
 <script src="auth-gate.js?v=a1b7693a"></script>
 <script src="my-monitoring.js?v=e75d59a8"></script>
-<script src="monitoring.js?v=e81bd54e"></script>
+<script src="monitoring.js?v=84500c1f"></script>
 </body>
 </html>

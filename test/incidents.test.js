@@ -101,8 +101,12 @@ test("the form sends a trimmed title, a known severity and a note only when ther
 });
 
 test("only a real incident id in the address opens an incident", function () {
-  assert.strictEqual(Inc.idFromHash("#inc_abcd1234"), "inc_abcd1234");
-  ["", "#", "#inc_abcd123", "#inc_ABCD1234", "#../x", "#inc_abcd1234x", null].forEach(function (h) { assert.strictEqual(Inc.idFromHash(h), ""); });
+  assert.strictEqual(Inc.idFromHash("#inc_abcd1234"), "inc_abcd1234", "the old address still opens it");
+  assert.strictEqual(Inc.idFromHash("#incidents/inc_abcd1234"), "inc_abcd1234", "the address on the Monitoring page");
+  ["", "#", "#incidents", "#inc_abcd123", "#inc_ABCD1234", "#../x", "#inc_abcd1234x", "#incidents/inc_abcd123", "#incidents/../inc_abcd1234", "#reports/inc_abcd1234", "#incidents/inc_abcd1234/x", null].forEach(function (h) { assert.strictEqual(Inc.idFromHash(h), ""); });
+  assert.strictEqual(Inc.hashForId("inc_abcd1234"), "#incidents/inc_abcd1234");
+  assert.strictEqual(Inc.idFromHash(Inc.hashForId("inc_abcd1234")), "inc_abcd1234");
+  assert.strictEqual(Inc.LIST_HASH, "#incidents");
   assert.strictEqual(Inc.safeLocalHref("ops.html#it_1"), "ops.html#it_1");
   assert.strictEqual(Inc.safeLocalHref("//evil.example"), "");
   assert.strictEqual(Inc.safeKbHref("https://study.barnyard.site/knowledgebase.html#/a/ka_abcd1234"), "https://study.barnyard.site/knowledgebase.html#/a/ka_abcd1234");
@@ -120,15 +124,17 @@ test("the Open incidents tile: a one-line summary, the three newest, and how lon
   assert.strictEqual(Tile.descriptor.id, "incidents"); assert.strictEqual(Tile.descriptor.ownerOnly, true); assert.strictEqual(Tile.descriptor.permission, "tile.incidents");
 });
 
-test("the page is wired: a menu item for the owner only, a strict page with no inline script, and the tile on the Overview", function () {
+test("the page is wired: a Monitoring tab for the owner only (found by the search), a strict page with no inline script, and the tile on the Overview", function () {
   var shell = fs.readFileSync(path.join(root, "shell.js"), "utf8");
-  assert.ok(/id: "incidents", title: "Incidents", group: "Work", icon: "alert", path: "incidents\.html", local: "incidents\.html", ownerOnly: true, perm: "incidents\.view"/.test(shell));
+  assert.ok(/id: "incidents", title: "Incidents", group: "Work", icon: "alert", path: "monitoring\.html#incidents", local: "monitoring\.html#incidents", ownerOnly: true, perm: "incidents\.view", nav: false/.test(shell));
   assert.ok(/alert: '<path/.test(shell));
-  var html = fs.readFileSync(path.join(root, "incidents.html"), "utf8");
+  var html = fs.readFileSync(path.join(root, "monitoring.html"), "utf8");
   assert.ok(/Content-Security-Policy[^>]*script-src 'self'/.test(html));
   assert.ok(!/<script>[^<]/.test(html) && !/\son[a-z]+=/.test(html), "no inline script or handler");
-  assert.ok(/data-shell="incidents"/.test(html));
-  assert.ok(/src="incidents\.js(\?v=[0-9a-f]+)?"/.test(html));
+  assert.ok(/data-shell="monitor"/.test(html));
+  assert.ok(/id="pane-incidents"[^>]*role="tabpanel"/.test(html));
+  ["inc-root", "inc-new", "inc-refresh", "inc-stamp"].forEach(function (id) { assert.ok(html.indexOf('id="' + id + '"') > -1, id); });
+  assert.ok(/<script src="incidents\.js(\?v=[0-9a-f]+)?"><\/script>/.test(html.slice(html.indexOf('<template id="mon-lazy">'), html.indexOf("</template>"))), "loaded on demand from the template");
   var index = fs.readFileSync(path.join(root, "index.html"), "utf8");
   assert.ok(/src="tile-incidents\.js(\?v=[0-9a-f]+)?"/.test(index));
   var page = fs.readFileSync(path.join(root, "incidents.js"), "utf8");

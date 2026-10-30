@@ -26,7 +26,7 @@
   var CARD_KINDS = [
     { kind: "ops", label: "Ops item", plural: "Ops items", page: "ops.html", prefix: "it_" },
     { kind: "asset", label: "Asset", plural: "Assets", page: "map.html", prefix: "as_" },
-    { kind: "incident", label: "Incident", plural: "Incidents", page: "incidents.html", prefix: "inc_" },
+    { kind: "incident", label: "Incident", plural: "Incidents", page: "monitoring.html#incidents", prefix: "inc_" },
     { kind: "todo", label: "To-do", plural: "To-dos", page: "calendar.html", prefix: "td_" }
   ];
   var ID_RE = { ops: /^it_[a-z0-9]{8}$/, asset: /^as_[a-z0-9]{10}$/, incident: /^inc_[a-z0-9]{8}$/, todo: /^td_[0-9a-f]{8}$/ };
