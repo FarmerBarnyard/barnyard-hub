@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Kitchen &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=870e98a5">
+<link rel="stylesheet" href="kitchen.css?v=2ff1d7b9">
+<script src="themes.js?v=e151fb94"></script>
+</head>
+<body data-shell="kitchen" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Kitchen</h1>
+    </div>
+    <div class="kt-tabs" role="tablist" aria-label="Kitchen sections" id="kt-tabs"></div>
+  </div>
+  <div id="kt-flash" class="kt-flash" hidden role="status"></div>
+  <div id="kt-root" aria-live="polite">
+    <p class="dim">Loading&hellip;</p>
+  </div>
+</main>
+
+<script src="shell.js?v=ecf2bcc6"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="kitchen-logic.js?v=86edf032"></script>
+<script src="kitchen.js?v=454344ca"></script>
+</body>
+</html>
