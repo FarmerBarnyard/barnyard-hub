@@ -136,15 +136,19 @@ test("errors are in plain words and never repeat a secret", function () {
   assert.ok(/Could not reach/.test(R.errorText({}, 0)));
 });
 
-test("release.html is in the shell: container, wide, a title row without a blurb, strict CSP, the logic loaded before the page", function () {
-  var html = fs.readFileSync(path.join(root, "release.html"), "utf8");
+test("the Release board is a tab of monitoring.html: its panel and ids, strict CSP, the logic loaded before the page and only on demand", function () {
+  var html = fs.readFileSync(path.join(root, "monitoring.html"), "utf8");
   assert.ok(/<main id="page" class="content"/.test(html));
-  assert.ok(/<body[^>]*data-shell="release"[^>]*\bdata-wide\b/.test(html));
-  assert.ok(/<div class="page-head">\s*<div>\s*<h1>Release board<\/h1>\s*<\/div>/.test(html), "the title is followed by the tools, not a paragraph");
+  assert.ok(/<body[^>]*data-shell="monitor"[^>]*\bdata-wide\b/.test(html));
+  assert.ok(/id="pane-release"[^>]*role="tabpanel"[^>]*aria-labelledby="tab-release"[^>]*hidden/.test(html), "a hidden tab panel");
+  ["rel-root", "rel-refresh", "rel-stamp", "rel-flash"].forEach(function (id) { assert.ok(html.indexOf('id="' + id + '"') > -1, id); });
   assert.ok(/Content-Security-Policy" content="default-src 'self'; connect-src 'self' https:\/\/api\.barnyard\.site;/.test(html));
   assert.ok(!/unsafe-inline/.test(html));
-  assert.ok(html.indexOf("release-logic.js") !== -1 && html.indexOf("release-logic.js") < html.indexOf("release.js"));
-  assert.ok(html.indexOf("shell.js") < html.indexOf("release-logic.js"));
+  var tpl = html.slice(html.indexOf('<template id="mon-lazy">'), html.indexOf("</template>"));
+  assert.ok(tpl.indexOf("release-logic.js") !== -1 && tpl.indexOf("release-logic.js") < tpl.indexOf("release.js"), "the logic is listed before the page");
+  var live = html.slice(html.indexOf("</template>"));
+  assert.ok(live.indexOf("release.js") === -1 && live.indexOf("release-logic.js") === -1, "neither is loaded by the page itself");
+  assert.deepStrictEqual(require("../monitoring.js").EXT_TABS.release.files, ["release-logic.js", "release.js"]);
 });
 
 test("release.js builds the page with textContent only, links only to github.com, and talks only to the Release routes", function () {
@@ -164,17 +168,18 @@ test("the stylesheet fits the shared container: no fixed-width page root", funct
   assert.ok(!/\bmain\s*\{[^}]*max-width/.test(css));
 });
 
-test("the menu has a Release board entry in the Work group: owner only, its own permission, icon and palette words", function () {
+test("the Release board is a Monitoring tab, not a menu item: owner only, its own permission, found by the search with its palette words", function () {
   var shell = fs.readFileSync(path.join(root, "shell.js"), "utf8");
   var line = shell.split("\n").filter(function (l) { return /id: "release"/.test(l); })[0] || "";
   assert.ok(/title: "Release board"/.test(line));
   assert.ok(/group: "Work"/.test(line));
-  assert.ok(/path: "release\.html"/.test(line) && /local: "release\.html"/.test(line));
+  assert.ok(/path: "monitoring\.html#release"/.test(line) && /local: "monitoring\.html#release"/.test(line), "it opens its tab");
+  assert.ok(/nav: false/.test(line), "and is not in the menu");
   assert.ok(/ownerOnly: true/.test(line), "owner only");
   assert.ok(/perm: "release\.view"/.test(line));
-  assert.ok(/icon: "branch"/.test(line) && /branch: '<circle/.test(shell), "its own icon is defined");
+  assert.ok(/icon: "branch"/.test(line) && /branch: '<circle/.test(shell), "its icon is still defined");
   assert.ok(/keywords: "[^"]*rollback[^"]*"/.test(line));
-  assert.ok(/release\\\.html\$\/\.test\(location\.pathname\)\) return "release"/.test(shell), "the page lights its own menu entry");
+  assert.ok(!/release\\\.html\$\/\.test\(location\.pathname\)\) return "release"/.test(shell), "no page of that name lights a menu entry any more");
 });
 
 console.log("\n" + passed + " passed");

@@ -302,6 +302,53 @@ test("the tab comes from the URL hash and unknown hashes mean the Dashboard", fu
   assert.strictEqual(Mon.hashForTab("anything"), "#dashboard");
 });
 
+test("the owner's four extra tabs: shown in order only to the owner with each permission, never to anyone else", function () {
+  assert.deepStrictEqual(Mon.TABS, ["dashboard", "services", "incidents", "reports", "release", "settings"]);
+  var all = function () { return true; };
+  assert.deepStrictEqual(Mon.extTabsFor({ owner: true }, all), ["services", "incidents", "reports", "release"]);
+  assert.deepStrictEqual(Mon.extTabsFor({ owner: true }, function (w, perm) { return perm !== "reports.view" && perm !== "release.view"; }), ["services", "incidents"], "the Users page can take one away");
+  assert.deepStrictEqual(Mon.extTabsFor({ owner: false }, all), [], "someone with their own space gets none");
+  assert.deepStrictEqual(Mon.extTabsFor({}, all), []);
+  assert.deepStrictEqual(Mon.extTabsFor(null, all), [], "it fails closed while who is not known");
+  assert.deepStrictEqual(Mon.extTabsFor({ owner: true }, function () { throw new Error("x"); }), [], "and when the check itself fails");
+  assert.deepStrictEqual(Mon.extTabsFor({ owner: true }), ["services", "incidents", "reports", "release"], "no permission list means every one");
+  assert.deepStrictEqual(Mon.allowedTabs([]), ["dashboard", "settings"]);
+  assert.deepStrictEqual(Mon.allowedTabs(["release", "services"]), ["dashboard", "services", "release", "settings"], "in the fixed order, not the order given");
+  assert.deepStrictEqual(Mon.allowedTabs(["bogus"]), ["dashboard", "settings"]);
+  assert.deepStrictEqual(Mon.allowedTabs(), ["dashboard", "settings"]);
+  Object.keys(Mon.EXT_TABS).forEach(function (t) {
+    assert.ok(/^[a-z0-9]+\.view$/.test(Mon.EXT_TABS[t].perm) && Mon.EXT_TABS[t].pane === "pane-" + t && Mon.EXT_TABS[t].files.length >= 1, t);
+  });
+});
+
+test("the extra tabs are reached by hash only when allowed; an incident's address opens Incidents", function () {
+  var owner = Mon.allowedTabs(["services", "incidents", "reports", "release"]);
+  assert.strictEqual(Mon.tabFromHash("#services", owner), "services");
+  assert.strictEqual(Mon.tabFromHash("#Release", owner), "release");
+  assert.strictEqual(Mon.tabFromHash("#incidents", owner), "incidents");
+  assert.strictEqual(Mon.tabFromHash("#incidents/inc_abcd1234", owner), "incidents");
+  assert.strictEqual(Mon.tabFromHash("#settings/anything", owner), "settings");
+  assert.strictEqual(Mon.tabFromHash("#services", Mon.allowedTabs(["incidents"])), "dashboard", "a tab this person lacks falls back to the Dashboard");
+  assert.strictEqual(Mon.tabFromHash("#services"), "dashboard", "and with no list only the two always-there tabs count");
+  assert.strictEqual(Mon.tabFromHash("#incidents/inc_abcd1234"), "dashboard");
+  assert.strictEqual(Mon.tabFromHash("#/services", owner), "dashboard");
+  ["services", "incidents", "reports", "release"].forEach(function (t) { assert.strictEqual(Mon.hashForTab(t), "#" + t); });
+});
+
+test("arrow keys skip the tabs this person does not have, and move through the extra ones in order", function () {
+  var owner = Mon.allowedTabs(["services", "incidents", "reports", "release"]);
+  assert.strictEqual(Mon.nextTab("dashboard", "ArrowRight", owner), "services");
+  assert.strictEqual(Mon.nextTab("release", "ArrowRight", owner), "settings");
+  assert.strictEqual(Mon.nextTab("settings", "ArrowRight", owner), "dashboard");
+  assert.strictEqual(Mon.nextTab("dashboard", "ArrowLeft", owner), "settings");
+  assert.strictEqual(Mon.nextTab("settings", "ArrowLeft", owner), "release");
+  assert.strictEqual(Mon.nextTab("incidents", "Home", owner), "dashboard");
+  assert.strictEqual(Mon.nextTab("incidents", "End", owner), "settings");
+  var some = Mon.allowedTabs(["incidents"]);
+  assert.strictEqual(Mon.nextTab("dashboard", "ArrowRight", some), "incidents");
+  assert.strictEqual(Mon.nextTab("incidents", "ArrowRight", some), "settings");
+});
+
 test("arrow keys move between the tabs, wrap, and Home and End jump", function () {
   assert.strictEqual(Mon.nextTab("dashboard", "ArrowRight"), "settings");
   assert.strictEqual(Mon.nextTab("settings", "ArrowRight"), "dashboard");
@@ -450,10 +497,16 @@ test("the optional reads and the Check now button follow their own limits", func
   assert.strictEqual(Mon.settingsNeedsRead(NOW - 31000, NOW), true);
 });
 
-test("the page is two tabs with proper roles, and its source holds to the request budget", function () {
+test("the page has its tabs with proper roles, and its source holds to the request budget", function () {
   var html = fs.readFileSync(path.join(root, "monitoring.html"), "utf8");
-  assert.ok(/role="tablist"/.test(html) && (html.match(/role="tab"/g) || []).length === 2, "a tablist with two tabs");
+  assert.ok(/role="tablist"/.test(html) && (html.match(/role="tab"/g) || []).length === 6, "a tablist with six tabs");
   assert.ok(/id="tab-dashboard"[^>]*aria-selected="true"/.test(html) && /id="tab-settings"[^>]*aria-selected="false"[^>]*tabindex="-1"/.test(html), "roving tabindex starts on the Dashboard");
+  var order = ["dashboard", "services", "incidents", "reports", "release", "settings"].map(function (t) { return html.indexOf('id="tab-' + t + '"'); });
+  assert.ok(order.every(function (n, i) { return n > 0 && (i === 0 || n > order[i - 1]); }), "Dashboard, Services, Incidents, Reports, Release board, Settings");
+  ["services", "incidents", "reports", "release"].forEach(function (t) {
+    assert.ok(new RegExp('id="tab-' + t + '"[^>]*aria-controls="pane-' + t + '"[^>]*hidden').test(html), t + " starts hidden and points at its panel");
+    assert.ok(new RegExp('id="pane-' + t + '"[^>]*role="tabpanel"[^>]*aria-labelledby="tab-' + t + '"[^>]*hidden').test(html), t + " panel starts hidden and is labelled by its tab");
+  });
   assert.ok(/id="mon-flash"[^>]*role="status"/.test(html), "messages sit outside the rebuilt panel");
   assert.ok(!/id="mon-check"/.test(html), "Check now lives in the Dashboard strip");
   var js = fs.readFileSync(path.join(root, "monitoring.js"), "utf8").replace(/\/\/.*$/gm, "");

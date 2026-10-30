@@ -1,4 +1,4 @@
-// The Services page (services.html): uptime against the targets the owner sets, the capacity forecast, the Worker's security
+// The Services tab of the Monitoring page (monitoring.html#services): uptime against the targets the owner sets, the capacity forecast, the Worker's security
 // event history, and what Microsoft says about the tenant. The owner's page, like Monitoring and Incidents.
 //
 // Reads and writes /services/* on the Worker (ClaudeRepo's cloudflare-worker/src/services-routes.js, owner only):
@@ -628,21 +628,51 @@
     });
   }
 
-  function boot() {
+  // ---- the Monitoring page's Services tab ----------------------------------------------------------------------
+  // monitoring.js loads this file the first time the tab is opened and calls start() each time it is shown and stop() each
+  // time another tab is chosen, so nothing is read or polled while the tab is closed. The Refresh button is in
+  // monitoring.html; it is wired once.
+
+  var wired = false, active = false, ready = false, pending = false, timer = null;
+
+  function wire() {
+    if (wired) return;
+    wired = true;
     var rf = $("svc-refresh");
     if (rf) rf.addEventListener("click", function () { loadAll(); });
+  }
+
+  function poll() {
+    if (timer) return;
+    // a hidden tab asks for nothing, and a tab being typed in is not repainted under the owner's hands
+    timer = setInterval(function () {
+      var typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+      if (!document.hidden && model.state === "ok" && !model.busy && !typing && !model.editTargets) loadAll();
+    }, POLL_MS);
+  }
+
+  function start() {
+    wire();
+    active = true;
+    if (ready) { loadAll(); poll(); return; }
+    if (pending) return;
+    pending = true;
     var authCheck = typeof window.barnyardAuthState === "function" ? window.barnyardAuthState() : Promise.resolve({ authenticated: false });
     authCheck.then(function (auth) {
+      pending = false;
       if (!auth.authenticated) { model.state = "guest"; render(); return; }
-      loadAll();
-      // a hidden tab asks for nothing, and a tab being typed in is not repainted under the owner's hands
-      setInterval(function () {
-        var typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-        if (!document.hidden && model.state === "ok" && !model.busy && !typing && !model.editTargets) loadAll();
-      }, POLL_MS);
+      ready = true;
+      if (active) { loadAll(); poll(); }
     });
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+  function stop() {
+    active = false;
+    clearInterval(timer);
+    timer = null;
+  }
+
+  window.BarnyardTabs = window.BarnyardTabs || {};
+  window.BarnyardTabs.services = { start: start, stop: stop };
   window.BarnyardServices = helpers;
 })();

@@ -35,7 +35,7 @@
   function render(container) {
     var wrap = h("div", "tl"), head = h("div", "tl-head");
     head.appendChild(h("h3", "tl-title", desc.title));
-    var openRoom = h("a", "btn btn-sm", "Open the Incident Room"); openRoom.href = "incidents.html";
+    var openRoom = h("a", "btn btn-sm", "Open the Incident Room"); openRoom.href = "monitoring.html#incidents";
     head.appendChild(openRoom);
     var body = h("div", "tl-body");
     wrap.appendChild(head); wrap.appendChild(body); clear(container); container.appendChild(wrap);
@@ -49,7 +49,7 @@
       var ul = h("ul", "tl-list");
       list.forEach(function (r) {
         var li = h("li");
-        var a = h("a", null, r.title); a.href = "incidents.html#" + r.id;
+        var a = h("a", null, r.title); a.href = "monitoring.html#incidents/" + r.id;
         li.appendChild(a);
         li.appendChild(chip(r.severity, r.tone));
         li.appendChild(h("span", "dim", " " + r.since));

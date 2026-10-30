@@ -47,7 +47,7 @@
   function render(container) {
     var wrap = h("div", "tl"), head = h("div", "tl-head");
     head.appendChild(h("h3", "tl-title", desc.title));
-    var open = h("a", "btn btn-sm", "Open Services"); open.href = "services.html";
+    var open = h("a", "btn btn-sm", "Open Services"); open.href = "monitoring.html#services";
     head.appendChild(open);
     var body = h("div", "tl-body");
     wrap.appendChild(head); wrap.appendChild(body); clear(container); container.appendChild(wrap);

@@ -1,9 +1,9 @@
-/* Release board page (release.html). Colours come from the shell's tokens so every theme works. */
+/* Release board tab of the Monitoring page (monitoring.html). Colours come from the shell's tokens so every theme works. */
 .rel-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
 #rel-root { display: grid; gap: 20px; margin-top: 8px; }
 .dim { color: var(--fg-dim); }
-.small { font-size: 12px; }
-.mono { font-family: var(--font-mono, monospace); font-size: 12px; }
+#pane-release .small { font-size: 12px; }
+#pane-release .mono { font-family: var(--font-mono, monospace); font-size: 12px; }
 
 .rel-flash { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .rel-flash[hidden] { display: none; }

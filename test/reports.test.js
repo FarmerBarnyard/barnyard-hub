@@ -76,12 +76,12 @@ test("downloads are named for the month", function () {
 
 test("the page is built without innerHTML, inline script or inline style, and has a strict CSP", function () {
   var js = fs.readFileSync(path.join(root, "reports.js"), "utf8");
-  var html = fs.readFileSync(path.join(root, "reports.html"), "utf8");
+  var html = fs.readFileSync(path.join(root, "monitoring.html"), "utf8");
   assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/.test(js), "no HTML injection");
   assert.ok(!/<script(?![^>]*\bsrc=)/.test(html), "no inline script");
   assert.ok(!/ style=|<style/.test(html), "no inline style");
   assert.ok(/default-src 'self'; connect-src 'self' https:\/\/api\.barnyard\.site; style-src 'self'; script-src 'self'/.test(html));
-  assert.ok(/data-shell="reports"/.test(html));
+  assert.ok(/id="pane-reports"[^>]*role="tabpanel"/.test(html));
   ["rp-month", "rp-refresh", "rp-root", "rp-stamp"].forEach(function (id) { assert.ok(html.indexOf('id="' + id + '"') > -1, id); });
 });
 
@@ -92,10 +92,10 @@ test("every Worker route the page uses exists, and the page never polls", functi
   assert.ok(/credentials: "include"/.test(js) && /referrerPolicy: "no-referrer"/.test(js));
 });
 
-test("the menu has a Reports item (owner only, behind the Users permission) and the Monitoring page has its switch", function () {
+test("Reports is a Monitoring tab found by the search (owner only, behind the Users permission) and the Monitoring page has its switch", function () {
   var shell = fs.readFileSync(path.join(root, "shell.js"), "utf8");
-  assert.ok(/\{ id: "reports", title: "Reports", group: "Work", icon: "report", path: "reports\.html", local: "reports\.html", ownerOnly: true, perm: "reports\.view" \}/.test(shell));
-  assert.ok(/reports\\\.html\$\/\.test\(location\.pathname\)\) return "reports"/.test(shell));
+  var it = (shell.match(/\{ id: "reports"[^}]*\}/) || [""])[0];
+  assert.ok(/ownerOnly: true/.test(it) && /perm: "reports\.view"/.test(it) && /path: "monitoring\.html#reports"/.test(it) && /nav: false/.test(it), it);
   assert.ok(/report: '<path/.test(shell), "the icon exists");
   var mon = fs.readFileSync(path.join(root, "monitoring.js"), "utf8");
   assert.ok(/\["report", "A monthly IT report/.test(mon));

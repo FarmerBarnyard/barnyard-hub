@@ -282,7 +282,7 @@ test("a card's id must have the shape of the kind it names", function () {
   assert.strictEqual(L.validRef({ kind: "ops", id: "as_abcdefghij" }), false);
   assert.strictEqual(L.validRef({ kind: "todo", id: "td_zzzzzzzz" }), false);
   assert.strictEqual(L.validRef(null), false);
-  assert.strictEqual(L.cardKind("incident").page, "incidents.html");
+  assert.strictEqual(L.cardKind("incident").page, "monitoring.html#incidents");
   assert.strictEqual(L.cardKind("server"), null);
 });
 
