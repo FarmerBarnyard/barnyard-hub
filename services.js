@@ -4,6 +4,7 @@
 // Reads and writes /services/* on the Worker (ClaudeRepo's cloudflare-worker/src/services-routes.js, owner only):
 //   GET  /services/summary   /events?type=&q=&days=&page=   /m365[?refresh=1]
 //   POST /services/settings  {targets?, m365?}
+//   GET  /services/mirror    POST /services/mirror/run     the Knowledgebase mirror card (a copy of the articles in one SharePoint site)
 // and flips Monitoring's own alert switch (PUT /mon/settings {alerts:{security}}) for the "burst of refused requests" email.
 // The page asks for the summary when it opens and once a minute while it is showing (never from a hidden tab, and not while
 // something is being typed); the event list and Microsoft 365 are asked for only when opened or searched.
@@ -214,6 +215,69 @@
     return changed ? { ok: true, body: { targets: out } } : { ok: false, error: "Nothing changed." };
   }
 
+  // The Knowledgebase mirror (a copy of every published article in one SharePoint site, kept by the Worker): what the card says for each
+  // state GET /services/mirror can answer with. Everything the Worker sends is a short fixed reason, a number or a setting NAME, never a value.
+  var MIRROR_REASONS = {
+    auth: "Microsoft refused the mirror app's sign-in. The client id, tenant or secret may be wrong, or the secret has expired",
+    forbidden: "Microsoft refused the write. The app needs Sites.Selected with write on the mirror site",
+    not_found: "Microsoft could not find the site or its Documents library. Check SP_MIRROR_SITE_ID",
+    bad_request: "Microsoft did not accept a request",
+    conflict: "A file could not be renamed because that name is taken",
+    throttled: "Microsoft asked it to slow down; it will try again later",
+    unavailable: "Microsoft did not answer",
+    source_unavailable: "The Knowledgebase could not be read",
+    state_too_large: "The mirror's record of what it wrote has grown too big to keep"
+  };
+  var MIRROR_WHAT = { article: "An article", image: "An image", rename: "A rename", "delete": "A removal" };
+  var MIRROR_TRIGGER = { nightly: "the nightly check", publish: "after a change", manual: "Run now", "catch-up": "finishing the copy" };
+  function mirrorReasonText(reason, detail) {
+    return (MIRROR_REASONS[reason] || "Something went wrong") + (detail ? " (" + detail + ")." : ".");
+  }
+  function plural(n, one, many) { return n + " " + (n === 1 ? one : many); }
+
+  // -> { state: loading | off | not_set_up | never | ok, tone, head, lines: [string], problems: [names], steps: [string], errors: [string] }
+  function mirrorModel(v, now) {
+    var none = { lines: [], problems: [], steps: [], errors: [] };
+    if (!v || v.ok !== true) return Object.assign({ state: "loading", tone: "", head: "Loading" }, none);
+    if (v.switchedOff) return Object.assign({ state: "off", tone: "", head: "Switched off" }, none, { lines: ["The Worker variable SP_MIRROR_ENABLED is 0, so nothing is copied."] });
+    if (!v.configured) {
+      var miss = Array.isArray(v.problems) ? v.problems : [];
+      return Object.assign({ state: "not_set_up", tone: "", head: "Not set up yet" }, none, {
+        lines: [miss.length ? "These Worker settings are missing or wrong: " + miss.join(", ") + "." : "The mirror has no settings yet."],
+        problems: miss, steps: Array.isArray(v.steps) ? v.steps : []
+      });
+    }
+    var s = v.status;
+    var where = "Folder " + v.folder + ", in the site ending " + v.siteTail + ".";
+    if (!s) return Object.assign({ state: "never", tone: "attn", head: "Set up, not run yet" }, none, { lines: [where, "Press Run now to make the first copy."] });
+    var lines = [plural(v.mirrored || 0, "article is", "articles are") + " on SharePoint. " + where];
+    var run = "Last run " + agoText(s.at, now) + " (" + (MIRROR_TRIGGER[s.trigger] || "a check") + "): " + plural(s.uploaded || 0, "article", "articles") + " written, " + plural(s.imagesUploaded || 0, "image", "images") + " written";
+    if (s.renamed) run += ", " + plural(s.renamed, "file", "files") + " renamed";
+    if (s.deleted) run += ", " + plural(s.deleted, "file", "files") + " removed";
+    lines.push(run + ".");
+    if (s.pending > 0) lines.push(plural(s.pending, "file is", "files are") + " still to copy; the next check does them within five minutes.");
+    if (s.complete === false) lines.push("The Knowledgebase list was cut short, so nothing was judged missing or removed.");
+    var o = v.orphans || { articles: 0, images: 0 };
+    if (o.articles || o.images) {
+      lines.push(plural(o.articles, "article", "articles") + " and " + plural(o.images, "image", "images") + " on SharePoint are no longer in the Knowledgebase. " +
+        (v.deleteOn ? "Removal is switched on, so the next run takes them off." : "They were kept. Set SP_MIRROR_DELETE to 1 to have them removed."));
+    }
+    var errors = (Array.isArray(s.errors) ? s.errors : []).map(function (e) { return (MIRROR_WHAT[e.what] || "A step") + " failed: " + mirrorReasonText(e.reason, e.detail); });
+    if (s.ok === false && s.reason) errors.unshift("The run stopped: " + mirrorReasonText(s.reason, s.detail));
+    var tone = s.ok === false || errors.length ? "alert" : s.pending > 0 || v.waiting ? "attn" : "ok";
+    var head = s.ok === false ? "The last run failed" : errors.length ? "Copied, with problems" : s.pending > 0 ? "Copying" : "Up to date";
+    return { state: "ok", tone: tone, head: head, lines: lines, problems: [], steps: [], errors: errors };
+  }
+
+  // Run now answers 429 with the wait in milliseconds.
+  function mirrorRunError(body, status) {
+    var code = body && typeof body.error === "string" ? body.error : "";
+    if (code === "rate_limited") return "Run now was pressed a moment ago. Try again in " + Math.max(1, Math.ceil((Number(body.retryMs) || 60000) / 1000)) + " seconds.";
+    if (code === "mirror_not_configured") return "The mirror is not set up yet: the Worker settings listed above are missing.";
+    if (code === "mirror_disabled") return "The mirror is switched off (SP_MIRROR_ENABLED is 0).";
+    return null;
+  }
+
   var ERRORS = {
     recent_sign_in_required: "For safety this needs a recent sign-in. Sign in again, then repeat it.",
     unauthenticated: "You are not signed in.",
@@ -250,7 +314,8 @@
     agoText: agoText, clockText: clockText, hourText: hourText, dateText: dateText, pctText: pctText, windowTone: windowTone, budgetText: budgetText,
     burnText: burnText, levelRows: levelRows, headline: headline, forecastText: forecastText, capacityRows: capacityRows, chartModel: chartModel, groupOf: groupOf,
     typeChips: typeChips, eventRows: eventRows, securityLine: securityLine, m365Model: m365Model, issueRows: issueRows, messageRows: messageRows,
-    targetsBody: targetsBody, errorText: errorText, eventsQuery: eventsQuery, CHART_GROUPS: CHART_GROUPS, ERRORS: ERRORS
+    targetsBody: targetsBody, errorText: errorText, eventsQuery: eventsQuery, CHART_GROUPS: CHART_GROUPS, ERRORS: ERRORS,
+    mirrorModel: mirrorModel, mirrorReasonText: mirrorReasonText, mirrorRunError: mirrorRunError
   };
 
   if (typeof document === "undefined") {
@@ -260,7 +325,7 @@
 
   // ---- 2. data --------------------------------------------------------------
 
-  var model = { state: "loading", sum: null, ev: { type: "", q: "", days: 7, page: 1, data: null, busy: false, open: false }, m365: null, flash: null, busy: false, editTargets: false };
+  var model = { state: "loading", sum: null, ev: { type: "", q: "", days: 7, page: 1, data: null, busy: false, open: false }, m365: null, mirror: null, flash: null, busy: false, editTargets: false };
 
   function getJson(url, init) {
     var controller = new AbortController();
@@ -310,9 +375,17 @@
     });
   }
 
+  // The mirror's card: one small read of the stored status; it never starts a copy. A failure keeps the last card.
+  function loadMirror() {
+    return send("GET", "/services", "/mirror").then(function (r) {
+      if (r.status === 200 && r.body && r.body.ok === true) model.mirror = r.body;
+    });
+  }
+
   function loadAll() {
     return loadSummary().then(function () {
       var more = [];
+      if (model.state === "ok") more.push(loadMirror());
       if (model.state === "ok" && model.sum && model.sum.m365 && !model.m365) more.push(loadM365(false));
       if (model.state === "ok" && model.ev.open) more.push(loadEvents());
       return Promise.all(more);
@@ -579,6 +652,26 @@
     root.appendChild(sec);
   }
 
+  function renderMirror(root) {
+    var sec = section("Knowledgebase mirror", "A copy of every published article, and the images it uses, in one locked-down SharePoint site. The Knowledgebase stays the only place to edit: the copy is overwritten, never read back, and nothing on SharePoint is removed unless you switch that on.");
+    var m = mirrorModel(model.mirror, Date.now());
+    var s = strip(m.tone, m.head, m.lines[0] || "");
+    sec.appendChild(s);
+    if (m.lines.length > 1) { var ul = h("ul", "svc-list"); m.lines.slice(1).forEach(function (t) { ul.appendChild(h("li", null, t)); }); sec.appendChild(ul); }
+    if (m.errors.length) { var el = h("ul", "svc-list"); m.errors.forEach(function (t) { var li = h("li"); li.appendChild(chip("Problem", "alert")); li.appendChild(h("span", null, " " + t)); el.appendChild(li); }); sec.appendChild(el); }
+    if (m.problems.length) { var pl = h("div", "svc-chips"); m.problems.forEach(function (name) { pl.appendChild(h("code", "mono", name)); }); sec.appendChild(pl); }
+    if (m.steps.length) { var ol = h("ol", "svc-steps"); m.steps.forEach(function (t) { ol.appendChild(h("li", null, t)); }); sec.appendChild(ol); }
+    var row = h("div", "svc-actions");
+    if (m.state === "ok" || m.state === "never") {
+      var run = btn("Run now", null, function () { runMirrorNow(); });
+      run.id = "mirror-run";
+      row.appendChild(run);
+    }
+    row.appendChild(btn("Check status", "btn-quiet", function () { loadMirror().then(render); }));
+    sec.appendChild(row);
+    root.appendChild(sec);
+  }
+
   function renderCode(root) {
     var c = model.sum.sources && model.sum.sources.code;
     var sec = section("Code and dependency health", "Test results and open pull requests per repository now live on the Release board; Dependabot alerts and outdated packages are still to come.");
@@ -596,7 +689,7 @@
     if (model.state === "error") { message("Could not reach the Worker. Press Refresh to try again."); return; }
     if (model.state === "loading" || !model.sum) return;
     clear(root);
-    renderLevels(root); renderCapacity(root); renderSecurity(root); renderM365(root); renderCode(root);
+    renderLevels(root); renderCapacity(root); renderSecurity(root); renderM365(root); renderMirror(root); renderCode(root);
     if (model.flash) flash(model.flash.text, model.flash.tone);
     var st = $("svc-stamp");
     if (st) st.textContent = "Updated " + clockText(Date.now()).slice(-5);
@@ -615,6 +708,26 @@
         if (after) after(r.body);
         loadAll().then(function () { if (okText) flash(okText, "ok"); });
       } else flash(errorText(r.body, r.status), "alert");
+    });
+  }
+
+  // Run now: the Worker copies what changed (at most 40 requests to Microsoft, so a big first copy needs a few presses) and answers with the new card.
+  function runMirrorNow() {
+    if (model.busy) return;
+    setBusy(true);
+    var b = $("mirror-run");
+    if (b) b.disabled = true;
+    send("POST", "/services", "/mirror/run", {}).then(function (r) {
+      setBusy(false);
+      if (r.status === 200 && r.body && r.body.view) {
+        model.mirror = r.body.view;
+        render();
+        var st = r.body.view.status;
+        flash(r.body.ran ? (st && st.pending > 0 ? "Copied part of it. Press Run now again, or wait for the next check." : "The copy is up to date.") : "The run hit a problem: see the card.", r.body.ran ? "ok" : "alert");
+      } else {
+        render();
+        flash(mirrorRunError(r.body, r.status) || errorText(r.body, r.status), "alert");
+      }
     });
   }
 
