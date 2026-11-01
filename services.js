@@ -674,8 +674,8 @@
 
   function renderCode(root) {
     var c = model.sum.sources && model.sum.sources.code;
-    var sec = section("Code and dependency health", "Test results, open pull requests, Dependabot alerts and outdated packages per repository.");
-    sec.appendChild(strip("", "Not set up yet", "This needs a read-only GitHub token, which is not built yet."));
+    var sec = section("Code and dependency health", "Test results and open pull requests per repository now live on the Release board; Dependabot alerts and outdated packages are still to come.");
+    sec.appendChild(strip("", "See the Release board", "Repositories, pull requests, CI and deploys are on the Release board (Monitoring, Release board). It needs its read-only GitHub token to be set up."));
     if (c && c.steps && c.steps.length) { var ul = h("ul", "svc-list"); c.steps.forEach(function (t) { ul.appendChild(h("li", null, t)); }); sec.appendChild(ul); }
     root.appendChild(sec);
   }

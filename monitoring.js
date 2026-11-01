@@ -13,7 +13,7 @@
 // (open findings by priority) and GET /incidents/summary (the open-incident count). All three are optional: if one
 // fails its block says so and the rest still shows.
 //
-// Tabs, chosen by the URL hash (#dashboard, #services, #incidents, #reports, #release, #settings): the Dashboard (a status
+// Tabs, chosen by the URL hash (#dashboard, #services, #incidents, #reports, #release, #monitor-settings): the Dashboard (a status
 // strip, a card per monitor with its 7-day uptime and a 14-day sparkline, recent alerts, the servers' reporters, security and
 // renewals), Settings (every control: recipients, working hours, switches, phone alerts, reporter keys, the test buttons), and,
 // for the hub owner only, the Services, Incidents, Reports and Release board pages that used to be separate. Each of those four
@@ -471,9 +471,23 @@
   // rubbish -> "dashboard". `allowed` is the person's tabs (allowedTabs); without it only Dashboard and Settings count.
   function tabFromHash(hash, allowed) {
     var h = String(hash || "").replace(/^#/, "").toLowerCase().split("/")[0];
+    h = HASH_TABS[h] || h;
     return (Array.isArray(allowed) ? allowed : BASE_TABS).indexOf(h) !== -1 ? h : "dashboard";
   }
-  function hashForTab(tab) { return "#" + (TABS.indexOf(tab) !== -1 ? tab : "dashboard"); }
+  // Settings lives at "#monitor-settings", not "#settings": the shell's Settings drawer is an element with id="settings", and a
+  // "#settings" address would make the browser treat that drawer as the link's target. Old "#settings" links still open the tab.
+  var HASH_NAMES = { settings: "monitor-settings" };
+  var HASH_TABS = { "monitor-settings": "settings" };
+  function hashForTab(tab) { var t = TABS.indexOf(tab) !== -1 ? tab : "dashboard"; return "#" + (HASH_NAMES[t] || t); }
+  // The address an old "#settings" (or "#settings/anything") link should be tidied to, or null when it needs no change.
+  function canonicalHash(hash) {
+    var h = String(hash || "").replace(/^#/, "").toLowerCase().split("/")[0];
+    return h === "settings" ? hashForTab("settings") : null;
+  }
+  function tidyHash() {
+    var c = canonicalHash(location.hash);
+    if (c && typeof history !== "undefined" && history && typeof history.replaceState === "function") { try { history.replaceState(null, "", c); } catch (e) { /* keep the old address */ } }
+  }
 
   // The tab a key moves to: arrows wrap, Home and End jump. null for any other key.
   function nextTab(current, key, allowed) {
@@ -705,7 +719,7 @@
     ZONES: ZONES, DAY_NAMES: DAY_NAMES, DAY_ORDER: DAY_ORDER, MAX_RECIPIENTS: MAX_RECIPIENTS,
     // the dashboard
     TABS: TABS, BASE_TABS: BASE_TABS, EXT_TABS: EXT_TABS, extTabsFor: extTabsFor, allowedTabs: allowedTabs, TREND_DAYS: TREND_DAYS, STATUS_MS: STATUS_MS, EXTRAS_MS: EXTRAS_MS, INCIDENTS_MS: INCIDENTS_MS, CHECK_GAP_MS: CHECK_GAP_MS, MIN_REFRESH_MS: MIN_REFRESH_MS,
-    tabFromHash: tabFromHash, hashForTab: hashForTab, nextTab: nextTab, counts: counts, overallState: overallState, uptimePct: uptimePct, pctText: pctText,
+    tabFromHash: tabFromHash, hashForTab: hashForTab, canonicalHash: canonicalHash, nextTab: nextTab, counts: counts, overallState: overallState, uptimePct: uptimePct, pctText: pctText,
     sparkModel: sparkModel, sparkLabel: sparkLabel, cardModel: cardModel, groupCards: groupCards, incidentsChip: incidentsChip, timelineRows: timelineRows,
     reporterBrief: reporterBrief, bestReports: bestReports, serviceStates: serviceStates, pushHealthLine: pushHealthLine, parseRetryAfter: parseRetryAfter, backoffMs: backoffMs, busyText: busyText, pollDue: pollDue,
     nextPollIn: nextPollIn, extraDue: extraDue, checkWait: checkWait, checkLabel: checkLabel, settingsNeedsRead: settingsNeedsRead
@@ -1137,7 +1151,7 @@
       var warn = h("p", "mo-setup");
       warn.appendChild(h("b", null, es.text + " "));
       var go = h("a", null, "Open Settings");
-      go.href = "#settings";
+      go.href = hashForTab("settings");
       warn.appendChild(go);
       root.appendChild(warn);
     }
@@ -1149,7 +1163,7 @@
       var pw = h("p", "mo-setup");
       pw.appendChild(h("b", null, phl.text + " "));
       var pg = h("a", null, "Open Settings");
-      pg.href = "#settings";
+      pg.href = hashForTab("settings");
       pw.appendChild(pg);
       root.appendChild(pw);
     }
@@ -1252,7 +1266,7 @@
     }
     var set = h("p", "mo-links");
     var a = h("a", "sub", "Make or revoke a key in Settings");
-    a.href = "#settings";
+    a.href = hashForTab("settings");
     set.appendChild(a);
     sec.appendChild(set);
     return sec;
@@ -1764,13 +1778,14 @@
       if (b) b.focus();
       location.hash = hashForTab(to);
     });
-    window.addEventListener("hashchange", function () { setTab(tabFromHash(location.hash, allowedTabs(model.ext))); });
+    window.addEventListener("hashchange", function () { setTab(tabFromHash(location.hash, allowedTabs(model.ext))); tidyHash(); });
   }
 
   function boot() {
     var rf = $("mon-refresh");
     if (rf) rf.addEventListener("click", refresh);
     model.tab = tabFromHash(location.hash);
+    tidyHash();
     bindTabs();
     updateTabs();
     document.addEventListener("visibilitychange", function () {
