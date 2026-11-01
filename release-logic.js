@@ -119,9 +119,22 @@
     return "Something went wrong (" + (e || status) + ").";
   }
 
+  // GET /release/history -> the rows of the "Recent deploys and changes" list, newest first. An event is a deploy that finished
+  // (state pass or fail) or main going red or green again; its text is written by the Worker and shown as plain text.
+  var HISTORY_SHOWN = 15;
+  function historyModel(events, now, repo) {
+    return (Array.isArray(events) ? events : []).filter(function (e) { return e && e.text && (!repo || e.repo === repo); }).slice(0, HISTORY_SHOWN).map(function (e) {
+      return {
+        id: String(e.id || ""), repo: String(e.repo || ""), kind: e.kind === "ci" ? "ci" : "deploy", tone: e.state === "fail" ? "alert" : "ok",
+        word: e.kind === "ci" ? (e.state === "fail" ? "Red" : "Green") : (e.state === "fail" ? "Failed" : "Deployed"),
+        text: String(e.text), when: agoText(e.at, now), clock: clockText(e.at), url: e.url || ""
+      };
+    });
+  }
+
   var api = {
-    NOTE_MAX: NOTE_MAX, agoText: agoText, clockText: clockText, stateOf: stateOf, deployWord: deployWord, headlineModel: headlineModel,
-    repoModel: repoModel, pullModel: pullModel, orderRows: orderRows, errorText: errorText
+    NOTE_MAX: NOTE_MAX, HISTORY_SHOWN: HISTORY_SHOWN, agoText: agoText, clockText: clockText, stateOf: stateOf, deployWord: deployWord, headlineModel: headlineModel,
+    repoModel: repoModel, pullModel: pullModel, orderRows: orderRows, errorText: errorText, historyModel: historyModel
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
