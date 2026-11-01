@@ -5,6 +5,8 @@
 //   GET  /academy/courses  /summary  /records  /review  /quiz?lesson=|course=      POST /academy/quiz/grade  /review/grade
 //   POST /academy/courses  PATCH|DELETE /academy/courses/<id>   POST .../<id>/lessons  .../<id>/order
 //   GET|PATCH|DELETE /academy/lessons/<id>   POST .../<id>/done   GET|POST .../<id>/questions   PATCH|DELETE /academy/questions/<id>
+//   GET /academy/drafts/status  /drafts/list?lesson=  /drafts/job?id=   POST /academy/lessons/<id>/draft  /academy/drafts/cancel  /drafts/delete  /drafts/save
+//     (question drafting with the local model: a panel above a lesson's questions; nothing is saved until you keep a candidate, always as a draft)
 // The words and rules are in academy-logic.js (tested in test/academy.test.js); this file draws them. A quiz never has its answers until it
 // is graded: the Worker grades and sends back what was right. Questions Claude drafted are marked as drafts and only count once approved.
 //
@@ -133,6 +135,7 @@
   }
 
   function render() {
+    stopDraftPolling();
     model.route = L.routeFromHash(location.hash);
     var root = $("ac-root");
     renderTools($("ac-tools"));
@@ -400,6 +403,7 @@
   // ---- questions (the owner's view, with answers) ----------------------------------------------------------------------------
 
   function drawQuestions(box, lesson) {
+    var drafting = drawDrafter(box, lesson, function () { reload(); });
     var list = h("div", "ac-qlist");
     box.appendChild(list);
     function reload() {
@@ -407,12 +411,238 @@
         clear(list);
         if (r.status !== 200 || !r.body || !r.body.questions) { list.appendChild(h("p", null, L.errorText(r.body && r.body.error))); return; }
         var qs = r.body.questions;
-        if (!qs.length) list.appendChild(h("p", "dim", "No questions yet. Write some below, or ask Claude to draft them from the article: drafts wait here for you to approve."));
+        if (!qs.length) list.appendChild(h("p", "dim", "No questions yet. Write some below, or use the drafting panel above: drafts wait here for you to approve."));
         qs.forEach(function (q) { list.appendChild(questionRow(q, lesson, reload)); });
         list.appendChild(questionForm(null, lesson, reload));
+        drafting.setQuestions(qs);
       });
     }
     reload();
+  }
+
+  // ---- drafting questions with the local model ----------------------------------------------------------------------------------
+  //
+  // The panel above a lesson's questions. "Draft questions" queues a job for the engine on app02 (the Worker refuses it up front when the
+  // engine is off or not running). What comes back is shown as candidates: keep one as a draft, approve it, edit it first, or discard it.
+  // Nothing is saved until you keep one, and a kept one is always a draft until you approve it. The job lives on the Worker, so leaving this
+  // page does not lose it: the panel picks the newest job up again when the lesson is opened. Nothing is kept in this browser.
+
+  var drafter = { token: 0, timer: null, handled: {} };
+
+  function stopDraftPolling() {
+    drafter.token++;   // any answer still on its way belongs to a panel that is gone
+    if (drafter.timer) { clearTimeout(drafter.timer); drafter.timer = null; }
+  }
+
+  function candidateDetail(q) {
+    var detail = h("div", "small");
+    if (q.kind === "choice") q.options.forEach(function (o, i) { detail.appendChild(h("div", i === q.answer ? "ac-right" : "", (i === q.answer ? "✔ " : "• ") + o)); });
+    else detail.appendChild(h("div", "ac-right", "✔ " + (q.answer ? "True" : "False")));
+    if (q.explanation) detail.appendChild(h("div", "dim", "Why: " + q.explanation));
+    return detail;
+  }
+
+  function drawDrafter(box, lesson, reloadList) {
+    var mine = ++drafter.token;
+    var panel = h("div", "ac-drafter");
+    box.appendChild(panel);
+    var view = { status: null, job: null, candidates: [], rejected: [], pending: 0, questions: [], busy: false, editing: null, note: "" };
+    var alive = function () { return mine === drafter.token && document.body.contains(panel); };
+
+    function loadStatus() {
+      return send("GET", "/drafts/status").then(function (r) { if (alive()) view.status = r.status === 200 ? r.body : null; });
+    }
+
+    // Asks about the job (with the revision we hold, so an unchanged job comes back tiny) and schedules the next look.
+    function track(id) {
+      if (!alive()) return;
+      if (drafter.timer) { clearTimeout(drafter.timer); drafter.timer = null; }
+      send("GET", "/drafts/job?id=" + id + (view.job && view.job.id === id ? "&since=" + view.job.rev : "")).then(function (r) {
+        if (!alive()) return;
+        if (r.status === 404) { view.job = null; view.candidates = []; view.rejected = []; paint(); return; }
+        if (r.status === 200 && r.body && r.body.ok && !r.body.unchanged) {
+          view.job = r.body.job; view.candidates = r.body.candidates || []; view.rejected = r.body.rejected || []; view.pending = r.body.pending || 0;
+          paint();
+        }
+        var wait = L.draftPollMs(view.job);
+        if (wait && (r.status === 200 || r.status === 0)) drafter.timer = setTimeout(function () { drafter.timer = null; track(id); }, wait);
+      });
+    }
+
+    // Picks up the lesson's newest job after a reload: a running one, or one with questions still to decide.
+    function resume() {
+      return Promise.all([loadStatus(), send("GET", "/drafts/list?lesson=" + lesson.id)]).then(function (rs) {
+        if (!alive()) return;
+        var jobs = rs[1].status === 200 && rs[1].body && rs[1].body.jobs ? rs[1].body.jobs : [];
+        var pick = jobs.filter(function (j) { return j.state !== "cancelled" || j.done > 0; })[0];
+        paint();
+        if (pick) track(pick.id);
+      });
+    }
+
+    function start(count) {
+      view.busy = true; paint();
+      send("POST", "/lessons/" + lesson.id + "/draft", { count: count }).then(function (r) {
+        view.busy = false;
+        if (!alive()) return;
+        if (r.status !== 202 || !r.body || !r.body.ok) {
+          flash(L.errorText(r.body && r.body.error), "alert");
+          loadStatus().then(paint);
+          return;
+        }
+        // show the job at once; the first look at it follows
+        view.job = { id: r.body.job.id, state: "queued", total: r.body.job.total, done: 0, failed: 0, rev: 0, label: "" };
+        view.candidates = []; view.rejected = []; view.pending = 0;
+        paint();
+        track(r.body.job.id);
+        loadStatus().then(paint);
+      });
+    }
+
+    function forget() {
+      var id = view.job && view.job.id;
+      if (!id) return;
+      send("POST", "/drafts/delete", { id: id }).then(function (r) {
+        if (!alive()) return;
+        if (r.status === 200 || r.status === 404) { delete drafter.handled[id]; view.job = null; view.candidates = []; view.rejected = []; loadStatus().then(paint); }
+        else flash(L.errorText(r.body && r.body.error), "alert");
+      });
+    }
+
+    function decided(idx) {
+      var id = view.job.id;
+      (drafter.handled[id] = drafter.handled[id] || {})[idx] = true;
+    }
+
+    // Keep one candidate on the lesson as a draft (the Worker saves its own reading of the reply, not anything the page holds).
+    function keep(c, approve) {
+      view.busy = true; paint();
+      return send("POST", "/drafts/save", { id: view.job.id, idx: c.idx }).then(function (r) {
+        if (!alive()) return;
+        view.busy = false;
+        if (r.status === 409 && r.body && r.body.error === "already_saved") { decided(c.idx); flash(L.errorText("already_saved"), "alert"); paint(); return; }
+        if (r.status !== 201 || !r.body || !r.body.question) { flash(L.errorText(r.body && r.body.error), "alert"); paint(); return; }
+        decided(c.idx);
+        if (!approve) { flash("Kept as a draft. Check it against the lesson, then approve it.", "ok"); reloadList(); paint(); return; }
+        return send("PATCH", "/questions/" + r.body.question.id, { status: "approved" }).then(function (p) {
+          if (p.status !== 200) { flash("Kept as a draft, but it could not be approved: " + L.errorText(p.body && p.body.error), "alert"); reloadList(); paint(); return; }
+          return loadAll().then(function () { flash("Approved. It will be asked in the quiz.", "ok"); render(); });
+        });
+      });
+    }
+
+    function keepAll(open) {
+      view.busy = true; paint();
+      var chain = Promise.resolve(), kept = 0, problem = "";
+      open.forEach(function (c) {
+        chain = chain.then(function () {
+          if (!alive() || problem) return;
+          return send("POST", "/drafts/save", { id: view.job.id, idx: c.idx }).then(function (r) {
+            if (r.status === 201) { kept++; decided(c.idx); }
+            else if (r.body && r.body.error === "already_saved") decided(c.idx);
+            else problem = (r.body && r.body.error) || "failed";
+          });
+        });
+      });
+      chain.then(function () {
+        if (!alive()) return;
+        view.busy = false;
+        if (problem) flash((kept ? L.plural(kept, "question") + " kept as drafts, then it stopped: " : "") + L.errorText(problem === "failed" ? "" : problem), "alert");
+        else flash("Kept as drafts. Check each against the lesson, then approve.", "ok");
+        reloadList(); paint();
+      });
+    }
+
+    function paint() {
+      if (!alive()) return;
+      clear(panel);
+      panel.appendChild(h("h3", null, "Draft questions with the local model"));
+      var job = view.job;
+      var handled = (job && drafter.handled[job.id]) || {};
+      var open = job ? L.openCandidates(view.candidates, view.questions, handled) : [];
+      var finished = job && L.jobFinished(job);
+
+      if (!job) {
+        panel.appendChild(h("p", "dim small", "The model on app02 reads this lesson and suggests questions. You decide which to keep, and a kept question is a draft until you approve it. It is slow, about two to three minutes a question."));
+        var st = L.draftStatusLine(view.status);
+        panel.appendChild(h("p", "small ac-draftstatus " + st.tone, st.text));
+        var row = h("div", "ac-drafter-row");
+        var count = h("select"); count.setAttribute("aria-label", "How many questions");
+        L.draftCounts(view.status && view.status.maxCount).forEach(function (n) { var o = h("option", null, n + (n === 1 ? " question" : " questions")); o.value = String(n); count.appendChild(o); });
+        count.value = String(L.DRAFT_DEFAULT);
+        row.appendChild(count);
+        var go1 = btn("Draft questions", "btn-sm btn-primary", function () { start(parseInt(count.value, 10) || L.DRAFT_DEFAULT); });
+        go1.disabled = !st.canStart || view.busy;
+        row.appendChild(go1);
+        row.appendChild(btn("Check again", "btn-sm btn-quiet", function () { loadStatus().then(paint); }));
+        panel.appendChild(row);
+        return;
+      }
+
+      // a job: its progress, then what has come back
+      var top = h("div", "ac-drafter-row");
+      top.appendChild(chip(finished ? (job.state === "error" ? "Stopped early" : "Finished") : "Working", finished ? (job.state === "error" ? "attn" : "ok") : "info"));
+      top.appendChild(h("span", "small", L.draftProgress(job)));
+      if (!finished) top.appendChild(btn(job.cancelling ? "Stopping…" : "Stop", "btn-sm btn-quiet", function () {
+        send("POST", "/drafts/cancel", { id: job.id }).then(function (r) { if (!alive()) return; if (r.status !== 200) flash(L.errorText(r.body && r.body.error), "alert"); track(job.id); });
+      }));
+      panel.appendChild(top);
+      if (!finished && job.total) { var bar = h("progress"); bar.max = job.total; bar.value = (job.done || 0) + (job.failed || 0); panel.appendChild(bar); }
+      if (!finished) panel.appendChild(h("p", "dim small", "You can leave this page; the questions will be here when you come back."));
+
+      var why = L.rejectedLine(view.rejected);
+      if (why) panel.appendChild(h("p", "dim small", why));
+
+      if (open.length) {
+        var all = h("div", "ac-actions");
+        all.appendChild(h("span", "small", L.plural(open.length, "question") + " to check"));
+        var keepBtn = btn("Keep all as drafts", "btn-sm", function () { keepAll(open); }); keepBtn.disabled = view.busy; all.appendChild(keepBtn);
+        panel.appendChild(all);
+      }
+      open.forEach(function (c) { panel.appendChild(candidateCard(c)); });
+      if (finished && !open.length) panel.appendChild(h("p", "small", view.candidates.length ? "That is all of them. Kept questions are in the list below, waiting for your approval." : "No usable questions came back this time."));
+      if (finished) {
+        var end = h("div", "ac-actions");
+        end.appendChild(btn(open.length ? "Discard the rest and close" : "Close", "btn-sm btn-quiet", forget));
+        panel.appendChild(end);
+      }
+    }
+
+    function candidateCard(c) {
+      var q = c.question;
+      if (view.editing === c.idx) {
+        var f = questionForm(q, lesson, reloadList, {
+          candidate: true,
+          onKept: function () { decided(c.idx); view.editing = null; reloadList(); paint(); },
+          onCancel: function () { view.editing = null; paint(); }
+        });
+        return f;
+      }
+      var card = h("div", "ac-q draft");
+      var top = h("div", "ac-q-top");
+      top.appendChild(h("b", null, q.prompt));
+      var tags = h("span", "ac-q-tags");
+      tags.appendChild(chip(L.KIND_LABELS[q.kind] || q.kind, ""));
+      tags.appendChild(chip("Not saved yet", "attn"));
+      top.appendChild(tags);
+      card.appendChild(top);
+      card.appendChild(candidateDetail(q));
+      var actions = h("div", "ac-actions");
+      var a1 = btn("Keep as draft", "btn-sm", function () { keep(c, false); });
+      var a2 = btn("Approve", "btn-sm btn-primary", function () { keep(c, true); });
+      a1.disabled = a2.disabled = view.busy;
+      actions.appendChild(a2); actions.appendChild(a1);
+      actions.appendChild(btn("Edit", "btn-sm", function () { view.editing = c.idx; paint(); }));
+      actions.appendChild(btn("Discard", "btn-sm btn-quiet", function () {
+        decided(c.idx); paint();
+        if (!L.openCandidates(view.candidates, view.questions, drafter.handled[view.job.id]).length && L.jobFinished(view.job)) forget();
+      }));
+      card.appendChild(actions);
+      return card;
+    }
+
+    resume();
+    return { setQuestions: function (qs) { view.questions = qs; if (alive()) paint(); } };
   }
 
   function questionRow(q, lesson, reload) {
@@ -444,9 +674,13 @@
   }
 
   // One form for a new question or an edit (q given). The fields shown follow the kind.
-  function questionForm(q, lesson, reload) {
+  // `q` is a saved question to edit, or (with opts.candidate) a drafted one not saved yet: keeping it saves it as a DRAFT, and opts.onKept /
+  // opts.onCancel say what the drafting panel does next.
+  function questionForm(q, lesson, reload, opts) {
+    var candidate = !!(opts && opts.candidate);
+    var saved = !!(q && q.id);
     var form = h("form", "ac-qform");
-    form.appendChild(h("h4", null, q ? "Edit the question" : "Add a question"));
+    form.appendChild(h("h4", null, candidate ? "Edit before keeping" : q ? "Edit the question" : "Add a question"));
     var start = q ? L.formFromQuestion(q) : { kind: "choice", prompt: "", explanation: "", optionsText: "", answerIndex: 0, truth: true, answersText: "" };
     var kind = h("select");
     ["choice", "truefalse", "short"].forEach(function (k) { var o = h("option", null, L.KIND_LABELS[k]); o.value = k; kind.appendChild(o); });
@@ -469,9 +703,9 @@
     form.appendChild(field("Why (shown after answering)", explanation, "Optional."));
     function show() { choiceWrap.hidden = kind.value !== "choice"; tfWrap.hidden = kind.value !== "truefalse"; shortWrap.hidden = kind.value !== "short"; }
     kind.addEventListener("change", show); show();
-    var save = btn(q ? "Save question" : "Add question", "btn-sm btn-primary", null); save.type = "submit";
+    var save = btn(candidate ? "Keep as draft" : q ? "Save question" : "Add question", "btn-sm btn-primary", null); save.type = "submit";
     form.appendChild(save);
-    if (q) form.appendChild(btn("Cancel", "btn-sm btn-quiet", reload));
+    if (q) form.appendChild(btn("Cancel", "btn-sm btn-quiet", candidate && opts.onCancel ? opts.onCancel : reload));
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
       var made = L.questionBody({
@@ -480,9 +714,11 @@
       });
       if (made.error) { flash(L.errorText(made.error), "alert"); return; }
       var body = made.body;
-      if (q) delete body.kind;
+      if (saved) delete body.kind;
+      if (candidate) body.status = "draft";   // you edited it, but you have not approved it yet
       save.disabled = true;
-      act(q ? send("PATCH", "/questions/" + q.id, body) : send("POST", "/lessons/" + lesson.id + "/questions", body), function () {
+      act(saved ? send("PATCH", "/questions/" + q.id, body) : send("POST", "/lessons/" + lesson.id + "/questions", body), function () {
+        if (candidate) { flash("Kept as a draft. Check it against the lesson, then approve it.", "ok"); return opts.onKept(); }
         return loadAll().then(function () { flash(q ? "Saved." : "Question added.", "ok"); render(); });
       }).then(function () { save.disabled = false; });
     });

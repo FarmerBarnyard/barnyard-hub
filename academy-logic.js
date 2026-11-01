@@ -31,7 +31,18 @@
     options_too_long: "An option is too long (120 characters).", answer_invalid: "Choose the right answer.", answers_invalid: "Give at least one accepted answer (up to 5).",
     answers_too_long: "An accepted answer is too long (80 characters).", explanation_too_long: "The explanation is too long (300 characters).",
     summary_too_long: "The summary is too long (300 characters).", articleId_invalid: "That does not look like a Knowledgebase link or article id.",
-    order_invalid: "The order could not be saved. Reload and try again.", not_found: "That is not there any more. Reload the page."
+    order_invalid: "The order could not be saved. Reload and try again.", not_found: "That is not there any more. Reload the page.",
+    drafting_unavailable: "Drafting with the local model is switched off on the Worker (the campaign engine is not enabled).",
+    engine_offline: "The engine on app02 is not running, so a request would just wait. Try again when it is back.",
+    daily_cap_reached: "That is today's limit of drafted questions. Try again tomorrow.",
+    lesson_too_short: "This lesson is too short to ask about. Add more text first.",
+    too_many_jobs: "Drafting is already running. Wait for it to finish, or stop it.",
+    queue_full: "The engine has a full queue right now. Try again in a few minutes.",
+    job_active: "That is still running. Stop it first.",
+    already_saved: "You already have that question.",
+    not_a_candidate: "That question could not be used. Reload and try again.",
+    count_invalid: "Choose between 1 and 8 questions.",
+    id_invalid: "That job could not be found. Reload the page."
   };
   var errorText = function (code) { return ERRORS[code] || "That did not work. Try again."; };
 
@@ -144,10 +155,99 @@
     return "Not quite. The answer is " + answer + ".";
   }
 
+  // ---- drafting questions with the local model --------------------------------------------------------------------------------
+  //
+  // The owner asks for a few questions on a lesson; the Worker queues a job for the engine on app02, and the page shows what comes back
+  // as candidates to keep, edit or discard. Nothing is saved until the owner keeps one, and a kept one is always a draft.
+
+  var DRAFT_MAX = 8, DRAFT_DEFAULT = 5;
+  var REJECT_WORDS = {
+    model_failed: "the model did not answer in time",
+    empty_reply: "the model sent nothing",
+    no_question: "the reply was not in the asked-for shape",
+    several_questions: "the reply held more than one question",
+    no_answer: "the reply did not say which answer is right",
+    several_answers: "the reply gave more than one answer",
+    several_explanations: "the reply explained twice",
+    options_not_abcd: "the options were not A to D",
+    answer_not_a_letter: "the answer was not one of A to D",
+    answer_not_true_false: "the answer was not true or false",
+    vague_option: "an option said \"all of the above\" or similar",
+    options_not_distinct: "two options were the same",
+    options_too_long: "an option was too long",
+    prompt_too_long: "the question was too long",
+    question_too_short: "the question was too short",
+    duplicate: "it repeated another question"
+  };
+
+  var foldPrompt = function (s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim(); };
+
+  // What the drafting panel says about itself, from GET /academy/drafts/status: { tone, text, canStart }.
+  function draftStatusLine(st) {
+    if (!st || st.ok === false) return { tone: "", text: "Drafting could not be checked just now.", canStart: false };
+    if (!st.enabled) return { tone: "", text: errorText("drafting_unavailable"), canStart: false };
+    if (!st.engineOnline) return { tone: "attn", text: errorText("engine_offline"), canStart: false };
+    if (!st.left) return { tone: "attn", text: errorText("daily_cap_reached"), canStart: false };
+    return { tone: "ok", text: "Ready. Allow two to three minutes a question; you can leave this page and the drafts will be here when you come back. " + plural(st.left, "draft") + " left today.", canStart: true };
+  }
+
+  // The options for how many to ask for: 1 to the Worker's maximum.
+  function draftCounts(max) {
+    var out = [];
+    for (var i = 1; i <= Math.min(DRAFT_MAX, max || DRAFT_MAX); i++) out.push(i);
+    return out;
+  }
+
+  var JOB_DONE = { done: 1, error: 1, cancelled: 1 };
+  var jobFinished = function (job) { return !!(job && JOB_DONE[job.state]); };
+
+  // One line about a job: "Waiting for the engine", "Drafting question 2 of 5", "Finished" ...
+  function draftProgress(job) {
+    if (!job) return "";
+    if (job.state === "queued") return "Waiting for the engine to pick it up";
+    if (job.state === "running") {
+      if (job.cancelling) return "Stopping…";
+      return job.label || "Drafting";
+    }
+    if (job.state === "cancelled") return "Stopped";
+    if (job.state === "error") return job.error || "The engine stopped before it finished.";
+    return "Finished";
+  }
+
+  // How long before the page asks again, or null when the job is over.
+  function draftPollMs(job) { return jobFinished(job) ? null : job && job.state === "queued" ? 5000 : 4000; }
+
+  // The candidates still to decide: not already on the lesson (compared by wording), and not decided in this visit.
+  function openCandidates(candidates, lessonQuestions, handled) {
+    var have = {};
+    (lessonQuestions || []).forEach(function (q) { have[foldPrompt(q.prompt)] = true; });
+    return (candidates || []).filter(function (c) {
+      return !(handled && handled[c.idx]) && !have[foldPrompt(c.question.prompt)];
+    });
+  }
+
+  // "2 replies were thrown away: the model did not answer in time (1), ..." or "" when nothing was.
+  function rejectedLine(rejected) {
+    if (!rejected || !rejected.length) return "";
+    var counts = {}, order = [];
+    rejected.forEach(function (r) {
+      var w = REJECT_WORDS[r.reason] || "it could not be read";
+      if (!counts[w]) { counts[w] = 0; order.push(w); }
+      counts[w]++;
+    });
+    return plural(rejected.length, "reply", "replies") + " could not be used and " + (rejected.length === 1 ? "was" : "were") + " thrown away: " +
+      order.map(function (w) { return w + (counts[w] > 1 ? " (" + counts[w] + ")" : ""); }).join(", ") + ".";
+  }
+
+  // The form for editing a candidate before keeping it (same shape as editing a saved question).
+  var formFromCandidate = formFromQuestion;
+
   var api = {
     KIND_LABELS: KIND_LABELS, ERRORS: ERRORS, errorText: errorText, articleIdFrom: articleIdFrom, routeFromHash: routeFromHash, plural: plural, agoText: agoText,
     dateText: dateText, scoreText: scoreText, courseLine: courseLine, quizLine: quizLine, tileSummary: tileSummary, questionBody: questionBody,
-    formFromQuestion: formFromQuestion, resultText: resultText
+    formFromQuestion: formFromQuestion, resultText: resultText,
+    DRAFT_DEFAULT: DRAFT_DEFAULT, draftStatusLine: draftStatusLine, draftCounts: draftCounts, jobFinished: jobFinished, draftProgress: draftProgress, draftPollMs: draftPollMs,
+    openCandidates: openCandidates, rejectedLine: rejectedLine, formFromCandidate: formFromCandidate
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

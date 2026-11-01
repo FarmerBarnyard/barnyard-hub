@@ -157,4 +157,98 @@ test("the sidebar has an Academy entry that is owner only, with its own permissi
   assert.ok(shell.indexOf('id: "release"') < shell.indexOf('id: "academy"') && shell.indexOf('id: "academy"') < shell.indexOf('id: "users"'), "between Release board and Users");
 });
 
+
+// ---- drafting questions with the local model ---------------------------------------------------------------------------------
+
+test("the drafting panel says plainly why it cannot start, and only starts when everything is ready", function () {
+  assert.strictEqual(L.draftStatusLine(null).canStart, false);
+  assert.strictEqual(L.draftStatusLine({ ok: false }).canStart, false);
+  var off = L.draftStatusLine({ ok: true, enabled: false, engineOnline: false, left: 60 });
+  assert.deepStrictEqual([off.canStart, /switched off/.test(off.text)], [false, true]);
+  var down = L.draftStatusLine({ ok: true, enabled: true, engineOnline: false, left: 60 });
+  assert.deepStrictEqual([down.canStart, down.tone, /app02 is not running/.test(down.text)], [false, "attn", true]);
+  var spent = L.draftStatusLine({ ok: true, enabled: true, engineOnline: true, left: 0 });
+  assert.deepStrictEqual([spent.canStart, /today's limit/.test(spent.text)], [false, true]);
+  var ready = L.draftStatusLine({ ok: true, enabled: true, engineOnline: true, left: 57 });
+  assert.deepStrictEqual([ready.canStart, ready.tone], [true, "ok"]);
+  assert.ok(/57 drafts left today/.test(ready.text) && /two to three minutes/.test(ready.text));
+  assert.ok(/1 draft left/.test(L.draftStatusLine({ ok: true, enabled: true, engineOnline: true, left: 1 }).text));
+});
+
+test("how many questions can be asked for follows the Worker's maximum", function () {
+  assert.deepStrictEqual(L.draftCounts(3), [1, 2, 3]);
+  assert.strictEqual(L.draftCounts(8).length, 8);
+  assert.strictEqual(L.draftCounts(50).length, 8, "never more than the page's own cap");
+  assert.strictEqual(L.draftCounts().length, 8);
+  assert.strictEqual(L.DRAFT_DEFAULT, 5);
+});
+
+test("a job's progress reads plainly and the page stops asking once it is over", function () {
+  assert.strictEqual(L.draftProgress({ state: "queued" }), "Waiting for the engine to pick it up");
+  assert.strictEqual(L.draftProgress({ state: "running", label: "Drafting question 2 of 5" }), "Drafting question 2 of 5");
+  assert.strictEqual(L.draftProgress({ state: "running", cancelling: true, label: "x" }), "Stopping…");
+  assert.strictEqual(L.draftProgress({ state: "cancelled" }), "Stopped");
+  assert.strictEqual(L.draftProgress({ state: "error", error: "The engine restarted before this finished." }), "The engine restarted before this finished.");
+  assert.strictEqual(L.draftProgress({ state: "done" }), "Finished");
+  assert.strictEqual(L.draftProgress(null), "");
+  assert.ok(L.draftPollMs({ state: "queued" }) >= 3000 && L.draftPollMs({ state: "running" }) >= 3000);
+  ["done", "error", "cancelled"].forEach(function (s) { assert.strictEqual(L.draftPollMs({ state: s }), null); assert.strictEqual(L.jobFinished({ state: s }), true); });
+  assert.strictEqual(L.jobFinished({ state: "running" }), false);
+});
+
+test("candidates already on the lesson, or decided in this visit, are not offered again", function () {
+  var cands = [
+    { idx: 0, question: { prompt: "Which port does HTTPS use by default?" } },
+    { idx: 1, question: { prompt: "A display name proves who sent a message." } },
+    { idx: 2, question: { prompt: "What does MFA stand for?" } }
+  ];
+  assert.strictEqual(L.openCandidates(cands, [], {}).length, 3);
+  assert.deepStrictEqual(L.openCandidates(cands, [{ prompt: "which PORT does https use by default" }], {}).map(function (c) { return c.idx; }), [1, 2], "compared by wording, not capitals or punctuation");
+  assert.deepStrictEqual(L.openCandidates(cands, [], { 1: true }).map(function (c) { return c.idx; }), [0, 2]);
+  assert.deepStrictEqual(L.openCandidates(cands, [{ prompt: "What does MFA stand for?" }], { 0: true, 1: true }), []);
+  assert.deepStrictEqual(L.openCandidates(null, null, null), []);
+});
+
+test("thrown-away replies are explained in a line, grouped by reason", function () {
+  assert.strictEqual(L.rejectedLine([]), "");
+  assert.strictEqual(L.rejectedLine(null), "");
+  assert.strictEqual(L.rejectedLine([{ idx: 1, reason: "model_failed" }]), "1 reply could not be used and was thrown away: the model did not answer in time.");
+  var many = L.rejectedLine([{ idx: 0, reason: "no_question" }, { idx: 1, reason: "no_question" }, { idx: 2, reason: "vague_option" }, { idx: 3, reason: "something_new" }]);
+  assert.ok(/^4 replies could not be used and were thrown away: /.test(many));
+  assert.ok(/the reply was not in the asked-for shape \(2\)/.test(many) && /all of the above/.test(many) && /it could not be read/.test(many));
+});
+
+test("the drafting words from the Worker are in plain English", function () {
+  ["drafting_unavailable", "engine_offline", "daily_cap_reached", "lesson_too_short", "too_many_jobs", "queue_full", "job_active", "already_saved", "not_a_candidate", "count_invalid", "id_invalid"].forEach(function (code) {
+    assert.notStrictEqual(L.errorText(code), "That did not work. Try again.", code);
+  });
+  assert.ok(/app02/.test(L.errorText("engine_offline")));
+  assert.deepStrictEqual(L.formFromCandidate({ kind: "choice", prompt: "p", explanation: "e", options: ["a", "b"], answer: 1, answers: [] }), L.formFromQuestion({ kind: "choice", prompt: "p", explanation: "e", options: ["a", "b"], answer: 1, answers: [] }));
+});
+
+test("the drafting panel only ever sends the Worker the choices it makes: a count, a job id, a candidate number", function () {
+  var js = read("academy.js");
+  assert.ok(/\/lessons\/" \+ lesson\.id \+ "\/draft", \{ count: count \}/.test(js), "start sends only a count");
+  assert.ok(/"\/drafts\/save", \{ id: view\.job\.id, idx: c\.idx \}/.test(js), "keeping sends a job and a number, never question text");
+  assert.ok(/"\/drafts\/cancel", \{ id: job\.id \}/.test(js) && /"\/drafts\/delete", \{ id: id \}/.test(js));
+  assert.ok(/body\.status = "draft"/.test(js), "an edited candidate is still only a draft");
+  assert.ok(!/status: "approved"[^;]*\/drafts\//.test(js), "approving is a separate step the owner takes");
+});
+
+test("a kept candidate is a draft until Approve is pressed, and everything from the server is drawn as text", function () {
+  var js = read("academy.js");
+  var keep = js.slice(js.indexOf("function keep(c, approve)"), js.indexOf("function keepAll"));
+  assert.ok(/if \(!approve\)/.test(keep) && /Kept as a draft/.test(keep), "keeping alone leaves it a draft");
+  assert.ok(/send\("PATCH", "\/questions\/" \+ r\.body\.question\.id, \{ status: "approved" \}\)/.test(keep), "Approve is the owner's own PATCH after saving");
+  var panel = js.slice(js.indexOf("function drawDrafter"));
+  assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML/.test(panel));
+  assert.ok(/stopDraftPolling\(\);/.test(js.slice(js.indexOf("function render()"), js.indexOf("function render()") + 80)), "leaving the page stops the polling");
+  assert.ok(/Discard/.test(panel) && /Edit/.test(panel) && /Approve/.test(panel) && /Keep as draft/.test(panel));
+});
+
+test("the panel's styles exist", function () {
+  var css = read("academy.css");
+  ["ac-drafter", "ac-drafter-row", "ac-draftstatus"].forEach(function (c) { assert.ok(css.indexOf("." + c) >= 0, c); });
+});
+
 console.log("\n" + passed + " passed");
