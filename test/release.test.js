@@ -158,8 +158,30 @@ test("release.js builds the page with textContent only, links only to github.com
   assert.ok(/indexOf\("https:\/\/github\.com\/"\) !== 0/.test(c), "a link is only set to a github.com address");
   assert.ok(!/\.style\b|setAttribute\("style"/.test(c), "no inline styles (the CSP forbids them)");
   var paths = (c.match(/API \+ "[^"]+"/g) || []).map(function (s) { return s.replace(/^API \+ "/, "").replace(/"$/, ""); });
-  paths.forEach(function (p) { assert.ok(/^\/release\/(summary|notes)/.test(p), "unexpected path " + p); });
+  paths.forEach(function (p) { assert.ok(/^\/release\/(summary|notes|history)/.test(p), "unexpected path " + p); });
+  assert.ok(paths.some(function (p) { return p === "/release/history"; }), "the history is read from the Worker's stored copy");
   assert.ok(/credentials: "include"/.test(c));
+});
+
+test("the history list: newest first as the Worker sent it, fifteen at most, a word and tone per event, and a repository filter", function () {
+  var ev = function (i, over) { return Object.assign({ id: "e" + i, repo: "study-hub", kind: "deploy", state: "pass", text: "Study: deployed abc" + i, at: NOW - i * HOUR, url: "https://github.com/FarmerBarnyard/study-hub/deployments" }, over || {}); };
+  var many = []; for (var i = 0; i < 20; i++) many.push(ev(i));
+  var rows = R.historyModel(many, NOW);
+  assert.strictEqual(rows.length, R.HISTORY_SHOWN);
+  assert.deepStrictEqual([rows[0].word, rows[0].tone, rows[0].when], ["Deployed", "ok", "just now"]);
+  assert.strictEqual(rows[2].when, "2 h ago");
+  var mixed = R.historyModel([ev(0, { state: "fail", text: "Study: deploy failed for abc" }), ev(1, { kind: "ci", state: "fail", text: "Study: main went red" }), ev(2, { kind: "ci", state: "pass", text: "Study: main is green again" }), ev(3, { repo: "hub" }), { id: "x" }, null], NOW);
+  assert.deepStrictEqual(mixed.map(function (r) { return r.word + "/" + r.tone; }), ["Failed/alert", "Red/alert", "Green/ok", "Deployed/ok"]);
+  assert.deepStrictEqual(R.historyModel(mixed.length ? [ev(0), ev(3, { repo: "hub" })] : [], NOW, "hub").map(function (r) { return r.repo; }), ["hub"]);
+  assert.deepStrictEqual(R.historyModel(null, NOW), []);
+  assert.deepStrictEqual(R.historyModel("nope", NOW), []);
+});
+
+test("release.js shows the history under the cards, after the Worker has recorded something, through textContent", function () {
+  var c = code(fs.readFileSync(path.join(root, "release.js"), "utf8"));
+  assert.ok(/function renderHistory\(root, events, now\)/.test(c) && /renderHistory\(root, model\.history, now\)/.test(c));
+  assert.ok(/if \(!rows\.length\) return;/.test(c), "nothing is drawn while there is nothing recorded");
+  assert.ok(/ghLink\("Log", r\.url/.test(c), "a log link is only ever a github.com address");
 });
 
 test("the stylesheet fits the shared container: no fixed-width page root", function () {

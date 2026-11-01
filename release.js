@@ -2,7 +2,7 @@
 // The owner's page, like Services and Incidents.
 //
 // Reads and writes /release/* on the Worker (ClaudeRepo's cloudflare-worker/src/release-routes.js, owner only):
-//   GET  /release/summary[?refresh=1]     POST /release/notes {repo, text}
+//   GET  /release/summary[?refresh=1]     POST /release/notes {repo, text}     GET /release/history (what the Worker has stored)
 // The page asks for the summary when it opens and every three minutes while it is showing (never from a hidden tab, and not while a
 // note is being typed). Refresh asks the Worker to read GitHub again (it allows that once every 30 seconds).
 //
@@ -16,7 +16,7 @@
   var API = "https://api.barnyard.site";
   var POLL_MS = 180000;
 
-  var model = { state: "loading", sum: null, flash: null, busy: false, saving: "" };
+  var model = { state: "loading", sum: null, history: [], flash: null, busy: false, saving: "" };
 
   // ---- data -----------------------------------------------------------------
 
@@ -39,6 +39,11 @@
       if (r.status === 0 || r.status >= 500 || !r.body) { model.state = model.sum ? "ok" : "error"; return; }
       if (r.body.enabled === false) { model.state = "off"; return; }
       model.sum = r.body; model.state = "ok";
+      // the history comes from what the Worker stored, not from GitHub; if it cannot be read the list is simply left as it was
+      if (!r.body.configured) return;
+      return getJson(API + "/release/history", { method: "GET" }).then(function (h) {
+        if (h.status === 200 && h.body && Array.isArray(h.body.events)) model.history = h.body.events;
+      });
     });
   }
 
@@ -178,6 +183,27 @@
     card.appendChild(box);
   }
 
+  // Recent deploys and main going red or green, newest first. Nothing is shown until the Worker has recorded something.
+  function renderHistory(root, events, now) {
+    var rows = L.historyModel(events, now);
+    if (!rows.length) return;
+    var sec = h("section", "rel-history");
+    sec.appendChild(h("h2", null, "Recent deploys and changes"));
+    var ul = h("ul", "rel-history-list");
+    rows.forEach(function (r) {
+      var li = h("li", "rel-history-row");
+      li.appendChild(h("span", "chip " + r.tone, r.word));
+      li.appendChild(h("span", "rel-history-text", r.text));
+      var when = h("span", "dim small rel-history-when", r.when);
+      when.title = r.clock;
+      li.appendChild(when);
+      if (r.url) li.appendChild(ghLink("Log", r.url, "rel-link small"));
+      ul.appendChild(li);
+    });
+    sec.appendChild(ul);
+    root.appendChild(sec);
+  }
+
   function renderRepo(root, row, notes, now) {
     var m = L.repoModel(row, notes && notes[row.name], now);
     var card = h("section", "rel-card " + m.tone);
@@ -232,6 +258,7 @@
       var grid = h("div", "rel-grid");
       L.orderRows(sum.rows).forEach(function (row) { renderRepo(grid, row, sum.notes, now); });
       root.appendChild(grid);
+      renderHistory(root, model.history, now);
       if (sum.rate && sum.rate.remaining !== null && sum.rate.remaining < 500) {
         root.appendChild(h("p", "dim small", "GitHub allowance left this hour: " + sum.rate.remaining + "."));
       }
