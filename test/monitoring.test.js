@@ -298,7 +298,14 @@ test("the tab comes from the URL hash and unknown hashes mean the Dashboard", fu
   assert.strictEqual(Mon.tabFromHash(""), "dashboard");
   assert.strictEqual(Mon.tabFromHash("#nonsense"), "dashboard");
   assert.strictEqual(Mon.tabFromHash(undefined), "dashboard");
-  assert.strictEqual(Mon.hashForTab("settings"), "#settings");
+  assert.strictEqual(Mon.hashForTab("settings"), "#monitor-settings", "not #settings: that is the id of the shell Settings drawer");
+  assert.strictEqual(Mon.tabFromHash("#monitor-settings"), "settings");
+  assert.strictEqual(Mon.tabFromHash("#Monitor-Settings/x"), "settings");
+  assert.strictEqual(Mon.canonicalHash("#settings"), "#monitor-settings", "an old link is tidied to the new address");
+  assert.strictEqual(Mon.canonicalHash("#Settings/anything"), "#monitor-settings");
+  assert.strictEqual(Mon.canonicalHash("#monitor-settings"), null);
+  assert.strictEqual(Mon.canonicalHash("#services"), null);
+  assert.strictEqual(Mon.canonicalHash(""), null);
   assert.strictEqual(Mon.hashForTab("anything"), "#dashboard");
 });
 
