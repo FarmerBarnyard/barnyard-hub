@@ -208,6 +208,70 @@ test("the tile: one line, the groups' 30-day figures and the soonest forecast", 
   assert.deepStrictEqual([Tile.descriptor.id, Tile.descriptor.permission, Tile.descriptor.ownerOnly], ["services", "tile.services", true]);
 });
 
+// ---- the Knowledgebase mirror card --------------------------------------------------------------------------------------
+
+function mirrorView(over) {
+  return Object.assign({ ok: true, configured: true, enabled: true, problems: [], steps: [], now: NOW, folder: "Knowledgebase", deleteOn: false, siteTail: "abc123", mirrored: 12, orphans: { articles: 0, images: 0 }, waiting: false, retryAt: 0,
+    status: { at: NOW - 3 * 60000, trigger: "nightly", ok: true, published: 12, uploaded: 2, renamed: 0, imagesUploaded: 1, deleted: 0, unchanged: 10, imagesUnchanged: 4, orphans: { articles: 0, images: 0 }, pending: 0, complete: true, errors: [], calls: 6, deleteOn: false } }, over || {});
+}
+
+test("the mirror card: loading, switched off, and not set up (which settings, and the steps)", function () {
+  assert.strictEqual(Svc.mirrorModel(null, NOW).state, "loading");
+  assert.strictEqual(Svc.mirrorModel({ ok: false }, NOW).state, "loading");
+  var off = Svc.mirrorModel({ ok: true, configured: false, switchedOff: true, problems: [] }, NOW);
+  assert.deepStrictEqual([off.state, off.head], ["off", "Switched off"]);
+  var n = Svc.mirrorModel({ ok: true, configured: false, problems: ["SP_MIRROR_TENANT", "SP_MIRROR_SITE_ID"], steps: ["One", "Two"] }, NOW);
+  assert.deepStrictEqual([n.state, n.head, n.problems, n.steps], ["not_set_up", "Not set up yet", ["SP_MIRROR_TENANT", "SP_MIRROR_SITE_ID"], ["One", "Two"]]);
+  assert.ok(/SP_MIRROR_TENANT, SP_MIRROR_SITE_ID/.test(n.lines[0]));
+});
+
+test("the mirror card: up to date, still copying, never run, and the files that were kept", function () {
+  var ok = Svc.mirrorModel(mirrorView(), NOW);
+  assert.deepStrictEqual([ok.state, ok.tone, ok.head], ["ok", "ok", "Up to date"]);
+  assert.ok(/12 articles are on SharePoint\. Folder Knowledgebase, in the site ending abc123\./.test(ok.lines[0]));
+  assert.ok(/Last run 3 min ago \(the nightly check\): 2 articles written, 1 image written\./.test(ok.lines[1]), ok.lines[1]);
+  var busy = Svc.mirrorModel(mirrorView({ status: Object.assign({}, mirrorView().status, { pending: 21, trigger: "manual" }) }), NOW);
+  assert.deepStrictEqual([busy.tone, busy.head], ["attn", "Copying"]);
+  assert.ok(busy.lines.some(function (l) { return /21 files are still to copy/.test(l); }));
+  var never = Svc.mirrorModel(mirrorView({ status: null }), NOW);
+  assert.deepStrictEqual([never.state, never.tone], ["never", "attn"]);
+  assert.ok(/Press Run now/.test(never.lines.join(" ")));
+  var kept = Svc.mirrorModel(mirrorView({ orphans: { articles: 1, images: 3 } }), NOW);
+  assert.ok(kept.lines.some(function (l) { return /1 article and 3 images on SharePoint are no longer in the Knowledgebase\. They were kept\. Set SP_MIRROR_DELETE to 1/.test(l); }), kept.lines.join("|"));
+  var removing = Svc.mirrorModel(mirrorView({ orphans: { articles: 2, images: 0 }, deleteOn: true }), NOW);
+  assert.ok(removing.lines.some(function (l) { return /Removal is switched on/.test(l); }));
+  var cut = Svc.mirrorModel(mirrorView({ status: Object.assign({}, mirrorView().status, { complete: false }) }), NOW);
+  assert.ok(cut.lines.some(function (l) { return /cut short/.test(l); }));
+});
+
+test("the mirror card: a failed run says why in plain words, with Microsoft's own code and nothing else", function () {
+  var failed = Svc.mirrorModel(mirrorView({ status: Object.assign({}, mirrorView().status, { ok: false, reason: "auth", detail: "AADSTS7000215", errors: [] }) }), NOW);
+  assert.deepStrictEqual([failed.tone, failed.head], ["alert", "The last run failed"]);
+  assert.ok(/secret has expired \(AADSTS7000215\)\.$/.test(failed.errors[0]), failed.errors[0]);
+  var some = Svc.mirrorModel(mirrorView({ status: Object.assign({}, mirrorView().status, { errors: [{ what: "image", reason: "not_found", detail: "image_missing" }, { what: "delete", reason: "forbidden" }] }) }), NOW);
+  assert.deepStrictEqual([some.tone, some.head, some.errors.length], ["alert", "Copied, with problems", 2]);
+  assert.strictEqual(some.errors[0], "An image failed: Microsoft could not find the site or its Documents library. Check SP_MIRROR_SITE_ID (image_missing).");
+  assert.strictEqual(Svc.mirrorReasonText("nope"), "Something went wrong.");
+  assert.strictEqual(Svc.mirrorReasonText("throttled"), "Microsoft asked it to slow down; it will try again later.");
+});
+
+test("Run now: the waits and refusals are said in plain words, anything else falls to the general text", function () {
+  assert.strictEqual(Svc.mirrorRunError({ error: "rate_limited", retryMs: 42000 }, 429), "Run now was pressed a moment ago. Try again in 42 seconds.");
+  assert.strictEqual(Svc.mirrorRunError({ error: "rate_limited" }, 429), "Run now was pressed a moment ago. Try again in 60 seconds.");
+  assert.ok(/not set up/.test(Svc.mirrorRunError({ error: "mirror_not_configured" }, 409)));
+  assert.ok(/switched off/.test(Svc.mirrorRunError({ error: "mirror_disabled" }, 409)));
+  assert.strictEqual(Svc.mirrorRunError({ error: "recent_sign_in_required" }, 403), null);
+  assert.ok(/recent sign-in/.test(Svc.errorText({ error: "recent_sign_in_required" }, 403)));
+});
+
+test("the mirror card reads the status on every refresh and starts a copy only from its button", function () {
+  var src = fs.readFileSync(path.join(root, "services.js"), "utf8");
+  assert.ok(/send\("GET", "\/services", "\/mirror"\)/.test(src));
+  assert.ok(/send\("POST", "\/services", "\/mirror\/run", \{\}\)/.test(src));
+  assert.strictEqual((src.match(/send\("POST", "\/services", "\/mirror\/run"/g) || []).length, 1, "one place starts a copy, and no timer does");
+  assert.ok(/btn\("Run now"/.test(src) && /renderMirror\(root\)/.test(src));
+});
+
 // ---- the page's rules ---------------------------------------------------------------------------------------------------
 
 test("what the server sends only ever reaches the page as text, and the page has no inline script or style", function () {
