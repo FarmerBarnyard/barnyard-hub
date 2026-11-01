@@ -93,6 +93,19 @@ test("no page, script or tile in the site still links to an old address", functi
   assert.ok(!/incidents\.html/.test(mon) && /hashForTab\("incidents"\)/.test(mon), "the Dashboard links to the tab, not the old page");
 });
 
+test("the Settings tab never uses the address #settings, which is the id of the shell Settings drawer; old #settings links still open it", function () {
+  var mon = code(read("monitoring.js"));
+  assert.ok(!/href = "#settings"/.test(mon), "links go through hashForTab");
+  assert.ok(/id = "settings"/.test(read("shell.js")), "the shell drawer still owns #settings");
+  assert.ok(!/\sid="settings"/.test(read("monitoring.html")), "and the Monitoring page does not add a second one");
+  return bootMonitoring({ authenticated: true, owner: true }, "#settings").then(function (p) {
+    assert.ok(p.view().main && p.view().panes.length === 0, "an old #settings link opens the Settings tab");
+    return p.go("#release").then(function () { return p.go("#monitor-settings"); }).then(function () {
+      assert.ok(p.view().main && p.view().panes.length === 0, "and so does the new address");
+    });
+  });
+});
+
 // ---- the page and its CSS ----------------------------------------------------------------------------------------------
 
 test("monitoring.html loads the four stylesheets up front (no flash) and the four scripts only from the inert template", function () {
