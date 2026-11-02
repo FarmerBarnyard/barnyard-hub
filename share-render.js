@@ -8,7 +8,7 @@
 (function (root) {
   "use strict";
 
-  var KIND_TITLE = { overview: "Overview summary", renewals: "Renewals", kb: "Knowledgebase articles" };
+  var KIND_TITLE = { overview: "Overview summary", renewals: "Renewals", kb: "Knowledgebase articles", canvas: "Canvas board" };
   var STATE_TEXT = { known: "date confirmed", estimated: "date estimated", planned: "planned", needed: "date needed", auto: "renews itself" };
   var TONES = ["", "attn", "alert"];
 
@@ -58,10 +58,44 @@
     }
     if (snapshot.kind === "renewals") return (snapshot.rows || []).length + " renewal" + ((snapshot.rows || []).length === 1 ? "" : "s");
     if (snapshot.kind === "kb") return (snapshot.articles || []).length + " article" + ((snapshot.articles || []).length === 1 ? "" : "s");
+    if (snapshot.kind === "canvas") {
+      var n = (snapshot.items || []).length;
+      return n + " item" + (n === 1 ? "" : "s");
+    }
     return "";
   }
 
-  var helpers = { kindTitle: kindTitle, dateText: dateText, isoText: isoText, dueChip: dueChip, stateText: stateText, tone: tone, paragraphs: paragraphs, describe: describe, KIND_TITLE: KIND_TITLE };
+  // ---- a shared Canvas board ----
+  // The Worker's picture of a board holds the drawing only (items renumbered n1, n2 ..., a card has just its kind and a plain label).
+  // It is drawn with canvas-logic.js's own SVG export, then rebuilt node by node from an allow-list of drawing elements and attributes,
+  // so even a changed or hostile picture can only ever produce lines, shapes and text: no script, style, link or picture address.
+  var SVG_TAGS = { svg: 1, defs: 1, marker: 1, path: 1, rect: 1, line: 1, text: 1, tspan: 1, ellipse: 1, polygon: 1, circle: 1 };
+  var SVG_ATTRS = {
+    viewBox: 1, "font-family": 1, id: 1, refX: 1, refY: 1, markerWidth: 1, markerHeight: 1, orient: 1, d: 1, fill: 1, x: 1, y: 1, rx: 1, ry: 1, cx: 1, cy: 1, r: 1,
+    x1: 1, y1: 1, x2: 1, y2: 1, stroke: 1, "stroke-width": 1, "stroke-dasharray": 1, "marker-end": 1, points: 1, "font-size": 1, "text-anchor": 1, "font-weight": 1, dy: 1
+  };
+  // Letters, digits, spaces and the punctuation a drawing needs; no ":" "/" ";" quotes or angle brackets, so no address and no markup.
+  var SVG_VALUE = /^[-A-Za-z0-9 #.,()_%]*$/;
+
+  // May this attribute (on any allowed element) be copied? width and height are left out on purpose: the page sizes the drawing.
+  function safeSvgAttr(name, value) {
+    return !!SVG_ATTRS[name] && SVG_VALUE.test(String(value)) && (name !== "marker-end" || /^url\(#[A-Za-z0-9_-]+\)$/.test(String(value)));
+  }
+
+  // The shared picture as the plain data canvas-logic.js draws. A card needs a reference to be drawn; it gets a placeholder id.
+  function canvasData(snapshot) {
+    var items = [];
+    ((snapshot && snapshot.items) || []).forEach(function (it) {
+      if (!it || typeof it !== "object") return;
+      var c = {};
+      Object.keys(it).forEach(function (k) { c[k] = it[k]; });
+      if (c.type === "card") c.ref = { kind: c.ref && c.ref.kind, id: "shared" };
+      items.push(c);
+    });
+    return { items: items };
+  }
+
+  var helpers = { kindTitle: kindTitle, dateText: dateText, isoText: isoText, dueChip: dueChip, stateText: stateText, tone: tone, paragraphs: paragraphs, describe: describe, KIND_TITLE: KIND_TITLE, safeSvgAttr: safeSvgAttr, canvasData: canvasData, SVG_TAGS: SVG_TAGS };
 
   if (typeof document === "undefined") {
     if (typeof module !== "undefined" && module.exports) module.exports = helpers;
@@ -155,12 +189,52 @@
     return wrap;
   }
 
+  var SVG_NS = "http://www.w3.org/2000/svg";
+
+  // Copy one parsed drawing node into a fresh SVG element, keeping only what the allow-list names.
+  function rebuild(node) {
+    if (node.nodeType === 3) return document.createTextNode(node.nodeValue);
+    if (node.nodeType !== 1 || !SVG_TAGS[node.localName]) return null;
+    var el = document.createElementNS(SVG_NS, node.localName);
+    for (var i = 0; i < node.attributes.length; i++) {
+      var a = node.attributes[i];
+      if (safeSvgAttr(a.name, a.value)) el.setAttribute(a.name, a.value);
+    }
+    for (var c = node.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType === 3 && node.localName !== "text" && node.localName !== "tspan") continue;   // words only inside text
+      var kid = rebuild(c);
+      if (kid) el.appendChild(kid);
+    }
+    return el;
+  }
+
+  function drawCanvas(snap) {
+    var wrap = h("div", "sv-body sv-canvas");
+    var L = root.BarnyardCanvasLogic;
+    if (!(snap.items || []).length) { wrap.appendChild(h("p", "sv-clear", "This board was empty when it was shared.")); return wrap; }
+    if (!L || !L.toSvg || typeof DOMParser === "undefined") { wrap.appendChild(h("p", "sv-dim", "This page could not draw the board.")); return wrap; }
+    var parsed;
+    try { parsed = new DOMParser().parseFromString(L.toSvg(canvasData(snap)), "image/svg+xml"); } catch (e) { parsed = null; }
+    var svg = parsed && parsed.documentElement && parsed.documentElement.localName === "svg" ? rebuild(parsed.documentElement) : null;
+    if (!svg) { wrap.appendChild(h("p", "sv-dim", "This board could not be drawn.")); return wrap; }
+    svg.setAttribute("class", "sv-canvas-svg");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", (snap.title || "Canvas board") + ", a drawing with " + describe(snap));
+    var frame = h("div", "sv-canvas-frame");
+    frame.appendChild(svg);
+    wrap.appendChild(frame);
+    var cards = (snap.items || []).filter(function (i) { return i.type === "card"; }).length;
+    if (cards) wrap.appendChild(h("p", "sv-dim", "Boxes marked as linked items were live cards on the board. Here they are only pictures: they show nothing that is live."));
+    return wrap;
+  }
+
   // -> an element holding the picture. opts.plain draws Knowledgebase text as short plain paragraphs (for the preview).
   function render(snapshot, opts) {
     if (!snapshot || typeof snapshot !== "object") return h("p", "sv-dim", "Nothing to show.");
     if (snapshot.kind === "overview") return drawOverview(snapshot);
     if (snapshot.kind === "renewals") return drawRenewals(snapshot);
     if (snapshot.kind === "kb") return drawKb(snapshot, opts);
+    if (snapshot.kind === "canvas") return drawCanvas(snapshot);
     return h("p", "sv-dim", "This kind of view is not known to this page.");
   }
 

@@ -26,7 +26,7 @@
     state: "loading", boards: [], limits: null, templates: [], board: null, items: [], view: { x: 0, y: 0, k: 1 },
     selected: null, tool: "select", shapeKind: "rect", snap: true, history: new L.History(), dirty: false, saving: false, refocusing: false,
     saveState: "saved", savedAt: 0, conflict: null, live: {}, drag: null, pointers: {}, pinch: null, editing: null,
-    pickerKind: "ops", pickerQ: "", pickerAt: null, saveTimer: 0, rafPending: false, versions: null
+    pickerKind: "ops", pickerQ: "", pickerAt: null, saveTimer: 0, rafPending: false, versions: null, shareFor: ""
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -67,6 +67,9 @@
   function remember(id) { try { localStorage.setItem(LAST_KEY, id); } catch (e) { /* storage may be off */ } }
   function recall() { try { return localStorage.getItem(LAST_KEY) || ""; } catch (e) { return ""; } }
 
+  // canvas.html#cb_xxxxxxxx opens that board (the Overview's Canvas tile links here).
+  function hashBoard() { var m = /^#(cb_[a-z0-9]{8})$/.exec(window.location.hash || ""); return m ? m[1] : ""; }
+
   function boardById(id) { for (var i = 0; i < S.boards.length; i++) if (S.boards[i].id === id) return S.boards[i]; return null; }
 
   function loadBoards(openId) {
@@ -78,7 +81,7 @@
       S.boards = r.body.boards || [];
       S.limits = r.body.limits || null;
       S.state = "ok";
-      var want = openId || recall();
+      var want = openId || hashBoard() || recall();
       var pick = boardById(want) ? want : (S.boards[0] && S.boards[0].id);
       return call("GET", "/canvas/templates").then(function (t) {
         S.templates = (t.body && t.body.templates) || [];
@@ -144,9 +147,31 @@
     });
     if (S.board) sel.value = S.board.id;
     var has = !!S.board;
-    ["cv-rename", "cv-history", "cv-export", "cv-delete"].forEach(function (id) { $(id).disabled = !has; });
+    ["cv-rename", "cv-history", "cv-export", "cv-share", "cv-delete"].forEach(function (id) { $(id).disabled = !has; });
     sel.disabled = !S.boards.length;
     renderStatus();
+    if (S.board && S.shareFor !== S.board.id) refreshShare();
+  }
+
+  // The Share button says how many links to this board are live (the Worker's list names each link's board), so what is shared is visible here.
+  function refreshShare() {
+    var ui = window.BarnyardShareUI, btn = $("cv-share");
+    if (!ui || !S.board) { btn.textContent = "Share"; return; }
+    var id = S.board.id;
+    S.shareFor = id;
+    ui.countLive(id).then(function (n) {
+      if (!S.board || S.board.id !== id) return;
+      btn.textContent = n ? "Share (" + n + " live)" : "Share";
+      btn.title = n ? n + (n === 1 ? " link" : " links") + " to this board can be opened right now. Open Share to see or switch them off." : "Make a read-only link to a picture of this board";
+    });
+  }
+
+  function shareDialog() {
+    var ui = window.BarnyardShareUI;
+    if (!ui || !S.board) return;
+    var id = S.board.id;
+    // The link shows the SAVED board, so save first.
+    flushSave().then(function () { S.shareFor = ""; ui.openFor("canvas", id); });
   }
 
   function renderStatus() {
@@ -763,7 +788,7 @@
 
   function deleteDialog() {
     dialog("cv-dlg", "Delete this board?", function (body, d) {
-      body.appendChild(h("p", "", "“" + S.board.title + "” and its saved copies will be deleted for good."));
+      body.appendChild(h("p", "", "“" + S.board.title + "” and its saved copies will be deleted for good, and any shared links to it are switched off."));
       body.appendChild(button("Delete the board", "btn-danger", function () {
         var id = S.board.id;
         call("POST", "/canvas/delete", { id: id }).then(function (r) {
@@ -1011,11 +1036,12 @@
     $("cv-rename").addEventListener("click", renameDialog);
     $("cv-history").addEventListener("click", historyDialog);
     $("cv-export").addEventListener("click", exportDialog);
+    $("cv-share").addEventListener("click", shareDialog);
     $("cv-delete").addEventListener("click", deleteDialog);
     $("cv-refresh").addEventListener("click", function () { flushSave().then(function () { return loadBoards(S.board && S.board.id); }); });
     $("cv-conflict-load").addEventListener("click", function () { resolveConflict(false); });
     $("cv-conflict-keep").addEventListener("click", function () { resolveConflict(true); });
-    document.addEventListener("visibilitychange", function () { if (document.hidden) flushSave(); else loadLive(); });
+    document.addEventListener("visibilitychange", function () { if (document.hidden) flushSave(); else { loadLive(); S.shareFor = ""; if (S.board) refreshShare(); } });
     window.addEventListener("pagehide", function () { flushSave(); });
     setInterval(function () { if (!document.hidden && S.board) loadLive(); }, LIVE_MS);
     setInterval(function () { if (S.board) renderStatus(); }, 30000);
