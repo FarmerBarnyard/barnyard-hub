@@ -132,7 +132,7 @@
       var di = daysBetween(today, entry.due);
       return di < 0 ? "alert" : di === 0 ? "attn" : "";
     }
-    if (entry.type === "event" || entry.type === "gcal") return "";
+    if (entry.type === "event" || entry.type === "gcal" || entry.type === "ocal") return "";
     if (!entry.due || entry.state === "needed" || entry.state === "auto") return "";
     var d = daysBetween(today, entry.due);
     return d <= 7 ? "alert" : d <= 30 ? "attn" : "ok";
@@ -160,6 +160,7 @@
       });
     });
     googleEntries(data.google, from, to).forEach(function (g) { put(g.due, g); });
+    outlookEntries(data.outlook, from, to).forEach(function (o) { put(o.due, o); });
     m365Entries(data.m365, from, to).forEach(function (m) { put(m.due, m); });
     Object.keys(map).forEach(function (k) { map[k].sort(sortInDay); });
     return map;
@@ -191,6 +192,29 @@
     return out;
   }
 
+  // The owner's Outlook (Microsoft 365) calendar events (read only, from GET /calendar/outlook) as entries. Each is
+  // { title, allDay, date, endDate, start, end, location, showAs, cancelled }: a timed event's start and end are the owner's own
+  // wall clock ("2026-11-05T09:30:00", no zone), an all-day event has its first date and its LAST date (inclusive). A multi-day
+  // all-day event is placed on every day it covers inside the window; a timed one on its first day. Cancelled ones are left out.
+  function outlookEntries(events, from, to) {
+    var out = [];
+    (events || []).forEach(function (o, i) {
+      if (!o || typeof o.title !== "string" || o.cancelled === true || !isYmd(o.date)) return;
+      if (o.allDay) {
+        var last = isYmd(o.endDate) && o.endDate >= o.date ? o.endDate : o.date;
+        var day = o.date < from ? from : o.date;
+        for (var n = 0; day <= last && day <= to && n < 62; n++, day = addDays(day, 1)) {
+          out.push({ type: "ocal", id: "o" + i + ":" + day, label: o.title, kind: "", state: "known", due: day, time: "", endTime: "", allDay: true, ref: o });
+        }
+        return;
+      }
+      var s = localParts(o.start), e = localParts(o.end);
+      if (!s || s.date < from || s.date > to) return;
+      out.push({ type: "ocal", id: "o" + i + ":" + s.date, label: o.title, kind: "", state: "known", due: s.date, time: s.time, endTime: e && e.date === s.date ? e.time : "", allDay: false, ref: o });
+    });
+    return out;
+  }
+
   // Microsoft 365 announced changes with an action-by date (read only, from GET /services/m365 `actionDates`:
   // { id, title, services, severity, major, actionBy (a time in ms) }). Each lands on its action-by date in the owner's own
   // day. It is a deadline, so it is dated like an Ops item (all day, nothing to tick), not an event.
@@ -217,7 +241,7 @@
     return none("off");
   }
 
-  var TYPE_ORDER = { event: 0, gcal: 0, task: 1, item: 2, m365: 2, renewal: 3 };
+  var TYPE_ORDER = { event: 0, gcal: 0, ocal: 0, task: 1, item: 2, m365: 2, renewal: 3 };
   // Within a day: all-day things first (events, then to-dos, Ops items, renewals), then timed ones by time.
   function sortInDay(a, b) {
     var at = !!a.time && !a.allDay, bt = !!b.time && !b.allDay;
@@ -237,7 +261,7 @@
     var out = { overdue: [], today: [], week: [] };
     var past = entriesByDate(data, addDays(today, -400), addDays(today, -1), kind);
     Object.keys(past).sort().forEach(function (date) {
-      past[date].forEach(function (e) { if (e.type !== "event" && e.type !== "gcal") out.overdue.push(e); });   // an event that has happened is not overdue
+      past[date].forEach(function (e) { if (e.type !== "event" && e.type !== "gcal" && e.type !== "ocal") out.overdue.push(e); });   // an event that has happened is not overdue
     });
     var now = entriesByDate(data, today, addDays(today, 7), kind);
     Object.keys(now).sort().forEach(function (date) {
@@ -323,7 +347,7 @@
   function dueCount(data, today) {
     var a = agenda(data, today, "all");
     var n = a.overdue.length;
-    a.today.forEach(function (e) { if (e.type !== "event" && e.type !== "gcal") n++; });
+    a.today.forEach(function (e) { if (e.type !== "event" && e.type !== "gcal" && e.type !== "ocal") n++; });
     return n;
   }
 
@@ -663,7 +687,7 @@
     urgency: urgency, entriesByDate: entriesByDate, sortInDay: sortInDay, filterKind: filterKind, agenda: agenda, upcoming: upcoming, renewalGroups: renewalGroups,
     groupTasks: groupTasks, widgetTasks: widgetTasks, taskDueText: taskDueText, dueCount: dueCount, monthGrid: monthGrid, weekDays: weekDays,
     icsEscape: icsEscape, icsFold: icsFold, buildIcs: buildIcs, buildDetails: buildDetails, renewalBody: renewalBody, parseRef: parseRef, refHref: refHref,
-    taskBody: taskBody, eventBody: eventBody, parseQuick: parseQuick, googleEntries: googleEntries, m365Entries: m365Entries, m365State: m365State
+    taskBody: taskBody, eventBody: eventBody, parseQuick: parseQuick, googleEntries: googleEntries, outlookEntries: outlookEntries, m365Entries: m365Entries, m365State: m365State
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
