@@ -1,6 +1,7 @@
 // Shared read-only views: the owner's side. A Settings tab ("Shared views") on the Overview where the owner makes a link to a
-// FROZEN copy of the Overview summary, the renewals list or a few Knowledgebase articles, previews exactly what it holds,
-// sets how long it lasts (14 days unless changed), and switches links off.
+// FROZEN copy of the Overview summary, the renewals list, a few Knowledgebase articles or one Canvas board, previews exactly what
+// it holds, sets how long it lasts (14 days unless changed), and switches links off. The Canvas page opens this tab for its board
+// through window.BarnyardShareUI (openFor, countLive).
 //
 // Anyone with a link sees a snapshot (view.html) with no login. The link is shown once, when it is made: the Worker keeps only
 // its hash. See ClaudeRepo's cloudflare-worker/src/share-routes.js. Owner only, on the hub's own origin.
@@ -14,13 +15,15 @@
 
   var API = "https://api.barnyard.site/share";
   var HUB_API = "https://api.barnyard.site/hub";
+  var CANVAS_API = "https://api.barnyard.site/canvas";
   var VIEW_URL = "https://dashboard.barnyard.site/view.html#";
   var DAYS = [{ v: 1, t: "1 day" }, { v: 7, t: "7 days" }, { v: 14, t: "14 days" }, { v: 30, t: "30 days" }, { v: 90, t: "90 days" }];
   var DEFAULT_DAYS = 14;
   var KINDS = [
     { id: "overview", title: "Overview summary", about: "What needs attention: what is down, backups, renewals, domains, security." },
     { id: "renewals", title: "Renewals", about: "The list of things that run out, with their dates." },
-    { id: "kb", title: "Knowledgebase articles", about: "Up to ten articles, copied as they read now." }
+    { id: "kb", title: "Knowledgebase articles", about: "Up to ten articles, copied as they read now." },
+    { id: "canvas", title: "Canvas board", about: "One whiteboard as a picture. Live cards become plain boxes with nothing live in them." }
   ];
   var SECTIONS = [
     { id: "down", title: "What is down", on: true }, { id: "backups", title: "Backups", on: true }, { id: "renewals", title: "Renewals soon", on: true },
@@ -41,6 +44,7 @@
     if (form.label && form.label.trim()) body.label = form.label.trim().slice(0, 60);
     if (form.kind === "overview") body.sections = SECTIONS.filter(function (s) { return form.sections[s.id]; }).map(function (s) { return s.id; });
     if (form.kind === "kb") body.ids = form.articles.map(function (a) { return a.id; });
+    if (form.kind === "canvas") { body.id = form.board; if (form.cardLabels) body.cardLabels = true; }
     if (today) body.today = today;
     if (form.confirmPii) body.confirmPii = true;
     return body;
@@ -50,7 +54,22 @@
   function formProblem(form) {
     if (form.kind === "overview" && !SECTIONS.some(function (s) { return form.sections[s.id]; })) return "Tick at least one section.";
     if (form.kind === "kb" && !form.articles.length) return "Choose at least one article.";
+    if (form.kind === "canvas" && !/^cb_[a-z0-9]{8}$/.test(String(form.board || ""))) return "Choose a board.";
     return "";
+  }
+
+  // The boards in a GET /canvas/boards answer -> [{ id, title, items }], newest change first as the Worker sends them.
+  function boardChoices(data) {
+    var out = [];
+    ((data && data.boards) || []).forEach(function (b) {
+      if (b && /^cb_[a-z0-9]{8}$/.test(String(b.id)) && b.title) out.push({ id: b.id, title: String(b.title).slice(0, 80), items: Number(b.items) || 0 });
+    });
+    return out;
+  }
+
+  // How many links to one board are live, from the owner's list (each link names its board in `ref`).
+  function liveFor(links, boardId) {
+    return (links || []).filter(function (l) { return l && l.kind === "canvas" && l.ref === boardId && l.status === "live"; }).length;
   }
 
   // The Knowledgebase articles in a /hub/search answer -> [{ id, title }].
@@ -94,6 +113,9 @@
     article_not_found: "One of those articles no longer exists. Remove it and try again.",
     article_hidden: "One of those articles is hidden, so it can't be shared.",
     too_large: "That is too big to share. Choose fewer articles.",
+    canvas_share_off: "Sharing boards is switched off. Set the Worker variable CANVAS_SHARE_ENABLED to 1 to turn it on.",
+    board_not_found: "That board no longer exists. Pick another.",
+    board_empty: "That board is empty, so there is nothing to share yet.",
     unauthenticated: "Sign in to the hub, then try again.",
     forbidden: "Only the hub owner can share views.",
     unavailable: "The server could not read that just now. Try again in a moment.",
@@ -106,7 +128,7 @@
   }
 
   var helpers = {
-    viewUrl: viewUrl, buildBody: buildBody, formProblem: formProblem, articleHits: articleHits, piiText: piiText, expiryText: expiryText,
+    viewUrl: viewUrl, buildBody: buildBody, formProblem: formProblem, articleHits: articleHits, boardChoices: boardChoices, liveFor: liveFor, piiText: piiText, expiryText: expiryText,
     viewsText: viewsText, errorText: errorText, KINDS: KINDS, SECTIONS: SECTIONS, DAYS: DAYS, DEFAULT_DAYS: DEFAULT_DAYS, MAX_ARTICLES: MAX_ARTICLES, SEARCH_MIN: SEARCH_MIN
   };
 
@@ -143,7 +165,8 @@
   }
 
   var S = {
-    form: { kind: "renewals", days: DEFAULT_DAYS, label: "", sections: {}, articles: [], confirmPii: false },
+    form: { kind: "renewals", days: DEFAULT_DAYS, label: "", sections: {}, articles: [], board: "", cardLabels: false, confirmPii: false },
+    boards: [], boardState: "idle",
     preview: null, previewKey: "", links: null, listState: "idle", message: "", created: null, busy: false,
     search: { q: "", hits: [], state: "idle" }, confirmRevoke: null, host: null, searchTimer: null
   };
@@ -156,6 +179,16 @@
     S.listState = "loading";
     call("GET", "/list").then(function (d) { S.links = d.links || []; S.listState = "ready"; again(); },
       function (e) { S.listState = "error"; S.listError = errorText(e.code, e.status); again(); });
+  }
+
+  function loadBoards() {
+    S.boardState = "loading";
+    call("GET", "/boards", undefined, CANVAS_API).then(function (d) {
+      S.boards = boardChoices(d);
+      S.boardState = d && d.enabled === false ? "off" : "ready";
+      if (!S.boards.some(function (b) { return b.id === S.form.board; })) S.form.board = S.boards.length ? S.boards[0].id : "";
+      again();
+    }, function (e) { S.boards = []; S.boardState = "error"; S.boardError = errorText(e.code, e.status); again(); });
   }
 
   function keyOfForm() { return JSON.stringify(buildBody(S.form, "")); }
@@ -221,7 +254,7 @@
     KINDS.forEach(function (k) {
       var label = h("label", "sh-kind"), input = h("input");
       input.type = "radio"; input.name = "sh-kind"; input.value = k.id; input.checked = S.form.kind === k.id;
-      input.addEventListener("change", function () { S.form.kind = k.id; S.preview = null; S.created = null; S.message = ""; again(); });
+      input.addEventListener("change", function () { S.form.kind = k.id; S.preview = null; S.created = null; S.message = ""; if (k.id === "canvas") S.boardState = "idle"; again(); });
       label.appendChild(input);
       var text = h("span", "sh-kind-text");
       text.appendChild(h("b", null, k.title));
@@ -247,6 +280,33 @@
         fs.appendChild(label);
       });
       box.appendChild(fs);
+    }
+    if (S.form.kind === "canvas") {
+      var fb = h("fieldset");
+      fb.appendChild(h("legend", null, "Board"));
+      if (S.boardState === "idle") loadBoards();
+      if (S.boardState === "idle" || S.boardState === "loading") fb.appendChild(h("p", "hint", "Loading your boards…"));
+      else if (S.boardState === "error") fb.appendChild(h("p", "hint", S.boardError || "Couldn't load your boards."));
+      else if (S.boardState === "off") fb.appendChild(h("p", "hint", "The Canvas is switched off on the Worker."));
+      else if (!S.boards.length) fb.appendChild(h("p", "hint", "You have no boards yet. Make one on the Canvas page first."));
+      else {
+        var pick = h("select", "sh-input");
+        pick.setAttribute("aria-label", "Board to share");
+        S.boards.forEach(function (b) {
+          var o = h("option", null, b.title + " · " + b.items + (b.items === 1 ? " item" : " items"));
+          o.value = b.id; if (b.id === S.form.board) o.selected = true;
+          pick.appendChild(o);
+        });
+        pick.addEventListener("change", function () { S.form.board = pick.value; S.preview = null; again(); });
+        fb.appendChild(pick);
+        var names = h("label", "sh-check"), namesBox = h("input");
+        namesBox.type = "checkbox"; namesBox.checked = !!S.form.cardLabels;
+        namesBox.addEventListener("change", function () { S.form.cardLabels = namesBox.checked; S.preview = null; again(); });
+        names.appendChild(namesBox); names.appendChild(h("span", null, "Show the names on live cards"));
+        fb.appendChild(names);
+        fb.appendChild(h("p", "hint", "A live card on the board becomes a plain box in the copy: it shows no status and links to nothing. Its name (what it was called when you placed it) is left out unless you tick this. The copy is taken from the saved board, as it is now."));
+      }
+      box.appendChild(fb);
     }
     if (S.form.kind === "kb") {
       var fk = h("fieldset");
@@ -423,6 +483,19 @@
     var who = window.BarnyardTheme && window.BarnyardTheme.who && window.BarnyardTheme.who.get();
     return !!who && who.owner === true;
   }
+
+  // For the Canvas page: open this tab ready to share one board, and count how many links to a board are live right now.
+  window.BarnyardShareUI = {
+    openFor: function (kind, id) {
+      if (kind !== "canvas" || !/^cb_[a-z0-9]{8}$/.test(String(id))) return;
+      S.form.kind = "canvas"; S.form.board = id; S.preview = null; S.created = null; S.message = ""; S.boardState = "idle"; S.listState = "idle";
+      if (window.BarnyardShell && window.BarnyardShell.openSettings) window.BarnyardShell.openSettings("share");
+      again();
+    },
+    countLive: function (id) {
+      return call("GET", "/list").then(function (d) { return liveFor((d && d.links) || [], id); }, function () { return 0; });
+    }
+  };
 
   // The tab and the palette command exist only for the hub owner, and appear once the page knows that.
   function boot() {

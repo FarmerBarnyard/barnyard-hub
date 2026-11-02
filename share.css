@@ -80,6 +80,9 @@
 .sv-md table { border-collapse: collapse; display: block; overflow-x: auto; }
 .sv-md th, .sv-md td { padding: 6px 10px; border: 1px solid var(--line); }
 .sv-md a { color: var(--accent); }
+.sv-canvas-frame { overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: #ffffff; }
+.sv-canvas-svg { display: block; width: 100%; height: auto; min-width: 480px; }
+.sh-frame .sv-canvas-svg { min-width: 360px; }
 
 @media (max-width: 560px) {
   .sv-line { flex-direction: column; gap: 2px; }
@@ -91,4 +94,6 @@
   .sv-foot .btn, .sv-frozen { display: none; }
   .sv-sec, .sv-chip { border-color: #999; background: none; color: #000; }
   .sv-md a { color: #000; text-decoration: underline; }
+  .sv-canvas-frame { border-color: #999; overflow: visible; }
+  .sv-canvas-svg { min-width: 0; }
 }
