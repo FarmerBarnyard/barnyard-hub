@@ -342,6 +342,48 @@ test("Google Calendar events: all-day and timed, in the owner's own day, read on
   assert.strictEqual(ag.overdue.length, 0, "a Google event that has happened is not overdue");
 });
 
+test("Outlook events: timed ones on their first day, multi-day all-day ones on every day, cancelled ones left out, read only", function () {
+  var o = Cal.outlookEntries([
+    { title: "Board meeting", allDay: false, date: "2026-10-28", endDate: "2026-10-28", start: "2026-10-28T09:30:00", end: "2026-10-28T10:15:00", location: "Boardroom", showAs: "busy", cancelled: false },
+    { title: "Conference", allDay: true, date: "2026-10-29", endDate: "2026-10-31", start: null, end: null, location: "", showAs: "oof", cancelled: false },
+    { title: "Cancelled call", allDay: false, date: "2026-10-28", endDate: "2026-10-28", start: "2026-10-28T14:00:00", end: "2026-10-28T15:00:00", cancelled: true },
+    { title: "Late night", allDay: false, date: "2026-10-30", endDate: "2026-10-30", start: "2026-10-30T22:00:00", end: "2026-10-31T01:00:00" },
+    { title: "Long trip", allDay: true, date: "2026-10-20", endDate: "2026-10-27", start: null, end: null },
+    { title: "Too far", allDay: true, date: "2027-01-01", endDate: "2027-01-01" },
+    { title: 42 }, null, { title: "Broken", allDay: false, date: "nope", start: "nope" }, { title: "No start", allDay: false, date: "2026-10-28" }
+  ], "2026-10-26", "2026-10-31");
+  assert.deepStrictEqual(o.map(function (x) { return [x.type, x.label, x.due, x.time, x.endTime, x.allDay]; }), [
+    ["ocal", "Board meeting", "2026-10-28", "09:30", "10:15", false],
+    ["ocal", "Conference", "2026-10-29", "", "", true],
+    ["ocal", "Conference", "2026-10-30", "", "", true],
+    ["ocal", "Conference", "2026-10-31", "", "", true],
+    ["ocal", "Late night", "2026-10-30", "22:00", "", false],
+    ["ocal", "Long trip", "2026-10-26", "", "", true],
+    ["ocal", "Long trip", "2026-10-27", "", "", true]
+  ], "a trip that began before the window shows from the window's first day; a timed event past midnight has no end time on its first day");
+  var data = { outlook: [{ title: "Dentist", allDay: true, date: "2026-10-28", endDate: "2026-10-28" }], google: [{ title: "Gym", allDay: true, date: "2026-10-28" }], tasks: [t({ id: "z", due: "2026-10-28" })], events: [], renewals: [], dueItems: [] };
+  var map = Cal.entriesByDate(data, "2026-10-28", "2026-10-28", "all");
+  assert.deepStrictEqual(ids(map["2026-10-28"]), ["ocal:o0:2026-10-28", "gcal:g0:2026-10-28", "task:z"], "all-day Outlook and Google events sort together by title, before to-dos");
+  assert.deepStrictEqual(Cal.entriesByDate({ tasks: [], events: [], renewals: [], dueItems: [] }, "2026-10-28", "2026-10-28", "all"), {}, "no Outlook data at all is fine");
+  assert.strictEqual(Cal.urgency(o[0], TODAY), "", "an event has no urgency");
+  assert.strictEqual(Cal.dueCount({ outlook: [{ title: "Today thing", allDay: true, date: TODAY, endDate: TODAY }], tasks: [], events: [], renewals: [], dueItems: [] }, TODAY), 0, "an event is not something to do");
+  var ag = Cal.agenda({ outlook: [{ title: "Past", allDay: true, date: "2026-10-20", endDate: "2026-10-20" }], tasks: [], events: [], renewals: [], dueItems: [] }, TODAY, "all");
+  assert.strictEqual(ag.overdue.length, 0, "an Outlook event that has happened is not overdue");
+});
+
+test("the page reads Outlook from its own owner-only route, a window at a time, and says plainly when it is not set up", function () {
+  var js = fs.readFileSync(path.join(__dirname, "..", "calendar.js"), "utf8");
+  var html = fs.readFileSync(path.join(__dirname, "..", "calendar.html"), "utf8");
+  assert.ok(/OUTLOOK_API = "https:\/\/api\.barnyard\.site\/calendar\/outlook"/.test(js), "the route on the Worker");
+  var cacheFn = /function writeCache\(\) \{[\s\S]*?\n  \}/.exec(js);
+  assert.ok(/credentials: "include"/.test(js), "sent with the sign-in cookie");
+  assert.ok(cacheFn && !/outlook/i.test(cacheFn[0]), "the events are never stored in this browser's speed copy");
+  assert.ok(/OUTLOOK_API \+ "\?from=" \+ win\.from \+ "&to=" \+ win\.to/.test(js), "a date window is asked for");
+  assert.ok(/not_setup: "not set up"/.test(js) && /permission_not_granted: "permission not granted"/.test(js), "each state has its words");
+  assert.ok(/id="cal-outlook"/.test(html) && /id="cal-outlook-status"/.test(html), "a switch and a status beside it");
+  assert.ok(/outlook: model\.showOutlook \? model\.outlook : \[\]/.test(js), "switching it off hides the events");
+});
+
 test("the Overview's to-do widget shows the same to-dos in a sensible order, with a count of the rest", function () {
   var tasks = [t({ id: "later", due: "2026-11-05" }), t({ id: "inbox", due: "" }), t({ id: "late", due: "2026-10-20" }), t({ id: "now", due: TODAY }), t({ id: "done", status: "done", due: TODAY })];
   var w = Cal.widgetTasks(tasks, TODAY, 3);

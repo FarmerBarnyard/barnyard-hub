@@ -149,7 +149,122 @@ test("the page names six cards in the order they are drawn", function () {
   M.ORDER.forEach(function (id) { assert.ok(M.TITLES[id], id + " has a title"); });
 });
 
+// ---- phase 2: the detail inside the cards ----------------------------------------------------------------------------------------
+
+test("admin people: a missing second step or a disabled account is an alert, any other flag an attention, the rest are plain", function () {
+  var s = { people: { count: 3, flagged: 2, rows: [
+    { name: "Ollie", upn: "o@x.com", roles: ["Global Administrator", "User Administrator"], flags: ["not signed in for 100 days", "no second sign-in step"] },
+    { name: "Sam", upn: "s@x.com", roles: ["Exchange Administrator"], flags: ["holds 3 privileged roles"] },
+    { name: "", upn: "a@x.com", roles: ["Global Administrator"], flags: [] }
+  ] } };
+  var rows = M.adminRows(s);
+  assert.deepStrictEqual(rows.map(function (r) { return [r.name, r.roles, r.tone]; }), [["Ollie", "Global Administrator, User Administrator", "alert"], ["Sam", "Exchange Administrator", "attn"], ["a@x.com", "Global Administrator", ""]]);
+  assert.strictEqual(M.adminsHead(s).tone, "attn");
+  assert.ok(/2 admins worth a look/.test(M.adminsHead(s).head) && /Out of 3/.test(M.adminsHead(s).text));
+  assert.strictEqual(M.adminsHead({ people: { count: 2, flagged: 0, rows: [] } }).tone, "ok");
+  assert.strictEqual(M.adminsHead({}), null, "an older snapshot has no people list: nothing is drawn");
+  assert.deepStrictEqual(M.adminRows({}), []);
+});
+
+test("eligible roles: with an end date is fine, without is an attention, and the optional permission is named when it is missing", function () {
+  var ok = M.eligibleModel({ eligible: { state: "ok", count: 2, permanent: 1, rows: [{ role: "Global Administrator", name: "Sam", upn: "s@x.com", permanent: true, ends: null }, { role: "Reports Reader", name: "", upn: "a@x.com", permanent: false, ends: NOW + 30 * DAY }] } });
+  assert.strictEqual(ok.tone, "attn");
+  assert.ok(/2 eligible assignments/.test(ok.head) && /1 has no end date/.test(ok.text));
+  assert.deepStrictEqual(ok.rows.map(function (r) { return [r.who, r.ends]; }), [["Sam", "no end date"], ["a@x.com", M.dateText(NOW + 30 * DAY)]]);
+  var all = M.eligibleModel({ eligible: { state: "ok", count: 1, permanent: 0, rows: [] } });
+  assert.strictEqual(all.tone, "ok");
+  assert.ok(/All have an end date/.test(all.text));
+  var need = M.eligibleModel({ eligible: { state: "needs_permission", needs: ["RoleEligibilitySchedule.Read.Directory"] } });
+  assert.ok(/RoleEligibilitySchedule\.Read\.Directory/.test(need.text) && /optional/.test(need.text) && /P2/.test(need.text));
+  assert.ok(/Entra ID P2/.test(M.eligibleModel({ eligible: { state: "needs_premium" } }).head));
+  assert.ok(/could not be read/.test(M.eligibleModel({ eligible: { state: "error" } }).head));
+  assert.strictEqual(M.eligibleModel({}), null);
+});
+
+test("guests: the age bands, the unaccepted invitations, the licensed ones and the companies", function () {
+  var s = { guestBands: { d30: 1, d90: 0, d365: 2, older: 3, unknown: 0 }, guestPending: { count: 2, rows: [] }, guestLicensed: 1, guestDomains: [{ domain: "partner.example", count: 4 }, { domain: "other.example", count: 1 }] };
+  assert.deepStrictEqual(M.guestBands(s).map(function (b) { return [b.label, b.count, b.tone]; }), [["Under 30 days", 1, ""], ["30 to 90 days", 0, ""], ["90 days to a year", 2, ""], ["Over a year", 3, "attn"]]);
+  var notes = M.guestNotes(s).map(function (n) { return n.text; });
+  assert.deepStrictEqual(notes, ["2 invitations were never accepted.", "1 guest holds a paid licence.", "Mostly from partner.example (4), other.example (1)."]);
+  assert.deepStrictEqual(M.guestBands({}), []);
+  assert.deepStrictEqual(M.guestNotes({ guestPending: { count: 1 }, guestDomains: [] }).map(function (n) { return n.text; }), ["1 invitation was never accepted."]);
+  assert.strictEqual(M.guestBands({ guestBands: { d30: 0, d90: 0, d365: 0, older: 0, unknown: 2 } }).pop().label, "Age unknown");
+});
+
+test("Conditional Access: what each policy covers sits under its name, and the baseline checks read yes, report-only or no", function () {
+  var s = { rows: [{ name: "Require MFA", state: "on", summary: "Everyone, all apps: require MFA", modified: NOW }, { name: "Old test", state: "off" }], checks: [
+    { id: "mfa-everyone", label: "MFA for everyone, on all apps", state: "yes", policy: "Require MFA" },
+    { id: "block-legacy", label: "Old sign-in methods blocked", state: "report-only", policy: "Block legacy" },
+    { id: "risk", label: "A policy that reacts to risky sign-ins", state: "no", policy: "" }] };
+  var rows = M.policyRows(s);
+  assert.deepStrictEqual([rows[0].summary, rows[0].tone, rows[1].summary, rows[1].tone], ["Everyone, all apps: require MFA", "", "", "attn"]);
+  assert.deepStrictEqual(M.policyChecks(s).map(function (c) { return [c.state, c.tone, c.text]; }), [["yes", "ok", "In place: Require MFA"], ["report-only", "attn", "Only reporting: Block legacy"], ["no", "alert", "Not found"]]);
+  assert.deepStrictEqual(M.policyChecks({ rows: [] }), [], "a plain list has no checks to show");
+});
+
+test("secure score trend: up, down, flat and not enough history; the line is the percentages in order", function () {
+  var up = M.scoreTrend({ trend: { points: [{ pct: 30 }, { pct: 40 }, { pct: 42 }], delta30: 12, delta7: 2 } });
+  assert.deepStrictEqual([up.text, up.points, up.tone], ["Up 12 points in the last month.", [30, 40, 42], "ok"]);
+  var down = M.scoreTrend({ trend: { points: [{ pct: 50 }, { pct: 45 }], delta30: null, delta7: -5 } });
+  assert.deepStrictEqual([down.text, down.tone], ["Down 5 points in the last week.", "alert"]);
+  assert.strictEqual(M.scoreTrend({ trend: { points: [{ pct: 50 }, { pct: 50 }], delta30: 0 } }).text, "No change in the last month.");
+  assert.strictEqual(M.scoreTrend({ trend: { points: [{ pct: 50 }, { pct: 50 }], delta30: null, delta7: null } }).text, "Not enough history to show a trend yet.");
+  assert.deepStrictEqual(M.scoreTrend({ trend: { points: [{ pct: 50 }] } }).points, [], "one reading is not a line");
+  assert.deepStrictEqual(M.scoreTrend({}).points, []);
+});
+
+test("the strip gains the admins to look at and the secure score", function () {
+  var s = M.stats({ adminsToCheck: 2, scorePct: 42 });
+  assert.deepStrictEqual(s.map(function (x) { return [x.label, x.value, x.tone]; }), [["Admins to look at", "2", "attn"], ["Secure score", "42%", "attn"]]);
+  assert.strictEqual(M.stats({ adminsToCheck: 0, scorePct: 85 })[1].tone, "ok");
+  assert.strictEqual(M.stats({ scorePct: 10 })[0].tone, "alert");
+});
+
+// ---- phase 3: the review -----------------------------------------------------------------------------------------------------------
+
+test("the review checklist: a line each, the Worker's tone in plain words, empty until something has been read", function () {
+  var rows = M.checklistRows({ checklist: [
+    { id: "admins", title: "Everyone who holds an admin role still needs it", how: "Remove roles from anyone who left.", tone: "check", detail: "2 people hold a privileged role." },
+    { id: "global-admins", title: "Two to four Global Administrators", how: "x", tone: "ok", detail: "2 Global Administrators." },
+    { id: "score", title: "The biggest secure score gaps", how: "y", tone: "unknown", detail: "needs SecurityEvents.Read.All" }] });
+  assert.deepStrictEqual(rows.map(function (r) { return [r.id, r.tone, r.word]; }), [["admins", "attn", "Check"], ["global-admins", "ok", "Fine"], ["score", "", "Not known"]]);
+  assert.deepStrictEqual(M.checklistRows({}), []);
+  assert.deepStrictEqual(M.checklistRows({ checklist: [] }), []);
+});
+
+test("what changed since the last review: the lines, nothing changed, and nothing to compare with", function () {
+  assert.strictEqual(M.changesModel(null, NOW).none, true);
+  assert.ok(/nothing to compare with/.test(M.changesModel(null, NOW).text));
+  var same = M.changesModel({ since: NOW - 10 * DAY, changed: false }, NOW);
+  assert.ok(/Nothing has changed since the review on/.test(same.text) && same.lines.length === 0);
+  var c = M.changesModel({ since: NOW - 10 * DAY, changed: true, adminsAdded: ["new@x.com"], adminsRemoved: ["old@x.com"], policiesAdded: ["P new"], policiesRemoved: [], policiesChanged: [{ name: "MFA", from: "on", to: "off" }], guests: { from: 1, to: 4 }, score: { from: 42, to: 39 } }, NOW);
+  assert.deepStrictEqual(c.lines, ["New admins: new@x.com", "No longer admins: old@x.com", "New policies: P new", "Policy MFA went from on to off.", "Guests: 1 to 4.", "Secure score: 42% to 39%."]);
+  assert.ok(/^Since the review on/.test(c.text));
+  var many = M.changesModel({ since: NOW, adminsAdded: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"] }, NOW);
+  assert.ok(/and 2 more/.test(many.lines[0]));
+  assert.strictEqual(M.changesModel({ since: NOW, guests: { from: 2, to: 2 } }, NOW).lines.length, 0);
+});
+
+test("earlier reviews say how many lines were ticked; an old record without ticks says only the date and note", function () {
+  var h = M.reviewHistory([{ at: NOW - DAY, note: "removed 2 guests", checked: ["admins", "stale"] }, { at: NOW - 100 * DAY, note: "", checked: null }], 10);
+  assert.ok(/2 of 10 lines ticked\. removed 2 guests$/.test(h[0].text));
+  assert.strictEqual(h[1].text, M.dateText(NOW - 100 * DAY));
+  assert.deepStrictEqual(M.reviewHistory(null, 10), []);
+});
+
+test("the review words: no review yet points at the checklist below, and checked_invalid is worded", function () {
+  assert.ok(/tick each one/.test(M.reviewModel(null, NOW).text));
+  assert.ok(/could not be saved/.test(M.errorText({ error: "checked_invalid" }, 400)));
+});
+
 // ---- the page --------------------------------------------------------------------------------------------------------------
+
+test("m365.js draws the new parts from numbers and text only: the sparkline sets presentation attributes, no style attribute, one fetch", function () {
+  var js = fs.readFileSync(path.join(root, "m365.js"), "utf8");
+  assert.ok(/createElementNS\(ns, "path"\)/.test(js) && /setAttribute\("stroke-width", "2"\)/.test(js));
+  assert.ok(!/setAttribute\("style"|\.style\./.test(js), "the page's CSP has no inline style");
+  assert.ok(/body\.checked = boxes\.filter/.test(js), "the ticked lines are sent with the record");
+});
 
 test("m365.html: the shell's container and title row with nothing under the title, no inline script or style, the rules before the page", function () {
   var html = fs.readFileSync(path.join(root, "m365.html"), "utf8");

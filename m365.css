@@ -51,3 +51,28 @@
 
 .m3-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .m3-form input { flex: 1 1 260px; font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+
+/* Phase 2: guests, policy checks, secure score trend */
+.m3-bands { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.m3-bands li { justify-content: space-between; padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.m3-bands b { font-variant-numeric: tabular-nums; }
+.m3-bands .attn, .m3-note.attn { color: var(--attn); }
+.m3-note { font-size: 13px; }
+.m3-checks li { align-items: center; }
+.m3-trend { display: flex; align-items: center; gap: 12px; font-size: 13px; flex-wrap: wrap; }
+.m3-spark { width: 160px; height: 36px; flex: none; }
+.m3-spark path { stroke: var(--fg-dim); stroke-linecap: round; stroke-linejoin: round; }
+.m3-trend.ok .m3-spark path { stroke: var(--ok); }
+.m3-trend.alert .m3-spark path { stroke: var(--alert); }
+.m3-trend.ok span { color: var(--ok); }
+.m3-trend.alert span { color: var(--alert); }
+
+/* Phase 3: the review checklist */
+.m3-todo { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.m3-todo-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); }
+.m3-todo-row.attn { border-color: var(--attn); }
+.m3-todo-label { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; min-width: 0; }
+.m3-todo-label input { margin-top: 3px; flex: none; }
+.m3-todo-body { display: grid; gap: 2px; font-size: 13px; min-width: 0; }
+.m3-todo-body b { color: var(--fg-strong); font-weight: 600; }
+.m3-todo-detail { color: var(--fg); }

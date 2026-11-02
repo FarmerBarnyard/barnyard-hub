@@ -93,6 +93,14 @@ kbd { padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; backgro
 .cal-ev.t-gcal { border-left: 3px solid var(--info, var(--accent)); }
 .cal-ev.t-gcal::before { display: none; }
 .t-gcal > .cal-dot { background: var(--info, var(--accent)); border-radius: 2px; }
+/* Outlook (Microsoft 365) events: a double edge and a ring, so they read as a different source from Google's solid ones */
+.cal-witem.t-ocal, .cal-ev.t-ocal { border-left: 4px double var(--info, var(--accent)); }
+.cal-ev.t-ocal::before { display: none; }
+.t-ocal > .cal-dot { background: transparent; border: 2px solid var(--info, var(--accent)); border-radius: 50%; box-sizing: border-box; }
+.cal-source { margin-left: auto; }
+.cal-source + .cal-filter { margin-left: 0; }
+.cal-source input { margin: 0; }
+.cal-source[hidden] { display: none; }
 .cal-quick-hint { flex-basis: 100%; margin: 0; font-size: 13px; min-height: 1.2em; }
 
 /* the drawer */
