@@ -3,6 +3,8 @@
 //
 // Reads and writes /services/* on the Worker (ClaudeRepo's cloudflare-worker/src/services-routes.js, owner only):
 //   GET  /services/summary   /events?type=&q=&days=&page=   /m365[?refresh=1]
+//   GET  /services/code[?repo=NAME&refresh=1]   code and dependency health: the stored answers, or one repository read from GitHub now
+//                                               (the Check now button asks for them one at a time)
 //   POST /services/settings  {targets?, m365?}
 //   GET  /services/mirror    POST /services/mirror/run     the Knowledgebase mirror card (a copy of the articles in one SharePoint site)
 // and flips Monitoring's own alert switch (PUT /mon/settings {alerts:{security}}) for the "burst of refused requests" email.
@@ -278,6 +280,127 @@
     return null;
   }
 
+  // ---- Code and dependency health (GET /services/code: one stored answer per repository, read from GitHub with a read-only token) ----
+  // Everything the Worker sends here is a number, a package or branch name, a short fixed reason code or a GitHub summary line; the page
+  // shows all of it as text.
+  var CODE_REASONS = {
+    permission_missing: "the token is not allowed to read this",
+    repo_not_visible: "the token cannot see this repository",
+    rate_limited: "GitHub's hourly allowance for the token is used up",
+    token_rejected: "GitHub rejected the token (it may have expired)",
+    unreachable: "GitHub could not be reached",
+    budget: "it stopped to stay inside the request allowance",
+    github_error: "GitHub answered with an error",
+    not_configured: "the token is not set"
+  };
+  function codeReason(code) { return CODE_REASONS[code] || "it could not be read"; }
+
+  function daysAgoText(days) {
+    if (days === null || days === undefined) return "";
+    if (days <= 0) return "today";
+    if (days === 1) return "1 day ago";
+    if (days < 60) return days + " days ago";
+    return Math.round(days / 30) + " months ago";
+  }
+
+  function severityText(by) {
+    var out = [];
+    ["critical", "high", "medium", "low"].forEach(function (k) { if (by && by[k] > 0) out.push(by[k] + " " + k); });
+    return out.join(", ");
+  }
+
+  // One repository's answer -> the lines under its name: [{ key, label, tone, text }]. Each part says for itself when it could not be read.
+  function codeLines(r, now) {
+    if (!r) return [];
+    if (r.error) return [{ key: "error", label: "Could not be read", tone: "alert", text: codeReason(r.error.code).replace(/^./, function (c) { return c.toUpperCase(); }) + "." }];
+    var out = [];
+    var a = r.alerts;
+    if (a && a.state === "ok") {
+      if (a.total === 0) out.push({ key: "alerts", label: "Dependabot alerts", tone: "ok", text: "None open" });
+      else out.push({ key: "alerts", label: "Dependabot alerts", tone: a.bySeverity.critical + a.bySeverity.high > 0 ? "alert" : "attn", text: (a.more ? a.total + " or more" : String(a.total)) + " open: " + severityText(a.bySeverity) });
+    } else if (a) {
+      out.push({ key: "alerts", label: "Dependabot alerts", tone: "", text: a.code === "permission_missing"
+        ? "Not read: the token needs Dependabot alerts: Read-only, and Dependabot alerts switched on for this repository"
+        : "Not read: " + codeReason(a.code) });
+    }
+    var w = r.workflows;
+    if (w && w.state === "ok") {
+      var bits = [];
+      if (w.outdated.length) bits.push(w.outdated.length + (w.outdated.length === 1 ? " action is" : " actions are") + " out of date");
+      if (w.unpinned.length) bits.push(w.unpinned.length + (w.unpinned.length === 1 ? " follows a branch" : " follow a branch") + " instead of a version");
+      out.push({ key: "actions", label: "Workflow actions", tone: bits.length ? "attn" : "ok", text: !w.files.length ? "No workflow files" : bits.length ? bits.join("; ") : "All " + w.actions + (w.actions === 1 ? " action is" : " actions are") + " current" + (w.partial ? " (first files only)" : "") });
+      if (w.tests && w.tests.state === "present") out.push({ key: "tests", label: "Tests in CI", tone: "ok", text: "Run by " + w.tests.workflow });
+      else if (w.tests && w.tests.state === "missing") out.push({ key: "tests", label: "Tests in CI", tone: "attn", text: "No workflow runs the tests on a pull request or push" });
+    } else if (w) out.push({ key: "actions", label: "Workflow actions", tone: "", text: "Not read: " + codeReason(w.code) });
+    var b = r.branches;
+    if (b && b.state === "ok") {
+      var checked = b.checked < b.total ? " (dates read for " + b.checked + " of " + b.total + "; Check again for the rest)" : "";
+      out.push({ key: "branches", label: "Branches", tone: b.staleCount ? "attn" : "ok", text: (b.total === 0 ? "Only the main branch" : b.staleCount ? b.staleCount + " not touched for over 30 days, out of " + b.total : "None older than 30 days, out of " + b.total) + checked + (b.more ? "; the first 100 only" : "") });
+    } else if (b) out.push({ key: "branches", label: "Branches", tone: "", text: "Not read: " + codeReason(b.code) });
+    var rel = r.release;
+    if (rel && rel.state === "ok") out.push({ key: "release", label: "Latest release", tone: "", text: (rel.tag || rel.name || "A release") + (rel.ageDays !== null && rel.ageDays !== undefined ? ", " + daysAgoText(rel.ageDays) : "") });
+    else if (rel && rel.state === "none") out.push({ key: "release", label: "Latest release", tone: "", text: "None: it ships by deploy" + (r.lastPushDays !== null && r.lastPushDays !== undefined ? "; last push " + daysAgoText(r.lastPushDays) : "") });
+    else if (rel) out.push({ key: "release", label: "Latest release", tone: "", text: "Not read: " + codeReason(rel.code) });
+    return out;
+  }
+
+  // The things to look at in one repository: the worst alerts, the actions to update, the branches to tidy. Plain strings with a tone.
+  function codeDetails(r) {
+    var out = [];
+    if (!r || r.error) return out;
+    if (r.alerts && r.alerts.state === "ok") r.alerts.top.forEach(function (x) {
+      out.push({ tone: x.severity === "critical" || x.severity === "high" ? "alert" : "attn", chip: x.severity, text: (x.package || "a package") + (x.ecosystem ? " (" + x.ecosystem + ")" : "") + (x.summary ? ": " + x.summary : "") + (x.fixedIn ? ". Fixed in " + x.fixedIn : ""), url: x.url || "" });
+    });
+    if (r.workflows && r.workflows.state === "ok") {
+      r.workflows.outdated.forEach(function (o) {
+        out.push({ tone: "attn", chip: "Update", text: o.action + " is on " + o.used + (o.latestMajor !== null && o.latestMajor !== undefined ? ", the latest is v" + o.latestMajor : ", older than v" + (o.usedMajor + o.behind) + " (a known floor)") + " (" + o.files.join(", ") + ")", url: "" });
+      });
+      r.workflows.unpinned.forEach(function (u) {
+        out.push({ tone: "attn", chip: "Pin", text: u.action + " follows @" + u.ref + " (" + u.files.join(", ") + ")", url: "" });
+      });
+    }
+    if (r.branches && r.branches.state === "ok") r.branches.stale.slice(0, 5).forEach(function (s) {
+      out.push({ tone: "", chip: "Branch", text: s.name + ", last commit " + daysAgoText(s.ageDays), url: "" });
+    });
+    return out;
+  }
+
+  // The strip over the card, from the totals the Worker sums over the repositories it has read.
+  function codeHeadline(t, now) {
+    if (!t || !t.repos) return { tone: "", head: "Not checked yet", text: "Press Check now. It reads one repository at a time and keeps what it finds." };
+    var bad = t.critical + t.high;
+    var bits = [];
+    if (t.alerts) bits.push(t.alerts + (t.alerts === 1 ? " open alert" : " open alerts"));
+    if (t.outdated) bits.push(t.outdated + (t.outdated === 1 ? " outdated action" : " outdated actions"));
+    if (t.unpinned) bits.push(t.unpinned + " not pinned to a version");
+    if (t.noTests) bits.push(t.noTests + (t.noTests === 1 ? " repository" : " repositories") + " without a tests workflow");
+    if (t.stale) bits.push(t.stale + (t.stale === 1 ? " stale branch" : " stale branches"));
+    var when = t.checkedAt ? " The oldest check was " + agoText(t.checkedAt, now) + "." : "";
+    var gap = t.alertsUnavailable ? " Alerts could not be read for " + t.alertsUnavailable + (t.alertsUnavailable === 1 ? " repository." : " repositories.") : "";
+    if (bad) return { tone: "alert", head: bad + (bad === 1 ? " critical or high alert" : " critical or high alerts"), text: bits.join(", ") + "." + gap + when };
+    var fix = t.alerts + t.outdated + t.unpinned + t.noTests;
+    if (fix) return { tone: "attn", head: "Some things to update", text: bits.join(", ") + "." + gap + when };
+    return { tone: "ok", head: "Nothing to fix", text: (bits.length ? bits.join(", ") + ". " : "") + "Across " + t.repos + (t.repos === 1 ? " repository." : " repositories.") + gap + when };
+  }
+
+  // What the card shows for each state. src: summary.sources.code; data: GET /services/code (or null before it arrives).
+  // -> { state: loading | not_set_up | never | ok, steps, permissions }
+  function codeModel(src, data) {
+    var steps = (data && data.steps) || (src && src.steps) || [];
+    if (!src || src.state === "not_set_up" || (data && data.configured === false)) return { state: "not_set_up", steps: steps, permissions: (data && data.permissions) || [] };
+    if (!data) return { state: "loading", steps: [], permissions: [] };
+    var any = (data.repos || []).some(function (x) { return !!x.result; });
+    return { state: any ? "ok" : "never", steps: any ? [] : steps, permissions: data.permissions || [] };
+  }
+
+  // GET /services/code?repo=...&refresh=1 answers: 429 (wait), 400, or a token problem inside a 200 (refreshError).
+  function codeCheckError(body, status) {
+    var code = body && typeof body.error === "string" ? body.error : "";
+    if (code === "rate_limited") return "That repository was checked a moment ago. Try again in " + Math.max(1, Math.ceil((Number(body.retryMs) || 30000) / 1000)) + " seconds.";
+    if (code === "repo_unknown") return "That is not one of the repositories on the Release board.";
+    return null;
+  }
+
   var ERRORS = {
     recent_sign_in_required: "For safety this needs a recent sign-in. Sign in again, then repeat it.",
     unauthenticated: "You are not signed in.",
@@ -315,7 +438,9 @@
     burnText: burnText, levelRows: levelRows, headline: headline, forecastText: forecastText, capacityRows: capacityRows, chartModel: chartModel, groupOf: groupOf,
     typeChips: typeChips, eventRows: eventRows, securityLine: securityLine, m365Model: m365Model, issueRows: issueRows, messageRows: messageRows,
     targetsBody: targetsBody, errorText: errorText, eventsQuery: eventsQuery, CHART_GROUPS: CHART_GROUPS, ERRORS: ERRORS,
-    mirrorModel: mirrorModel, mirrorReasonText: mirrorReasonText, mirrorRunError: mirrorRunError
+    mirrorModel: mirrorModel, mirrorReasonText: mirrorReasonText, mirrorRunError: mirrorRunError,
+    codeReason: codeReason, daysAgoText: daysAgoText, severityText: severityText, codeLines: codeLines, codeDetails: codeDetails, codeHeadline: codeHeadline,
+    codeModel: codeModel, codeCheckError: codeCheckError
   };
 
   if (typeof document === "undefined") {
@@ -325,7 +450,7 @@
 
   // ---- 2. data --------------------------------------------------------------
 
-  var model = { state: "loading", sum: null, ev: { type: "", q: "", days: 7, page: 1, data: null, busy: false, open: false }, m365: null, mirror: null, flash: null, busy: false, editTargets: false };
+  var model = { state: "loading", sum: null, ev: { type: "", q: "", days: 7, page: 1, data: null, busy: false, open: false }, m365: null, mirror: null, code: null, codeBusy: "", flash: null, busy: false, editTargets: false };
 
   function getJson(url, init) {
     var controller = new AbortController();
@@ -382,10 +507,18 @@
     });
   }
 
+  // Code health: the stored answers only (the Worker does not call GitHub for this read). A failure keeps what is shown.
+  function loadCode() {
+    return send("GET", "/services", "/code").then(function (r) {
+      if (r.status === 200 && r.body && r.body.ok === true) model.code = r.body;
+    });
+  }
+
   function loadAll() {
     return loadSummary().then(function () {
       var more = [];
       if (model.state === "ok") more.push(loadMirror());
+      if (model.state === "ok") more.push(loadCode());
       if (model.state === "ok" && model.sum && model.sum.m365 && !model.m365) more.push(loadM365(false));
       if (model.state === "ok" && model.ev.open) more.push(loadEvents());
       return Promise.all(more);
@@ -673,11 +806,90 @@
   }
 
   function renderCode(root) {
-    var c = model.sum.sources && model.sum.sources.code;
-    var sec = section("Code and dependency health", "Test results and open pull requests per repository now live on the Release board; Dependabot alerts and outdated packages are still to come.");
-    sec.appendChild(strip("", "See the Release board", "Repositories, pull requests, CI and deploys are on the Release board (Monitoring, Release board). It needs its read-only GitHub token to be set up."));
-    if (c && c.steps && c.steps.length) { var ul = h("ul", "svc-list"); c.steps.forEach(function (t) { ul.appendChild(h("li", null, t)); }); sec.appendChild(ul); }
+    var src = model.sum.sources && model.sum.sources.code;
+    var m = codeModel(src, model.code);
+    var sec = section("Code and dependency health", "Open security alerts, out-of-date workflow actions, tests in CI, stale branches and the last release, for each repository on the Release board. Read only: it only looks, and nothing is changed on GitHub. Test results and pull requests are on the Release board.");
+    if (m.state === "not_set_up") {
+      sec.appendChild(strip("", "Not set up yet", "It uses the Release board's read-only GitHub token (the Worker secret GITHUB_READ_TOKEN)."));
+      renderCodeSteps(sec, m);
+      root.appendChild(sec);
+      return;
+    }
+    if (m.state === "loading") { sec.appendChild(h("p", "dim", "Loading…")); root.appendChild(sec); return; }
+    var head = codeHeadline(model.code.totals, Date.now());
+    sec.appendChild(strip(head.tone, head.head, head.text));
+    var row = h("div", "svc-actions");
+    var all = btn(model.codeBusy ? "Checking " + model.codeBusy + "…" : "Check now", null, function () { checkCode(null); });
+    all.id = "code-check";
+    all.disabled = !!model.codeBusy;
+    row.appendChild(all);
+    sec.appendChild(row);
+    if (m.state === "never") renderCodeSteps(sec, m);
+    (model.code.repos || []).forEach(function (repo) {
+      var r = repo.result;
+      var wrap = h("div", "svc-code-repo");
+      var title = h("h3", null, repo.name + " ");
+      title.appendChild(chip(repo.why || "Not checked yet", repo.tone));
+      wrap.appendChild(title);
+      wrap.appendChild(h("p", "dim", repo.label + (r && r.checkedAt ? " · checked " + agoText(r.checkedAt, Date.now()) : "")));
+      var lines = codeLines(r, Date.now());
+      if (lines.length) {
+        var ul = h("ul", "svc-list");
+        lines.forEach(function (l) { var li = h("li"); li.appendChild(chip(l.label, l.tone)); li.appendChild(h("span", null, " " + l.text)); ul.appendChild(li); });
+        wrap.appendChild(ul);
+      }
+      var det = codeDetails(r);
+      if (det.length) {
+        var dl = h("ul", "svc-list");
+        det.forEach(function (d) {
+          var li = h("li"); li.appendChild(chip(d.chip, d.tone));
+          if (d.url) { var a = h("a", null, " " + d.text); a.href = d.url; a.target = "_blank"; a.rel = "noopener noreferrer"; li.appendChild(a); }
+          else li.appendChild(h("span", null, " " + d.text));
+          dl.appendChild(li);
+        });
+        wrap.appendChild(dl);
+      }
+      var one = btn("Check " + repo.name, "btn-quiet", function () { checkCode(repo.name); });
+      one.disabled = !!model.codeBusy;
+      wrap.appendChild(one);
+      sec.appendChild(wrap);
+    });
+    if (model.code.permissions && model.code.permissions.length) {
+      var pl = h("p", "dim", "The token needs: " + model.code.permissions.map(function (p) { return p.name + " (" + p.level.toLowerCase() + (p.optional ? ", optional" : "") + ")"; }).join(", ") + ".");
+      sec.appendChild(pl);
+    }
     root.appendChild(sec);
+  }
+
+  function renderCodeSteps(sec, m) {
+    if (m.steps && m.steps.length) { var ol = h("ol", "svc-steps"); m.steps.forEach(function (t) { ol.appendChild(h("li", null, t)); }); sec.appendChild(ol); }
+  }
+
+  // Check now reads the repositories one after another (each one is its own call to the Worker, about twenty requests to GitHub);
+  // a repository checked a moment ago says so and is skipped.
+  function checkCode(only) {
+    if (model.codeBusy || !model.code) return;
+    var names = only ? [only] : (model.code.repos || []).map(function (x) { return x.name; });
+    var problems = [], i = 0;
+    function next() {
+      if (i >= names.length) {
+        model.codeBusy = "";
+        return loadSummary().then(function () {
+          render();
+          if (problems.length) flash(problems[0], "alert"); else flash(only ? only + " checked." : "Every repository was checked.", "ok");
+        });
+      }
+      var name = names[i++];
+      model.codeBusy = name; render();
+      return send("GET", "/services", "/code?repo=" + encodeURIComponent(name) + "&refresh=1").then(function (r) {
+        if (r.status === 200 && r.body && r.body.ok === true) {
+          model.code = r.body;
+          if (r.body.refreshError) problems.push(name + ": GitHub could not be read (" + codeReason(r.body.refreshError.code) + "), so the earlier answer is kept.");
+        } else problems.push(codeCheckError(r.body, r.status) || errorText(r.body, r.status));
+        return next();
+      });
+    }
+    next();
   }
 
   function render() {

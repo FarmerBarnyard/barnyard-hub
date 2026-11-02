@@ -36,7 +36,20 @@
     return best;
   }
 
-  var helpers = { summaryLine: summaryLine, rows: rows, soonest: soonest };
+  // The code and dependency health line, from the summary's sources.code ({ state, totals }): nothing until a repository has been checked
+  // (the tile does not call GitHub), then the worst thing found. { tone, text } or null.
+  function codeLine(sum, now) {
+    var c = sum && sum.sources && sum.sources.code;
+    if (!c || c.state !== "ok" || !c.totals || !c.totals.repos) return null;
+    var t = c.totals, bad = t.critical + t.high;
+    var old = t.checkedAt && now && now - t.checkedAt > 14 * 86400000 ? " (last checked " + Math.round((now - t.checkedAt) / 86400000) + " days ago)" : "";
+    if (bad) return { tone: "alert", text: "Code: " + K.plural(bad, "critical or high alert") + old };
+    var fix = t.alerts + t.outdated + t.unpinned + t.noTests;
+    if (fix) return { tone: "attn", text: "Code: " + K.plural(fix, "thing") + " to update" + old };
+    return { tone: "ok", text: "Code: nothing to fix" + old };
+  }
+
+  var helpers = { summaryLine: summaryLine, rows: rows, soonest: soonest, codeLine: codeLine };
   var desc = { id: "services", title: "Service levels", about: "Uptime against your targets over 30 days, and the soonest disk forecast to fill.", w: 4, h: 6, minW: 3, minH: 3, maxW: 12, maxH: 20, ownerOnly: true, permission: "tile.services" };
   helpers.descriptor = desc;
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
@@ -70,6 +83,8 @@
       }
       var s = soonest(sum);
       if (s) { var p = h("p", "tl-sub"); p.appendChild(chip(s.name + " " + s.text, s.tone)); body.appendChild(p); }
+      var cl = codeLine(sum, Date.now());
+      if (cl) { var cp = h("p", "tl-sub"); cp.appendChild(chip(cl.text, cl.tone)); body.appendChild(cp); }
     }
     function load() {
       return K.call("GET", "/services/summary").then(function (r) {
