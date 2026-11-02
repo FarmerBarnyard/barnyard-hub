@@ -22,7 +22,7 @@
     recent_sign_in_required: "Sign in again, then repeat that. It needs a recent sign-in.",
     rate_limited: "Microsoft was read a moment ago. Try again in a minute.",
     secret_detected: "That note looks like it contains a key or password. Take it out and try again.",
-    unknown_field: "That could not be saved.", note_invalid: "The note has to be plain text.", body_invalid: "That could not be saved."
+    unknown_field: "That could not be saved.", checked_invalid: "That could not be saved.", note_invalid: "The note has to be plain text.", body_invalid: "That could not be saved."
   };
 
   function errorText(body, status) {
@@ -173,13 +173,120 @@
     add("Not signed in for 60 days", h.stale60, h.stale60 > 0 ? "attn" : "ok");
     add("Guests", h.guests, "");
     add("Unused paid licences", h.unusedLicences, h.unusedLicences > 0 ? "attn" : "ok");
+    add("Admins to look at", h.adminsToCheck, h.adminsToCheck > 0 ? "attn" : "ok");
+    add("Secure score", h.scorePct === null || h.scorePct === undefined ? h.scorePct : h.scorePct + "%", h.scorePct >= 70 ? "ok" : h.scorePct >= 40 ? "attn" : "alert");
     return out;
+  }
+
+  // ---- phase 2: the detail inside the cards -------------------------------------------------------------------------------------
+
+  // The people who hold a privileged role: [{ name, upn, roles, flags, tone }], flagged ones first (the Worker already sorts them).
+  function adminRows(s) {
+    var p = s && s.people;
+    if (!p || !p.rows) return [];
+    return p.rows.map(function (r) {
+      var bad = (r.flags || []).some(function (f) { return /no second sign-in step|account disabled|never signed in/.test(f); });
+      return { name: r.name || r.upn, upn: r.upn || "", roles: (r.roles || []).join(", "), flags: r.flags || [], tone: bad ? "alert" : ((r.flags || []).length ? "attn" : "") };
+    });
+  }
+  function adminsHead(s) {
+    var p = s && s.people;
+    if (!p) return null;
+    if (!p.count) return { tone: "", head: "No one holds a privileged role directly", text: "" };
+    if (!p.flagged) return { tone: "ok", head: plural(p.count, "admin", "admins") + ", nothing to flag", text: "Each one signs in, has a second step, and holds few roles." };
+    return { tone: "attn", head: plural(p.flagged, "admin", "admins") + " worth a look", text: "Out of " + p.count + ". The flags say why." };
+  }
+  // The eligible-assignments part of the admin roles card (its own small state; the card itself stays ok without it).
+  function eligibleModel(s) {
+    var e = s && s.eligible;
+    if (!e) return null;
+    if (e.state === "ok") {
+      if (!e.count) return { tone: "", head: "No eligible assignments", text: "Nobody can switch a role on when needed.", rows: [] };
+      return { tone: e.permanent > 0 ? "attn" : "ok", head: plural(e.count, "eligible assignment", "eligible assignments"), text: (e.permanent ? plural(e.permanent, "has", "have") + " no end date. " : "All have an end date. ") + "These people can switch a role on when needed; they are not permanent admins.",
+        rows: (e.rows || []).map(function (r) { return { role: r.role, who: r.name || r.upn || "(unnamed)", upn: r.upn || "", ends: r.permanent ? "no end date" : (r.ends ? dateText(r.ends) : ""), tone: r.permanent ? "attn" : "" }; }) };
+    }
+    if (e.state === "needs_permission") return { tone: "", head: "Eligible roles not read", text: "To see who can switch an admin role on when needed, add " + ((e.needs || []).join(" and ") || "RoleEligibilitySchedule.Read.Directory") + " (optional) to the read-only app and grant admin consent. It also needs Entra ID P2.", rows: [] };
+    if (e.state === "needs_premium") return { tone: "", head: "Eligible roles need Entra ID P2", text: "Microsoft only lists these for tenants with Privileged Identity Management. Adding permissions will not change that.", rows: [] };
+    return { tone: "", head: "Eligible roles could not be read", text: "Microsoft could not be asked this time.", rows: [] };
+  }
+
+  // Guests: [{ label, count, tone }] for the age bands, in order, then the lines under them.
+  function guestBands(s) {
+    var b = s && s.guestBands;
+    if (!b) return [];
+    return [["Under 30 days", b.d30, ""], ["30 to 90 days", b.d90, ""], ["90 days to a year", b.d365, ""], ["Over a year", b.older, b.older > 0 ? "attn" : ""], ["Age unknown", b.unknown, ""]]
+      .filter(function (r) { return r[1] > 0 || r[0] !== "Age unknown"; }).map(function (r) { return { label: r[0], count: r[1], tone: r[1] > 0 ? r[2] : "" }; });
+  }
+  function guestNotes(s) {
+    var out = [];
+    if (!s) return out;
+    if (s.guestPending && s.guestPending.count) out.push({ tone: "attn", text: plural(s.guestPending.count, "invitation was", "invitations were") + " never accepted." });
+    if (s.guestLicensed) out.push({ tone: "attn", text: plural(s.guestLicensed, "guest holds", "guests hold") + " a paid licence." });
+    if (s.guestDomains && s.guestDomains.length) out.push({ tone: "", text: "Mostly from " + s.guestDomains.slice(0, 5).map(function (d) { return d.domain + " (" + d.count + ")"; }).join(", ") + "." });
+    return out;
+  }
+
+  // Conditional Access: what each policy covers, and the baseline protections that exist.
+  function policyRows(s) {
+    return ((s && s.rows) || []).map(function (p) {
+      return { name: p.name, state: p.state, tone: p.state === "off" ? "attn" : "", summary: p.summary || "", changed: p.modified ? dateText(p.modified) : "" };
+    });
+  }
+  function policyChecks(s) {
+    return ((s && s.checks) || []).map(function (c) {
+      var text = c.state === "yes" ? "In place" + (c.policy ? ": " + c.policy : "") : c.state === "report-only" ? "Only reporting" + (c.policy ? ": " + c.policy : "") : "Not found";
+      return { label: c.label, state: c.state, text: text, tone: c.state === "yes" ? "ok" : c.state === "report-only" ? "attn" : "alert" };
+    });
+  }
+
+  // Secure score: the sentence about the trend and the points for a small line (each 0 to 100, oldest first).
+  function scoreTrend(s) {
+    var t = s && s.trend;
+    if (!t || !t.points || t.points.length < 2) return { text: "", points: [], tone: "" };
+    var d = t.delta30, label = "month";
+    if (d === null || d === undefined) { d = t.delta7; label = "week"; }
+    var text = "";
+    if (d === null || d === undefined) text = "Not enough history to show a trend yet.";
+    else if (d > 0) text = "Up " + d + " points in the last " + label + ".";
+    else if (d < 0) text = "Down " + Math.abs(d) + " points in the last " + label + ".";
+    else text = "No change in the last " + label + ".";
+    return { text: text, points: t.points.map(function (p) { return p.pct; }), tone: d > 0 ? "ok" : d < 0 ? "alert" : "" };
+  }
+
+  // ---- phase 3: the quarterly review ---------------------------------------------------------------------------------------
+
+  var TONE_WORDS = { check: "Check", ok: "Fine", unknown: "Not known" };
+  // The checklist the Worker built from the snapshot -> [{ id, title, how, detail, tone, word }]. Empty until something has been read.
+  function checklistRows(data) {
+    return ((data && data.checklist) || []).map(function (i) {
+      return { id: i.id, title: i.title, how: i.how, detail: i.detail || "", tone: i.tone === "check" ? "attn" : i.tone === "ok" ? "ok" : "", word: TONE_WORDS[i.tone] || "" };
+    });
+  }
+  // What changed since the last recorded review, as short lines. null from the Worker means there was nothing to compare with.
+  function changesModel(c, now) {
+    if (!c) return { none: true, lines: [], text: "The next review will say what changed since it. This one has nothing to compare with yet." };
+    var lines = [];
+    function list(label, items) { if (items && items.length) lines.push(label + ": " + items.slice(0, 8).join(", ") + (items.length > 8 ? " and " + (items.length - 8) + " more" : "")); }
+    list("New admins", c.adminsAdded); list("No longer admins", c.adminsRemoved);
+    list("New policies", c.policiesAdded); list("Removed policies", c.policiesRemoved);
+    (c.policiesChanged || []).forEach(function (p) { lines.push("Policy " + p.name + " went from " + p.from + " to " + p.to + "."); });
+    if (c.guests && c.guests.from !== c.guests.to) lines.push("Guests: " + c.guests.from + " to " + c.guests.to + ".");
+    if (c.score && c.score.from !== c.score.to) lines.push("Secure score: " + c.score.from + "% to " + c.score.to + "%.");
+    var since = dateText(c.since);
+    return { none: false, lines: lines, text: lines.length ? "Since the review on " + since + ":" : "Nothing has changed since the review on " + since + "." };
+  }
+  // Earlier reviews: "12 Oct 2026: 7 of 10 lines ticked. Note".
+  function reviewHistory(reviews, total) {
+    return (reviews || []).map(function (r) {
+      var ticks = r.checked === null || r.checked === undefined ? "" : r.checked.length + " of " + total + " lines ticked";
+      return { text: dateText(r.at) + (ticks ? ": " + ticks + "." : "") + (r.note ? " " + r.note : "") };
+    });
   }
 
   // ---- the access review --------------------------------------------------------------------------------------------------
 
   function reviewModel(review, now) {
-    if (!review || !review.last) return { tone: "attn", head: "No review recorded yet", text: "Go through the admins, guests and stale accounts above, then record the date here. Do it every three months." };
+    if (!review || !review.last) return { tone: "attn", head: "No review recorded yet", text: "Go through the lines below, tick each one you have done, then record the review. Do it every three months." };
     if (review.due) return { tone: "attn", head: "A review is due", text: "The last one was " + dateText(review.last.at) + " (" + agoText(review.last.at, now) + ")." + (review.last.note ? " Note: " + review.last.note : "") };
     return { tone: "ok", head: "Reviewed " + dateText(review.last.at), text: "The next one is due in " + plural(review.daysLeft, "day", "days") + "." + (review.last.note ? " Note: " + review.last.note : "") };
   }
@@ -205,7 +312,9 @@
     TITLES: TITLES, ORDER: ORDER, ERRORS: ERRORS, errorText: errorText, agoText: agoText, dateText: dateText, failureText: failureText, stateModel: stateModel,
     staleNote: staleNote, licenceRows: licenceRows, licenceHead: licenceHead, mfaHead: mfaHead, accountsHead: accountsHead, signInNote: signInNote, peopleRows: peopleRows,
     rolesHead: rolesHead, memberText: memberText, policiesHead: policiesHead, scoreHead: scoreHead, gapRows: gapRows, stats: stats, reviewModel: reviewModel,
-    setupNeeded: setupNeeded, missingPermissions: missingPermissions
+    setupNeeded: setupNeeded, missingPermissions: missingPermissions,
+    adminRows: adminRows, adminsHead: adminsHead, eligibleModel: eligibleModel, guestBands: guestBands, guestNotes: guestNotes, policyRows: policyRows, policyChecks: policyChecks,
+    scoreTrend: scoreTrend, checklistRows: checklistRows, changesModel: changesModel, reviewHistory: reviewHistory
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
