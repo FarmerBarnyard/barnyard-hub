@@ -4,6 +4,8 @@
 // Reads (all owner only; see ClaudeRepo's cloudflare-worker README):
 //   GET /hub/renewals   renewals (Ops board items with the target "renewal", and keys that expire) and dueItems (other dated Ops items)
 //   GET /planner/all    the owner's to-dos and own events
+//   GET /services/m365  Microsoft 365 announced changes with an action-by date (its `actionDates`); read only, nothing kept in this browser,
+//                       and nothing shown unless the Microsoft 365 switch on the Services tab is on and Microsoft answers
 // Writes: /planner/* for to-dos and events; a renewal is an Ops board item, written through the Ops board's own API (/ops/items).
 //
 // Where the data lives: to-dos and events in the Planner Durable Object on Cloudflare, renewals in the Ops board's Durable
@@ -28,6 +30,7 @@
   var CACHE_KEY = "barnyard-calendar-cache";
   var GOOGLE_API = "https://api.barnyard.site/calendar";
   var OUTLOOK_API = "https://api.barnyard.site/calendar/outlook";
+  var SERVICES_API = "https://api.barnyard.site/services";   // GET /services/m365: its actionDates are the announced changes with an action-by date
   var ACTIVE_VIEWS = L.VIEWS;
 
   // `google` is the owner's Google Calendar (read only, from the Worker's /calendar; it sends about 8 days back and 90 ahead).
@@ -35,7 +38,7 @@
   // `olWin` is the window held, `olFail` the one that last failed so it is not asked for again until the next poll).
   // Neither is ever kept in this browser: they are fetched fresh each time.
   var model = {
-    state: "loading", planner: "loading", renewals: [], dueItems: [], tasks: [], events: [], google: [], googleState: "loading", partial: false, fromCache: false,
+    state: "loading", planner: "loading", renewals: [], dueItems: [], tasks: [], events: [], google: [], googleState: "loading", m365: [], m365State: "loading", partial: false, fromCache: false,
     outlook: [], outlookState: "loading", showOutlook: true, olWin: null, olFail: "", olBusy: false,
     view: "today", kind: "all", month: null, weekOf: null,
     plan: null            // the day planner's settings, accepted blocks, timer and learned ratios (from GET /planner/all); see plan-view.js
@@ -128,10 +131,12 @@
   }
 
   function load() {
-    return Promise.all([getJson(HUB_API + "/renewals"), getJson(PLAN_API + "/all"), getJson(GOOGLE_API), loadOutlook()]).then(function (res) {
-      var a = res[0], b = res[1], g = res[2];
+    return Promise.all([getJson(HUB_API + "/renewals"), getJson(PLAN_API + "/all"), getJson(GOOGLE_API), getJson(SERVICES_API + "/m365"), loadOutlook()]).then(function (res) {
+      var a = res[0], b = res[1], g = res[2], ms = res[3];
       if (g.status === 200 && Array.isArray(g.data)) { model.google = g.data; model.googleState = "ok"; }
       else model.googleState = g.status === 500 ? "off" : "error";   // 500 is the Worker saying no calendar feed is set up
+      var m = L.m365State(ms);
+      model.m365 = m.items; model.m365State = m.state;
       if (a.status === 401 || b.status === 401) { model.state = "guest"; return; }
       if (a.status === 403 || b.status === 403) { model.state = "forbidden"; return; }
       var haveData = model.renewals.length || model.tasks.length || model.events.length;
@@ -188,7 +193,7 @@
   }
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
   function today() { return L.ymd(new Date()); }
-  function data() { return { renewals: model.renewals, dueItems: model.dueItems, tasks: model.tasks, events: model.events, google: model.google, outlook: model.showOutlook ? model.outlook : [] }; }
+  function data() { return { renewals: model.renewals, dueItems: model.dueItems, tasks: model.tasks, events: model.events, google: model.google, m365: model.m365, outlook: model.showOutlook ? model.outlook : [] }; }
 
   function toast(text, undoLabel, onUndo) {
     var box = $("cal-toast");
@@ -243,6 +248,7 @@
     if (e.type === "event") el.appendChild(chip("Event"));
     if (e.type === "gcal") el.appendChild(chip("Google Calendar"));
     if (e.type === "ocal") el.appendChild(chip("Outlook"));
+    if (e.type === "m365") { el.appendChild(chip("Microsoft 365")); if (e.ref.major) el.appendChild(chip("Major change")); }
     if (e.type === "item") el.appendChild(chip("Ops item"));
     if (e.type === "renewal") { el.appendChild(chip(L.kindTitle(e.kind))); var bd = L.STATE_BADGE[e.state]; if (bd) el.appendChild(chip(bd)); }
     if (e.type === "task") {
@@ -411,7 +417,7 @@
     scroll.appendChild(table);
     root.appendChild(scroll);
   }
-  function typeName(e) { return e.type === "task" ? "to-do" : e.type === "item" ? "Ops item" : e.type === "event" ? "event" : e.type === "gcal" ? "Google Calendar event" : e.type === "ocal" ? "Outlook event" : L.kindTitle(e.kind).toLowerCase() + " renewal"; }
+  function typeName(e) { return e.type === "task" ? "to-do" : e.type === "item" ? "Ops item" : e.type === "event" ? "event" : e.type === "gcal" ? "Google Calendar event" : e.type === "ocal" ? "Outlook event" : e.type === "m365" ? "Microsoft 365 change" : L.kindTitle(e.kind).toLowerCase() + " renewal"; }
 
   function renderUpcoming(root, t) {
     var groups = L.upcoming(data(), t, 120, model.kind);
@@ -567,6 +573,7 @@
       var ow = OUTLOOK_WARN[model.outlookState] || (model.outlookState === "throttled" || model.outlookState === "unavailable" || model.outlookState === "error" ? "Your Outlook calendar couldn’t be loaded just now, so its events are missing." : "");
       if (ow) root.appendChild(h("p", "cal-warn", ow));
     }
+    if (model.m365State === "error") root.appendChild(h("p", "cal-warn", "Microsoft 365 announced changes couldn’t be loaded just now, so their action-by dates are missing."));
     if (model.view === "today") renderToday(root, t);
     else if (model.view === "week") renderWeek(root, t);
     else if (model.view === "month") renderMonth(root, t);
@@ -627,6 +634,7 @@
     else if (e.type === "event") openEvent(e.ref.event, e.ref.day);
     else if (e.type === "gcal") openGoogle(e);
     else if (e.type === "ocal") openOutlook(e);
+    else if (e.type === "m365") openM365(e);
   }
 
   // An Outlook (Microsoft 365) event: read only. It is changed in Outlook, not here. Only the title, when, place and how it
@@ -642,6 +650,25 @@
     body.appendChild(h("p", "cal-date", span));
     if (e.ref.location) body.appendChild(h("p", null, "Where: " + e.ref.location));
     body.appendChild(h("p", "dim", "This comes from your Outlook calendar and can’t be changed here."));
+  }
+
+  // A Microsoft 365 announced change with an action-by date: read only, shown from the Services tab's message centre read.
+  function openM365(e) {
+    var body = openDrawer(e.label);
+    var t = today();
+    var top = h("div", "cal-chips");
+    top.appendChild(chip("Microsoft 365"));
+    if (e.ref.major) top.appendChild(chip("Major change"));
+    if (e.ref.severity === "high" || e.ref.severity === "critical") top.appendChild(chip(e.ref.severity === "critical" ? "Critical" : "High", "alert"));
+    body.appendChild(top);
+    body.appendChild(h("p", "cal-date " + L.urgency(e, t), "Action needed by " + L.longDate(e.due) + " · " + L.relativeText(L.daysBetween(t, e.due))));
+    fact(body, "Services", (e.ref.services || []).join(", "));
+    body.appendChild(h("p", "dim", "This comes from the Microsoft 365 message centre and can’t be changed here. Read the full announcement in the Microsoft 365 admin centre."));
+    var actions = h("div", "cal-actions");
+    var open = h("a", "btn btn-sm", "Open the Services tab");
+    open.href = "monitoring.html#services";
+    actions.appendChild(open);
+    body.appendChild(actions);
   }
 
   // A Google Calendar event: read only. It is changed in Google Calendar, not here.

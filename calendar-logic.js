@@ -161,6 +161,7 @@
     });
     googleEntries(data.google, from, to).forEach(function (g) { put(g.due, g); });
     outlookEntries(data.outlook, from, to).forEach(function (o) { put(o.due, o); });
+    m365Entries(data.m365, from, to).forEach(function (m) { put(m.due, m); });
     Object.keys(map).forEach(function (k) { map[k].sort(sortInDay); });
     return map;
   }
@@ -214,7 +215,33 @@
     return out;
   }
 
-  var TYPE_ORDER = { event: 0, gcal: 0, ocal: 0, task: 1, item: 2, renewal: 3 };
+  // Microsoft 365 announced changes with an action-by date (read only, from GET /services/m365 `actionDates`:
+  // { id, title, services, severity, major, actionBy (a time in ms) }). Each lands on its action-by date in the owner's own
+  // day. It is a deadline, so it is dated like an Ops item (all day, nothing to tick), not an event.
+  function m365Entries(items, from, to) {
+    var out = [];
+    (Array.isArray(items) ? items : []).forEach(function (m) {
+      if (!m || typeof m.title !== "string" || !m.id || typeof m.actionBy !== "number" || !isFinite(m.actionBy)) return;
+      var date = ymd(new Date(m.actionBy));
+      if (date < from || date > to) return;
+      out.push({ type: "m365", id: "m365:" + m.id, label: m.title, kind: "", state: "known", due: date, time: "", endTime: "", allDay: true, ref: m });
+    });
+    return out;
+  }
+
+  // GET /services/m365's answer ({ status, data }) -> { state, items }. "ok" carries the action-by dates; "off" is everything that is
+  // simply not there (the switch is off, the Graph app is not set up or lacks a permission, not signed in, the Services tab is off):
+  // the Calendar says nothing then, the Services tab is where that is explained. "error" is Microsoft or the Worker failing.
+  function m365State(res) {
+    var none = function (state) { return { state: state, items: [] }; };
+    if (!res || res.status === 0 || res.status >= 500) return none("error");
+    if (res.status !== 200 || !res.data || typeof res.data !== "object") return none("off");
+    if (res.data.state === "ok" && Array.isArray(res.data.actionDates)) return { state: "ok", items: res.data.actionDates };
+    if (res.data.state === "error") return none("error");
+    return none("off");
+  }
+
+  var TYPE_ORDER = { event: 0, gcal: 0, ocal: 0, task: 1, item: 2, m365: 2, renewal: 3 };
   // Within a day: all-day things first (events, then to-dos, Ops items, renewals), then timed ones by time.
   function sortInDay(a, b) {
     var at = !!a.time && !a.allDay, bt = !!b.time && !b.allDay;
@@ -660,7 +687,7 @@
     urgency: urgency, entriesByDate: entriesByDate, sortInDay: sortInDay, filterKind: filterKind, agenda: agenda, upcoming: upcoming, renewalGroups: renewalGroups,
     groupTasks: groupTasks, widgetTasks: widgetTasks, taskDueText: taskDueText, dueCount: dueCount, monthGrid: monthGrid, weekDays: weekDays,
     icsEscape: icsEscape, icsFold: icsFold, buildIcs: buildIcs, buildDetails: buildDetails, renewalBody: renewalBody, parseRef: parseRef, refHref: refHref,
-    taskBody: taskBody, eventBody: eventBody, parseQuick: parseQuick, googleEntries: googleEntries, outlookEntries: outlookEntries
+    taskBody: taskBody, eventBody: eventBody, parseQuick: parseQuick, googleEntries: googleEntries, outlookEntries: outlookEntries, m365Entries: m365Entries, m365State: m365State
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
