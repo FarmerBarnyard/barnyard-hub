@@ -236,7 +236,24 @@
     unauthenticated: "Sign in to use the Kitchen.", forbidden: "The Kitchen is the owner's only.", kitchen_disabled: "The Kitchen is switched off on the Worker.",
     not_found: "That is not there any more.", nothing_to_copy: "There is no plan on that week to copy.", rate_limited: "Too many requests: wait a moment.",
     "request body too large": "That is too long to save.", line_unknown: "That line has changed: reload and try again.", list_too_large: "The list is too long to keep.",
-    week_invalid: "That week is not a Monday's date.", recipe_invalid: "Pick a recipe from the list."
+    week_invalid: "That week is not a Monday's date.", recipe_invalid: "Pick a recipe from the list.",
+    // photos, reading a web page, nutrition and sharing (each is switched on by its own Worker variable)
+    photos_disabled: "Photos are switched off on the Worker (KITCHEN_PHOTOS_ENABLED is not 1).", image_type_invalid: "Use a JPEG, PNG or WebP picture.",
+    image_invalid: "That file is not a picture the Kitchen can keep.", image_too_large: "That picture is too big even after shrinking it. Try a smaller one.",
+    image_store_failed: "The picture could not be stored. Try again in a moment.", images_not_configured: "The Worker has no place to keep pictures yet.",
+    import_disabled: "Reading a recipe from a web address is switched off on the Worker (KITCHEN_IMPORT_ENABLED is not 1).",
+    url_invalid: "That is not a web address the Kitchen can read.", url_must_be_https: "The address must start with https://.",
+    host_not_allowed: "The Kitchen only reads public websites, not that address.", host_invalid: "That website name does not look right.",
+    redirect_refused: "That page sent the Kitchen somewhere it will not go.", too_many_redirects: "That page keeps redirecting.",
+    page_unavailable: "That website did not give the page (it may need a sign-in or be gone).", page_unreachable: "The Worker could not reach that website.",
+    page_timeout: "That website took too long to answer.", page_too_large: "That page is too big to read.", not_html: "That address is not a web page.",
+    no_recipe: "That page does not publish its recipe in a form the Kitchen can read. Copy it in by hand instead.",
+    recipe_unreadable: "The page has a recipe, but without a title or ingredients the Kitchen can use.", import_limit: "That is today's limit of 40 pages. Try again tomorrow.",
+    nutrition_invalid: "A nutrition figure is out of range: leave it empty or use a sensible number.",
+    share_disabled: "Sharing is switched off on the Worker (KITCHEN_SHARE_ENABLED is not 1).", share_full: "Up to 8 people can be invited: remove one first.",
+    person_unknown: "That person has not signed in to the hub yet, so they cannot be invited.", level_invalid: "Pick whether they can look or also tick and add.",
+    key_invalid: "That person is not valid.", not_shared: "Nothing has been shared with you.", read_only: "You can look at this list but not change it.",
+    access_unavailable: "Access could not be checked just now: try again in a moment."
   };
   function errorText(body, status) {
     var code = body && body.error;
@@ -248,7 +265,47 @@
     return "That did not work (" + (code || status || "no answer") + ").";
   }
 
+  // ---- nutrition, photos, sharing and the cooking screen ------------------------------------------------------------------------------
+
+  var NUTRIENTS = [["kcal", "Energy", "kcal"], ["proteinG", "Protein", "g"], ["fatG", "Fat", "g"], ["carbsG", "Carbohydrate", "g"], ["sugarG", "Sugars", "g"], ["fibreG", "Fibre", "g"], ["sodiumMg", "Sodium", "mg"]];
+  // A recipe's nutrition (per serving) as rows to show: [{ key, label, text }], only the figures it has. Empty when it has none.
+  function nutritionRows(n) {
+    var out = [];
+    if (!n || typeof n !== "object") return out;
+    NUTRIENTS.forEach(function (d) {
+      var v = n[d[0]];
+      if (typeof v === "number" && isFinite(v)) out.push({ key: d[0], label: d[1], text: (Math.round(v * 10) / 10) + " " + d[2] });
+    });
+    return out;
+  }
+  // The form's text boxes ({ kcal: "450", fatG: "" ... }) -> the object the Worker takes, only the boxes with a number in them.
+  function nutritionFromForm(values) {
+    var out = {};
+    NUTRIENTS.forEach(function (d) {
+      var raw = values && values[d[0]];
+      if (raw === undefined || raw === null || String(raw).trim() === "") return;
+      var n = Number(String(raw).replace(",", "."));
+      if (isFinite(n)) out[d[0]] = n;
+    });
+    return out;
+  }
+
+  // The size a photo is shrunk to before it is sent: the long side at most `max`, never enlarged, whole pixels.
+  function fitSize(w, hgt, max) {
+    if (!(w > 0) || !(hgt > 0)) return { w: 0, h: 0 };
+    var scale = Math.min(1, max / Math.max(w, hgt));
+    return { w: Math.max(1, Math.round(w * scale)), h: Math.max(1, Math.round(hgt * scale)) };
+  }
+
+  var LEVEL_NAMES = { view: "Can look", edit: "Can tick and add" };
+  function levelText(level) { return LEVEL_NAMES[level] || ""; }
+
+  // How far through the recipe the cooking screen is, as a whole percent, and the keys that move it.
+  function cookPercent(step, total) { return total > 0 ? Math.max(0, Math.min(100, Math.round(((step + 1) / total) * 100))) : 0; }
+  function cookKey(key) { return key === "ArrowRight" || key === "PageDown" ? 1 : key === "ArrowLeft" || key === "PageUp" ? -1 : 0; }
+
   var api = {
+    nutritionRows: nutritionRows, nutritionFromForm: nutritionFromForm, NUTRIENTS: NUTRIENTS, fitSize: fitSize, levelText: levelText, cookPercent: cookPercent, cookKey: cookKey,
     DAYS: DAYS, DAY_NAMES: DAY_NAMES, SLOTS: SLOTS, SLOT_NAMES: SLOT_NAMES, KINDS: KINDS, AISLES: AISLES, UNITS: UNITS,
     niceUnit: niceUnit, formatQuantity: formatQuantity, unitLabel: unitLabel, formatIngredient: formatIngredient, scaledIngredients: scaledIngredients, stepServings: stepServings,
     parseStepTimers: parseStepTimers, clock: clock, filterRecipes: filterRecipes, tagCounts: tagCounts, stars: stars, minutesText: minutesText,

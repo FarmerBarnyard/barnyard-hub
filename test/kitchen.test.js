@@ -174,7 +174,7 @@ test("kitchen.js builds the page with textContent only, has no inline styles, an
   assert.ok(!/\.href\s*=\s*(?!window\.barnyardLoginUrl)/.test(c.replace(/a\.href = window\.barnyardLoginUrl\(\)/, "")), "no link is built from server text");
   var paths = (c.match(/"\/kitchen\/[^"]*"/g) || []).map(function (s) { return s.replace(/"/g, "").replace(/\?.*$/, ""); });
   assert.ok(paths.length >= 10, "it talks to the kitchen routes");
-  paths.forEach(function (p) { assert.ok(/^\/kitchen\/(recipes|recipe|recipe\/delete|week|plan|plan\/copy|pantry|list\/(tick|add|remove|stock))$/.test(p), "unexpected path " + p); });
+  paths.forEach(function (p) { assert.ok(/^\/kitchen\/(recipes|recipe|recipe\/delete|week|plan|plan\/copy|pantry|list\/(tick|add|remove|stock)|photo|photo\/remove|import|share|share\/remove|shared\/(me|week|tick|add))$/.test(p), "unexpected path " + p); });
   assert.ok(/credentials: "include"/.test(c));
   assert.ok(!/localStorage|sessionStorage|indexedDB/.test(c), "nothing is kept in the browser");
 });
