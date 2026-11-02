@@ -7,6 +7,8 @@
 //   GET|PATCH|DELETE /academy/lessons/<id>   POST .../<id>/done   GET|POST .../<id>/questions   PATCH|DELETE /academy/questions/<id>
 //   GET /academy/drafts/status  /drafts/list?lesson=  /drafts/job?id=   POST /academy/lessons/<id>/draft  /academy/drafts/cancel  /drafts/delete  /drafts/save
 //     (question drafting with the local model: a panel above a lesson's questions; nothing is saved until you keep a candidate, always as a draft)
+//   GET|POST /academy/invites  POST /academy/invites/<id>/revoke  GET /academy/learners[?course=]  GET|DELETE /academy/learners/<id>
+//     (invite links for other learners, on a course's page; the learners' own page is learn.html with no login, see learn.js)
 // The words and rules are in academy-logic.js (tested in test/academy.test.js); this file draws them. A quiz never has its answers until it
 // is graded: the Worker grades and sends back what was right. Questions Claude drafted are marked as drafts and only count once approved.
 //
@@ -95,14 +97,14 @@
   }
 
   // A button that asks again before it does something that cannot be undone.
-  function confirmButton(label, ask, onYes) {
+  function confirmButton(label, ask, onYes, yesLabel) {
     var wrap = h("span", "ac-confirm");
     function idle() {
       clear(wrap);
       wrap.appendChild(btn(label, "btn-sm btn-quiet", function () {
         clear(wrap);
         wrap.appendChild(h("span", "small", ask + " "));
-        wrap.appendChild(btn("Yes, delete", "btn-sm", onYes));
+        wrap.appendChild(btn(yesLabel || "Yes, delete", "btn-sm", onYes));
         wrap.appendChild(btn("Cancel", "btn-sm btn-quiet", idle));
       }));
     }
@@ -132,6 +134,8 @@
     var due = model.sum && model.sum.due ? model.sum.due : 0;
     tools.appendChild(link("Review" + (due ? " (" + due + " due)" : ""), "#/review", "btn btn-sm" + (due ? " btn-primary" : "")));
     tools.appendChild(link("Records", "#/records", "btn btn-sm btn-quiet"));
+    var learners = model.sum && model.sum.learners ? model.sum.learners : 0;
+    tools.appendChild(link("Learners" + (learners ? " (" + learners + ")" : ""), "#/learners", "btn btn-sm btn-quiet"));
   }
 
   function render() {
@@ -155,6 +159,7 @@
     if (r.view === "lesson") return drawLesson(root, r.id);
     if (r.view === "review") return drawReview(root);
     if (r.view === "records") return drawRecords(root);
+    if (r.view === "learners") return drawLearners(root);
     drawHome(root);
   }
 
@@ -265,6 +270,7 @@
     if (!c.lessons.length) list.appendChild(h("li", "dim", "No lessons yet. Add one below."));
     root.appendChild(list);
     root.appendChild(addLessonForms(c));
+    root.appendChild(inviteCard(c));
   }
 
   function renameCourse(head, c) {
@@ -861,6 +867,181 @@
       });
       table.appendChild(tbody); wrap.appendChild(table); card.appendChild(wrap);
     });
+  }
+
+  // ---- invite links and learners -----------------------------------------------------------------------------------------------
+  //
+  // GET|POST /academy/invites, POST /academy/invites/<id>/revoke, GET /academy/learners[?course=], GET|DELETE /academy/learners/<id>.
+  // A learner opens the link on learn.html with no login; they give a name and the Worker keeps what they read and score.
+
+  function copyText(text, done) {
+    var ok = function () { done(true); }, no = function () { done(false); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, no); else no();
+  }
+
+  // One learner's row for the owner: name, how far, last seen, and the buttons. `after` redraws the surrounding list.
+  function learnerRow(l, after, showCourse) {
+    var tr = h("tr");
+    tr.appendChild(h("td", null, l.name));
+    if (showCourse) {
+      var cell = h("td");
+      cell.appendChild(link(l.courseTitle || "a deleted course", "#/c/" + l.courseId, ""));
+      tr.appendChild(cell);
+    }
+    var st = L.learnerStatus(l), sc = h("td");
+    sc.appendChild(chip(st.text, st.tone));
+    tr.appendChild(sc);
+    tr.appendChild(h("td", "dim small", l.lastAt ? L.agoText(l.lastAt) : ""));
+    var act1 = h("td");
+    var detail = btn("Details", "btn-sm btn-quiet", function () { toggleDetail(tr, l, showCourse ? 5 : 4); });
+    act1.appendChild(detail);
+    act1.appendChild(confirmButton("Forget", "Forget " + l.name + " and their records?", function () {
+      act(send("DELETE", "/learners/" + l.id + "?confirm=1"), function () { return loadAll().then(function () { flash("Forgotten.", "ok"); after(); }); });
+    }, "Yes, forget"));
+    tr.appendChild(act1);
+    return tr;
+  }
+
+  // A learner's own lines (per lesson, then every quiz they took) under their row.
+  function toggleDetail(tr, l, span) {
+    var next = tr.nextSibling;
+    if (next && next.getAttribute && next.getAttribute("data-detail") === l.id) { next.remove(); return; }
+    var row = h("tr"); row.setAttribute("data-detail", l.id);
+    var cell = h("td"); cell.colSpan = span;
+    cell.appendChild(h("p", "dim small", "Loading…"));
+    row.appendChild(cell);
+    tr.parentNode.insertBefore(row, tr.nextSibling);
+    send("GET", "/learners/" + l.id).then(function (r) {
+      clear(cell);
+      if (r.status !== 200 || !r.body || !r.body.lessons) { cell.appendChild(h("p", null, L.errorText(r.body && r.body.error))); return; }
+      var ul = h("ul", "ac-detail");
+      r.body.lessons.forEach(function (x) {
+        var li = h("li");
+        li.appendChild(h("b", null, x.title + " "));
+        li.appendChild(chip(x.doneAt ? "Read " + L.dateText(x.doneAt) : "Not read", x.doneAt ? "ok" : ""));
+        if (x.quiz) li.appendChild(chip(x.attempts ? "Best " + x.bestPercent + "% in " + L.plural(x.attempts, "try", "tries") : "Quiz not taken", x.attempts && x.bestPercent >= 70 ? "ok" : "attn"));
+        ul.appendChild(li);
+      });
+      cell.appendChild(ul);
+      if (r.body.attempts.length) {
+        cell.appendChild(h("p", "dim small", "Quizzes taken: " + r.body.attempts.slice(0, 8).map(function (a) {
+          return (a.mode === "course" ? "final check" : a.lessonTitle || "a lesson") + " " + a.percent + "% (" + L.dateText(a.at) + ")";
+        }).join(", ") + (r.body.attempts.length > 8 ? ", and " + (r.body.attempts.length - 8) + " more" : "")));
+      }
+    });
+  }
+
+  function learnersTable(learners, after, showCourse) {
+    var wrap = h("div", "ac-table-wrap"), table = h("table", "ac-table");
+    var thead = h("thead"), hr = h("tr");
+    (showCourse ? ["Name", "Course", "Progress", "Last seen", ""] : ["Name", "Progress", "Last seen", ""]).forEach(function (c) { hr.appendChild(h("th", null, c)); });
+    thead.appendChild(hr); table.appendChild(thead);
+    var tbody = h("tbody");
+    learners.forEach(function (l) { tbody.appendChild(learnerRow(l, after, showCourse)); });
+    table.appendChild(tbody); wrap.appendChild(table);
+    return wrap;
+  }
+
+  // On a course's page: make and revoke invite links, and see who joined.
+  function inviteCard(c) {
+    var card = h("div", "ac-card");
+    card.appendChild(h("h2", null, "Invite learners"));
+    card.appendChild(h("p", "dim", "Send a link and anyone holding it can take this course without signing in. They give a name, read the lessons and take the quizzes; you see who finished. A link always expires, and you can switch it off at any time."));
+    var body = h("div", "ac-invites");
+    card.appendChild(body);
+
+    function load() {
+      clear(body);
+      body.appendChild(h("p", "dim", "Loading…"));
+      Promise.all([send("GET", "/invites?course=" + c.id), send("GET", "/learners?course=" + c.id)]).then(function (rs) {
+        clear(body);
+        if (rs[0].status !== 200 || !rs[0].body || !rs[0].body.invites) { body.appendChild(h("p", null, L.errorText(rs[0].body && rs[0].body.error))); return; }
+        var enabled = rs[0].body.enabled;
+        if (!enabled) body.appendChild(h("p", "ac-banner attn", L.errorText("invites_disabled")));
+        else body.appendChild(inviteForm());
+        var invites = rs[0].body.invites;
+        if (invites.length) {
+          var list = h("ul", "ac-invite-list");
+          invites.forEach(function (inv) { list.appendChild(inviteRow(inv)); });
+          body.appendChild(list);
+        }
+        var learners = rs[1].status === 200 && rs[1].body && rs[1].body.learners ? rs[1].body.learners : [];
+        if (learners.length) {
+          body.appendChild(h("h3", null, "Who has done what"));
+          body.appendChild(learnersTable(learners, load, false));
+        } else if (invites.length) {
+          body.appendChild(h("p", "dim small", "Nobody has joined yet."));
+        }
+      });
+    }
+
+    function inviteForm() {
+      var form = h("form", "ac-form");
+      var label = input("", 60); label.placeholder = "For example: Committee 2026";
+      form.appendChild(field("Who is it for?", label, "Optional. Shown to learners and to you."));
+      var days = h("select");
+      L.INVITE_DAYS.forEach(function (d) { var o = h("option", null, d.text); o.value = String(d.days); if (d.days === L.INVITE_DEFAULT_DAYS) o.selected = true; days.appendChild(o); });
+      form.appendChild(field("The link works for", days));
+      var go1 = btn("Make a link", "btn-primary", null); go1.type = "submit";
+      form.appendChild(go1);
+      form.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        go1.disabled = true;
+        act(send("POST", "/invites", { courseId: c.id, label: label.value.trim(), days: parseInt(days.value, 10) }), function () {
+          return loadAll().then(function () { flash("Link made. Copy it and send it.", "ok"); load(); });
+        }).then(function () { go1.disabled = false; });
+      });
+      return form;
+    }
+
+    function inviteRow(inv) {
+      var li = h("li", "ac-invite " + inv.status);
+      var top = h("div", "ac-invite-top");
+      top.appendChild(h("b", null, inv.label || "Invite link"));
+      top.appendChild(chip(inv.status === "live" ? "Works" : inv.status === "expired" ? "Expired" : "Switched off", L.inviteTone(inv)));
+      li.appendChild(top);
+      li.appendChild(h("div", "dim small", L.inviteLine(inv, Date.now())));
+      if (inv.status === "live") {
+        var url = L.learnUrl(inv.token);
+        var shown = h("input"); shown.type = "text"; shown.readOnly = true; shown.value = url; shown.className = "ac-url"; shown.setAttribute("aria-label", "The link to send");
+        shown.addEventListener("focus", function () { shown.select(); });
+        li.appendChild(shown);
+        var acts = h("div", "ac-actions");
+        var copy = btn("Copy link", "btn-sm btn-primary", function () {
+          copyText(url, function (ok) { copy.textContent = ok ? "Copied" : "Press Ctrl+C"; if (!ok) shown.select(); setTimeout(function () { copy.textContent = "Copy link"; }, 2500); });
+        });
+        acts.appendChild(copy);
+        acts.appendChild(confirmButton("Switch off", "Stop this link working now? People who joined keep their records.", function () {
+          act(send("POST", "/invites/" + inv.id + "/revoke", {}), function () { return loadAll().then(function () { flash("Link switched off.", "ok"); load(); }); });
+        }, "Yes, switch off"));
+        li.appendChild(acts);
+      }
+      return li;
+    }
+
+    load();
+    return card;
+  }
+
+  // All learners across every course.
+  function drawLearners(root) {
+    root.appendChild(link("← All courses", "#/", "ac-back"));
+    var card = h("div", "ac-card");
+    card.appendChild(h("h2", null, "Learners"));
+    card.appendChild(h("p", "dim", "Everyone who joined a course through an invite link, and how far they have got. Make links on a course's own page."));
+    root.appendChild(card);
+    var box = h("div"); card.appendChild(box);
+    function load() {
+      clear(box);
+      box.appendChild(h("p", "dim", "Loading…"));
+      send("GET", "/learners").then(function (r) {
+        clear(box);
+        if (r.status !== 200 || !r.body || !r.body.learners) { box.appendChild(h("p", null, L.errorText(r.body && r.body.error))); return; }
+        if (!r.body.learners.length) { box.appendChild(h("p", "dim", "Nobody has joined yet.")); return; }
+        box.appendChild(learnersTable(r.body.learners, function () { load(); }, true));
+      });
+    }
+    load();
   }
 
   // ---- start ----------------------------------------------------------------------------------------------------------------

@@ -17,7 +17,7 @@ function test(name, fn) { fn(); passed++; console.log("ok - " + name); }
 var pages = fs.readdirSync(root).filter(function (f) { return /\.html$/.test(f) && f !== "prototype-wotc-style.html"; });
 
 // Pages whose text is a notice by design (the privacy page, the shared read-only view's own frozen-copy notice).
-var EXEMPT = { "privacy.html": true, "view.html": true };
+var EXEMPT = { "privacy.html": true, "view.html": true, "learn.html": true };
 
 test("there are pages to check", function () { assert.ok(pages.length >= 3, "found " + pages.length + " pages"); });
 

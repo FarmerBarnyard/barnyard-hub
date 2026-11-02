@@ -42,7 +42,12 @@
     already_saved: "You already have that question.",
     not_a_candidate: "That question could not be used. Reload and try again.",
     count_invalid: "Choose between 1 and 8 questions.",
-    id_invalid: "That job could not be found. Reload the page."
+    id_invalid: "That job could not be found. Reload the page.",
+    invites_disabled: "Invite links are switched off on the Worker (the variable ACADEMY_INVITES_ENABLED is not 1).",
+    invites_full: "There are too many live invite links in all (60). Revoke one first.",
+    course_invites_full: "This course already has 10 live invite links. Revoke one first.",
+    days_invalid: "Choose how long the link should last.", label_too_long: "That label is too long (60 characters).",
+    confirm_required: "Press the confirm button to do that."
   };
   var errorText = function (code) { return ERRORS[code] || "That did not work. Try again."; };
 
@@ -61,6 +66,7 @@
     if (m) return { view: "lesson", id: m[1] };
     if (h === "review") return { view: "review", id: "" };
     if (h === "records") return { view: "records", id: "" };
+    if (h === "learners") return { view: "learners", id: "" };
     return { view: "home", id: "" };
   }
 
@@ -242,7 +248,45 @@
   // The form for editing a candidate before keeping it (same shape as editing a saved question).
   var formFromCandidate = formFromQuestion;
 
+  // ---- invite links and learners ----------------------------------------------------------------------------------------------
+  //
+  // The owner sends other people an address that opens ONE course on learn.html without signing in. The Worker makes the links and keeps
+  // what each learner did; this page only draws them. Off unless the Worker variable ACADEMY_INVITES_ENABLED is 1.
+
+  var LEARN_BASE = "https://dashboard.barnyard.site/learn.html#";
+  var INVITE_DAYS = [{ days: 7, text: "7 days" }, { days: 30, text: "30 days" }, { days: 90, text: "90 days" }, { days: 180, text: "180 days" }];
+  var INVITE_DEFAULT_DAYS = 30;
+
+  // The address to send for an invite token, or "" when it is not a well-formed token.
+  function learnUrl(token) { return /^lk_[A-Za-z0-9_-]{32}$/.test(String(token || "")) ? LEARN_BASE + token : ""; }
+
+  // One line under an invite: "3 people joined · works until 2026-12-01", "expired 2026-10-01", "switched off".
+  function inviteLine(inv, now) {
+    var who = inv.learners ? plural(inv.learners, "person", "people") + " joined" : "nobody has joined yet";
+    if (inv.status === "revoked") return who + " · switched off" + (inv.revokedAt ? " " + dateText(inv.revokedAt) : "");
+    if (inv.status === "expired") return who + " · expired " + dateText(inv.expiresAt);
+    var left = Math.max(0, Math.ceil((inv.expiresAt - (now || Date.now())) / DAY));
+    return who + " · works until " + dateText(inv.expiresAt) + " (" + plural(left, "day") + " left)";
+  }
+  function inviteTone(inv) { return inv.status === "live" ? "ok" : "attn"; }
+
+  // How far a learner is, for the owner's table: { tone, text }.
+  function learnerStatus(l) {
+    if (l.complete) return { tone: "ok", text: "Finished " + dateText(l.completedAt) + (l.score !== null && l.score !== undefined ? " · " + l.score + "%" : "") };
+    var parts = [l.read + " of " + plural(l.total, "lesson") + " read"];
+    if (l.quizzes) parts.push(l.passed + " of " + plural(l.quizzes, "quiz", "quizzes") + " passed");
+    return { tone: l.read || l.passed ? "attn" : "", text: parts.join(" · ") };
+  }
+
+  // The tile's second line from GET /academy/summary: "3 learners, 1 finished", or "" when nobody has joined.
+  function learnersLine(sum) {
+    if (!sum || !sum.learners) return "";
+    return plural(sum.learners, "learner") + ", " + (sum.completions || 0) + " finished";
+  }
+
   var api = {
+    LEARN_BASE: LEARN_BASE, INVITE_DAYS: INVITE_DAYS, INVITE_DEFAULT_DAYS: INVITE_DEFAULT_DAYS,
+    learnUrl: learnUrl, inviteLine: inviteLine, inviteTone: inviteTone, learnerStatus: learnerStatus, learnersLine: learnersLine,
     KIND_LABELS: KIND_LABELS, ERRORS: ERRORS, errorText: errorText, articleIdFrom: articleIdFrom, routeFromHash: routeFromHash, plural: plural, agoText: agoText,
     dateText: dateText, scoreText: scoreText, courseLine: courseLine, quizLine: quizLine, tileSummary: tileSummary, questionBody: questionBody,
     formFromQuestion: formFromQuestion, resultText: resultText,
