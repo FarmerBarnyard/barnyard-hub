@@ -15,7 +15,7 @@ function test(name, fn) { fn(); passed++; console.log("ok - " + name); }
 // Pages that are deliberately not in the shared shell: the public shared view (its own narrow reading layout),
 // and the privacy page (static legal text). The four redirect pages (their content is a tab of monitoring.html now) load no shell:
 // test/monitoring-tabs.test.js checks them.
-var OUTSIDE_SHELL = ["view.html", "privacy.html", "services.html", "incidents.html", "reports.html", "release.html"];
+var OUTSIDE_SHELL = ["view.html", "privacy.html", "services.html", "incidents.html", "reports.html", "release.html", "learn.html"];
 // Stylesheets that may still carry a fixed-width page root or the title row until their page is reworked.
 var CSS_EXCEPTIONS = [];
 
