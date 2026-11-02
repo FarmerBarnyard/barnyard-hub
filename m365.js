@@ -149,13 +149,36 @@
     }
     if (s.guestRows && s.guestRows.length) {
       c.appendChild(h("h3", null, "Guests, oldest first (" + s.guests + ")"));
+      var bands = L.guestBands(s);
+      if (bands.length) {
+        var bl = h("ul", "m3-list m3-bands");
+        bands.forEach(function (b) { var li = h("li"); li.appendChild(h("span", b.tone, b.label)); li.appendChild(h("b", b.tone, String(b.count))); bl.appendChild(li); });
+        c.appendChild(bl);
+      }
+      L.guestNotes(s).forEach(function (n) { c.appendChild(h("p", n.tone ? "m3-note " + n.tone : "dim small", n.text)); });
+      var pendingNames = {};
+      ((s.guestPending && s.guestPending.rows) || []).forEach(function (r) { pendingNames[r.upn] = true; });
       c.appendChild(table([{ h: "Guest" }, { h: "Added", num: true }, { h: "Last sign-in", num: true }],
-        L.peopleRows(s.guestRows, "guest").map(function (p) { return [{ text: p.name, sub: p.upn + (p.off ? " (disabled)" : "") }, p.age + " ago", p.since === "never" ? "never" : p.since + " ago"]; })));
+        L.peopleRows(s.guestRows, "guest").map(function (p) { return [{ text: p.name, sub: p.upn + (p.off ? " (disabled)" : "") + (pendingNames[p.upn] ? " (invitation not accepted)" : "") }, p.age + " ago", p.since === "never" ? "never" : p.since + " ago"]; })));
     }
   }
 
   function fillRoles(c, s) {
     c.appendChild(headLine(L.rolesHead(s)));
+    var ah = L.adminsHead(s);
+    var people = L.adminRows(s);
+    if (ah && people.length) {
+      c.appendChild(h("h3", null, "People with a privileged role"));
+      c.appendChild(headLine(ah));
+      c.appendChild(table([{ h: "Person" }, { h: "Roles" }, { h: "Worth a look" }],
+        people.map(function (p) { return [{ text: p.name, sub: p.upn }, p.roles, p.flags.length ? { text: p.flags.join("; "), cls: p.tone } : { text: "nothing" }]; })));
+    }
+    var el = L.eligibleModel(s);
+    if (el) {
+      c.appendChild(h("h3", null, "Eligible roles (switched on when needed)"));
+      c.appendChild(headLine(el));
+      if (el.rows.length) c.appendChild(table([{ h: "Person" }, { h: "Role" }, { h: "Ends", num: true }], el.rows.map(function (r) { return [{ text: r.who, sub: r.upn }, r.role, { text: r.ends, cls: r.tone }]; })));
+    }
     (s.roles || []).forEach(function (r) {
       var t = h("h3", null, r.name + " (" + r.count + ")");
       if (r.privileged) t.appendChild(chip("privileged", "attn"));
@@ -169,12 +192,42 @@
 
   function fillPolicies(c, s) {
     c.appendChild(headLine(L.policiesHead(s)));
-    if (s.rows && s.rows.length) c.appendChild(table([{ h: "Policy" }, { h: "State" }, { h: "Changed", num: true }],
-      s.rows.map(function (p) { return [p.name, { text: p.state, cls: p.state === "off" ? "attn" : "" }, p.modified ? L.dateText(p.modified) : ""]; })));
+    var checks = L.policyChecks(s);
+    if (checks.length) {
+      c.appendChild(h("h3", null, "Baseline protections"));
+      var ul = h("ul", "m3-list m3-checks");
+      checks.forEach(function (k) { var li = h("li"); li.appendChild(chip(k.state === "yes" ? "yes" : k.state === "report-only" ? "report-only" : "no", k.tone)); li.appendChild(h("span", null, k.label)); li.appendChild(h("span", "dim small", k.text)); ul.appendChild(li); });
+      c.appendChild(ul);
+    }
+    var rows = L.policyRows(s);
+    if (rows.length) c.appendChild(table([{ h: "Policy" }, { h: "State" }, { h: "Changed", num: true }],
+      rows.map(function (p) { return [{ text: p.name, sub: p.summary }, { text: p.state, cls: p.tone }, p.changed]; })));
+  }
+
+  // A small line of the score over time, drawn as an SVG from numbers only (colour comes from the stylesheet, nothing inline).
+  function sparkline(points) {
+    var ns = "http://www.w3.org/2000/svg", w = 160, hgt = 36;
+    var svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 " + w + " " + hgt); svg.setAttribute("class", "m3-spark"); svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Secure score over time, from " + points[0] + "% to " + points[points.length - 1] + "%");
+    var lo = Math.min.apply(null, points), hi = Math.max.apply(null, points);
+    if (hi - lo < 4) { hi += 2; lo -= 2; }
+    var d = points.map(function (v, i) { return (i ? "L" : "M") + (i * (w - 4) / (points.length - 1) + 2).toFixed(1) + " " + (hgt - 3 - ((v - lo) / (hi - lo)) * (hgt - 6)).toFixed(1); }).join(" ");
+    var path = document.createElementNS(ns, "path");
+    path.setAttribute("d", d); path.setAttribute("fill", "none"); path.setAttribute("stroke-width", "2");
+    svg.appendChild(path);
+    return svg;
   }
 
   function fillScore(c, s) {
     c.appendChild(headLine(L.scoreHead(s)));
+    var trend = L.scoreTrend(s);
+    if (trend.points.length > 1) {
+      var tr = h("div", "m3-trend" + (trend.tone ? " " + trend.tone : ""));
+      tr.appendChild(sparkline(trend.points));
+      tr.appendChild(h("span", null, trend.text));
+      c.appendChild(tr);
+    }
     var gaps = L.gapRows(s);
     if (gaps.length) {
       c.appendChild(h("h3", null, "Biggest gaps"));
@@ -185,29 +238,62 @@
   }
 
   function reviewCard(data) {
-    var c = h("section", "m3-card");
+    var c = h("section", "m3-card m3-review");
     c.appendChild(h("h2", null, "Quarterly access review"));
     var m = L.reviewModel(data.review, Date.now());
     c.appendChild(headLine(m));
+
+    // What changed since the last recorded review, once there is one to compare with and something has been read.
+    if (data.snapshot) {
+      var ch = L.changesModel(data.changes, Date.now());
+      c.appendChild(h("h3", null, "What changed since the last review"));
+      c.appendChild(h("p", ch.none ? "dim small" : null, ch.text));
+      if (ch.lines.length) { var cl = h("ul", "m3-list"); ch.lines.forEach(function (t) { cl.appendChild(h("li", null, t)); }); c.appendChild(cl); }
+    }
+
+    // The checklist, answered from the snapshot. Each line the owner has done is ticked and sent with the record.
+    var rows = L.checklistRows(data), boxes = [];
+    if (rows.length) {
+      c.appendChild(h("h3", null, "What to check"));
+      var list = h("ul", "m3-todo");
+      rows.forEach(function (r) {
+        var li = h("li", "m3-todo-row" + (r.tone ? " " + r.tone : ""));
+        var label = h("label", "m3-todo-label");
+        var box = h("input"); box.type = "checkbox"; box.value = r.id; boxes.push(box);
+        label.appendChild(box);
+        var body = h("span", "m3-todo-body");
+        body.appendChild(h("b", null, r.title));
+        if (r.detail) body.appendChild(h("span", "m3-todo-detail", r.detail));
+        body.appendChild(h("span", "dim small", r.how));
+        label.appendChild(body);
+        li.appendChild(label);
+        if (r.word) li.appendChild(chip(r.word, r.tone));
+        list.appendChild(li);
+      });
+      c.appendChild(list);
+    }
+
     var form = h("div", "m3-form");
     var input = h("input"); input.type = "text"; input.maxLength = 300; input.placeholder = "A note, if you want one (what you changed)"; input.setAttribute("aria-label", "Review note");
     var btn = h("button", "btn btn-sm", "Record this review"); btn.type = "button";
     btn.addEventListener("click", function () {
       if (model.busy) return;
       model.busy = true; btn.disabled = true;
-      send("POST", "/review", { note: input.value }).then(function (r) {
+      var body = { note: input.value };
+      if (boxes.length) body.checked = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
+      send("POST", "/review", body).then(function (r) {
         model.busy = false;
-        if (r.status === 200 && r.body && r.body.ok) { data.review = r.body.review; data.reviews = r.body.reviews; render(); flash("Review recorded.", "ok"); }
+        if (r.status === 200 && r.body && r.body.ok) { data.review = r.body.review; data.reviews = r.body.reviews; load().then(function () { render(); flash("Review recorded.", "ok"); }); }
         else { btn.disabled = false; flash(L.errorText(r.body, r.status), "alert"); }
       });
     });
     form.appendChild(input); form.appendChild(btn);
     c.appendChild(form);
-    var past = (data.reviews || []).slice(1, 5);
+    var past = L.reviewHistory((data.reviews || []).slice(1, 6), (data.items || []).length || rows.length);
     if (past.length) {
       c.appendChild(h("h3", null, "Earlier reviews"));
       var ul = h("ul", "m3-list");
-      past.forEach(function (r) { ul.appendChild(h("li", null, L.dateText(r.at) + (r.note ? ": " + r.note : ""))); });
+      past.forEach(function (r) { ul.appendChild(h("li", null, r.text)); });
       c.appendChild(ul);
     }
     return c;
