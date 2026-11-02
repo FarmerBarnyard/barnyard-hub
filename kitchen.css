@@ -96,3 +96,21 @@
   .kt-slot { grid-template-columns: 64px minmax(0, 1fr) auto; }
 }
 @media (prefers-reduced-motion: reduce) { .kt-card, .kt-tab { transition: none; } }
+
+/* photos, nutrition, importing and sharing */
+.kt-photo { display: block; width: 100%; max-width: 560px; max-height: 380px; object-fit: cover; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); }
+.kt-nutri { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.kt-nutri li { display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--panel-2); font-size: 13px; }
+.kt-nutri b { font-size: 16px; color: var(--fg-strong); }
+.kt-facts { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; margin: 0; min-width: 0; }
+.kt-facts legend { font-size: 13px; color: var(--fg-dim); padding: 0 6px; }
+.kt-import { max-width: 760px; }
+.kt-import input { font: inherit; font-size: 14px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); min-width: 0; }
+.kt-share-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--line); }
+.kt-share-row select { font: inherit; font-size: 14px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); }
+.kt-sub { margin: 8px 0 0; font: 700 20px var(--font-display); color: var(--fg-strong); }
+.kt-slot-ro { grid-template-columns: 74px minmax(0, 1fr); }
+.kt-cook-progress { flex: 1 1 100%; width: 100%; height: 8px; accent-color: var(--accent); }
+.kt-cook.big .kt-cook-step { font-size: clamp(36px, 7vw, 64px); max-width: 22ch; }
+.kt-cook.big .kt-cook-ings { font-size: 28px; }
+.kt-cook.big .kt-cook-count, .kt-cook.big .kt-timer { font-size: 22px; }
