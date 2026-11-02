@@ -28,6 +28,8 @@
       clear(body);
       var line = L.tileSummary(sum);
       body.appendChild(h("p", "tl-sub", line.text));
+      var learners = L.learnersLine(sum);
+      if (learners) body.appendChild(h("p", "tl-sub", learners + "."));
       if (sum.due) {
         var review = h("a", "btn btn-sm btn-primary", "Start the review"); review.href = "academy.html#/review";
         body.appendChild(review);
