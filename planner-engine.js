@@ -5,7 +5,7 @@
 // Google Calendar, the blocks already accepted, and the owner's working hours, it proposes where each to-do's time goes:
 //   * earliest deadline first, with a priority nudge (a high-priority to-do counts as due 2 days sooner, a low one 2 days later);
 //     a to-do with no date goes after the dated ones;
-//   * only inside working hours and outside lunch, never over an event or Google Calendar entry, never moving anything;
+//   * only inside working hours and outside lunch, never over an event, Google Calendar or Outlook entry, never moving anything;
 //   * a focus block is at most `focusMin` long, then a break; every block leaves `bufferMin` of space; a day never takes more than `loadMin`;
 //   * a to-do with a time is a fixed commitment (it takes up its slot and is not moved);
 //   * it says plainly what does not fit, what lands after its deadline, and when the days ahead are over-full.
@@ -78,6 +78,7 @@
   // ---- busy time ---------------------------------------------------------------------------------------------------
 
   // The span of the day an entry from calendar-logic's entriesByDate takes, or null for all-day things (they do not block time).
+  // An Outlook event the owner marked as free (Graph showAs "free") does not block time either.
   function busySpan(e) {
     if (!e || e.allDay) return null;
     var s, en;
@@ -86,7 +87,7 @@
       s = day && !day.first ? 0 : toMin(e.time);
       if (s === null) return null;
       en = day && !day.last ? 1440 : (toMin(e.endTime) !== null ? toMin(e.endTime) : s + 60);
-    } else if (e.type === "gcal") {
+    } else if (e.type === "gcal" || (e.type === "ocal" && !(e.ref && e.ref.showAs === "free"))) {
       s = toMin(e.time);
       if (s === null) return null;
       en = toMin(e.endTime) !== null ? toMin(e.endTime) : s + 60;
@@ -122,6 +123,7 @@
   //   today "YYYY-MM-DD", nowMin (minutes since midnight now, for today),
   //   settings, ratios,
   //   tasks (open and ticked; only open ones are planned), events (the owner's own), google (the Worker's /calendar answer),
+  //   outlook (the events of the Worker's /calendar/outlook answer),
   //   blocks (accepted blocks from /planner/all),
   //   scope [dates] -- the days being planned and, when `reflow`, replaced; reflow (bool) -- unlocked, unstarted blocks in scope are
   //   dropped and their to-dos planned again
@@ -138,7 +140,7 @@
     for (var i = 0; i < horizon; i++) { d = L.addDays(today, i); dates.push(d); }
 
     // what is on the calendar
-    var entries = L.entriesByDate({ renewals: [], dueItems: [], tasks: [], events: input.events || [], google: input.google || [] }, from, to);
+    var entries = L.entriesByDate({ renewals: [], dueItems: [], tasks: [], events: input.events || [], google: input.google || [], outlook: input.outlook || [] }, from, to);
     var tasks = (input.tasks || []).filter(function (t) { return t && t.status === "open"; });
     var taskById = {};
     (input.tasks || []).forEach(function (t) { taskById[t.id] = t; });

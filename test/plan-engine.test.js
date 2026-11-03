@@ -300,4 +300,20 @@ test("formatting helpers", function () {
   assert.strictEqual(E.toMin("bad"), null);
 });
 
+test("Outlook events block time like Google ones; free, all-day and cancelled ones do not", function () {
+  var t = task({ estimate: 240, due: WED });
+  var outlook = [
+    { title: "Board meeting", allDay: false, date: MON, start: MON + "T09:00:00", end: MON + "T10:00:00", showAs: "busy" },
+    { title: "Optional drop-in", allDay: false, date: MON, start: MON + "T10:30:00", end: MON + "T11:30:00", showAs: "free" },
+    { title: "Moved", allDay: false, date: MON, start: MON + "T13:00:00", end: MON + "T14:00:00", cancelled: true },
+    { title: "Conference", allDay: true, date: MON, endDate: MON }
+  ];
+  var p = plan({ tasks: [t], outlook: outlook });
+  var blocks = placed(p, t.id);
+  blocks.forEach(function (b) { assert.ok(!overlaps(b, { start: m("09:00"), end: m("10:00") }), "not over the board meeting: " + span(b)); });
+  assert.deepStrictEqual(day(p, MON).items.filter(function (i) { return i.type === "ocal"; }).map(function (i) { return i.label; }), ["Board meeting"], "only the busy timed one is listed");
+  assert.ok(blocks.some(function (b) { return overlaps(b, { start: m("10:30"), end: m("11:30") }); }), "free time stays usable");
+  assert.strictEqual(E.busySpan({ type: "ocal", time: "09:00", endTime: "", allDay: false, ref: {} }).e, m("10:00"), "no end: an hour");
+});
+
 console.log("\n" + passed + " passed");

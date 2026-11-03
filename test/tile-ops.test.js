@@ -101,7 +101,12 @@ test("Approvals: refusals read in words, pending changes are counted, and the su
 });
 
 test("Calendar tile: the three answers become the page's data, and the agenda is the page's own", function () {
-  assert.deepStrictEqual(Calendar.dataFrom(null, null, null), { renewals: [], dueItems: [], tasks: [], events: [], google: [] });
+  assert.deepStrictEqual(Calendar.dataFrom(null, null, null), { renewals: [], dueItems: [], tasks: [], events: [], google: [], outlook: [] });
+  assert.deepStrictEqual(Calendar.dataFrom(null, null, null, { state: "not_configured", events: [{ title: "x" }] }).outlook, [], "Outlook only counts when ok");
+  var ol = Calendar.dataFrom(null, null, null, { state: "ok", events: [{ title: "Review", allDay: false, date: "2026-10-28", start: "2026-10-28T14:00:00", end: "2026-10-28T15:00:00" }] });
+  var oa = Calendar.agendaFor(ol, "2026-10-28");
+  assert.deepStrictEqual([oa.overdue.length, oa.today.length, oa.today[0].type], [0, 1, "ocal"], "an Outlook event shows today");
+  assert.strictEqual(Calendar.outlookWanted(), true, "no saved preference: on");
   var d = Calendar.dataFrom({ renewals: [{ id: "r" }], dueItems: [{ id: "d" }] }, { tasks: [{ id: "t" }], events: [{ id: "e" }] }, [{ id: "g" }]);
   assert.deepStrictEqual([d.renewals.length, d.dueItems.length, d.tasks.length, d.events.length, d.google.length], [1, 1, 1, 1, 1]);
   var data = Calendar.dataFrom({ renewals: [{ id: "r1", label: "Domain", due: "2026-10-30", state: "known", kind: "domain" }], dueItems: [] }, { tasks: [{ id: "t1", title: "Pay the host", due: "2026-10-27", time: "", priority: "normal", status: "open", recur: "" }, { id: "t2", title: "Call", due: "2026-10-28", time: "09:30", priority: "normal", status: "open", recur: "" }], events: [] }, []);

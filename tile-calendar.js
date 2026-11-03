@@ -1,6 +1,7 @@
 // The Calendar tile, "Today and next up": what is due or on today and in the next seven days, from the same three sources the Calendar page
-// uses (the Planner's to-dos and own events, renewals and other dated Ops items, and the Google calendar feed), worked out by the
-// Calendar page's own rules (calendar-logic.js). It only reads; each row opens the Calendar page. Needs tile-kit.js and calendar-logic.js first.
+// uses (the Planner's to-dos and own events, renewals and other dated Ops items, the Google calendar feed and the Outlook calendar), worked
+// out by the Calendar page's own rules (calendar-logic.js). It only reads; each row opens the Calendar page. Needs tile-kit.js and
+// calendar-logic.js first. Outlook is left out when the Calendar page's own Outlook switch is off (its saved preference).
 // Pure helpers are exported for test/tile-ops.test.js.
 
 (function (root) {
@@ -11,13 +12,19 @@
 
   function pad(n) { return (n < 10 ? "0" : "") + n; }
   function todayParam(now) { var d = new Date(now == null ? Date.now() : now); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
-  // The data the page's agenda wants, from the three answers (any may be missing).
-  function dataFrom(renewals, planner, google) {
+  // The data the page's agenda wants, from the four answers (any may be missing). The Outlook answer is { state, events } and only
+  // counts when its state is "ok" (not set up, not permitted or failed: nothing).
+  function dataFrom(renewals, planner, google, outlook) {
     return {
       renewals: renewals && Array.isArray(renewals.renewals) ? renewals.renewals : [], dueItems: renewals && Array.isArray(renewals.dueItems) ? renewals.dueItems : [],
       tasks: planner && Array.isArray(planner.tasks) ? planner.tasks : [], events: planner && Array.isArray(planner.events) ? planner.events : [],
-      google: Array.isArray(google) ? google : []
+      google: Array.isArray(google) ? google : [],
+      outlook: outlook && outlook.state === "ok" && Array.isArray(outlook.events) ? outlook.events : []
     };
+  }
+  // The Calendar page's saved Outlook switch (barnyard-calendar-prefs): on unless it was switched off.
+  function outlookWanted() {
+    try { var p = JSON.parse(root.localStorage.getItem("barnyard-calendar-prefs") || "{}"); return !p || p.outlook !== false; } catch (e) { return true; }
   }
   function agendaFor(data, today) {
     var a = L.agenda(data, today, "");
@@ -31,7 +38,7 @@
     return (a.overdue.length ? a.overdue.length + " overdue, " : "") + a.today.length + " today.";
   }
 
-  var helpers = { todayParam: todayParam, dataFrom: dataFrom, agendaFor: agendaFor, entryLine: entryLine, headline: headline };
+  var helpers = { todayParam: todayParam, dataFrom: dataFrom, outlookWanted: outlookWanted, agendaFor: agendaFor, entryLine: entryLine, headline: headline };
   var desc = { id: "calendar", title: "Today and next up", about: "What is due or on today and over the next week, from your to-dos, events and renewals.", w: 4, h: 7, minW: 3, minH: 3, maxW: 12, maxH: 24, ownerOnly: true, permission: "tile.calendar" };
   helpers.descriptor = desc;
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
@@ -55,7 +62,7 @@
       entries.slice(0, limit).forEach(function (e, n) {
         var li = h("li", "tl-row" + (n >= 2 ? " tl-rich-row" : ""));
         li.appendChild(h("span", null, entryLine(e)));
-        li.appendChild(chip(e.type === "task" ? "To-do" : e.type === "event" || e.type === "gcal" ? "Event" : "Renewal", tone));
+        li.appendChild(chip(e.type === "task" ? "To-do" : e.type === "event" || e.type === "gcal" || e.type === "ocal" ? "Event" : "Renewal", tone));
         ul.appendChild(li);
       });
       body.appendChild(ul);
@@ -69,8 +76,10 @@
       section("Next 7 days", a.week, "", 6);
     }
     function load() {
-      return Promise.all([K.call("GET", "/hub/renewals"), K.call("GET", "/planner/all"), K.call("GET", "/calendar")]).then(function (res) {
-        if (res[0].status === 200 || res[1].status === 200) { paint(dataFrom(res[0].status === 200 ? res[0].body : null, res[1].status === 200 ? res[1].body : null, res[2].status === 200 ? res[2].body : null)); return; }
+      var t = todayParam();
+      var ol = outlookWanted() ? K.call("GET", "/calendar/outlook?from=" + t + "&to=" + L.addDays(t, 7)) : Promise.resolve({ status: 0 });
+      return Promise.all([K.call("GET", "/hub/renewals"), K.call("GET", "/planner/all"), K.call("GET", "/calendar"), ol]).then(function (res) {
+        if (res[0].status === 200 || res[1].status === 200) { paint(dataFrom(res[0].status === 200 ? res[0].body : null, res[1].status === 200 ? res[1].body : null, res[2].status === 200 ? res[2].body : null, res[3].status === 200 ? res[3].body : null)); return; }
         K.loadFailure(body, res[0].status === 200 ? res[1] : res[0], load);
       });
     }

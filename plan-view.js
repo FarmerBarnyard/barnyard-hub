@@ -48,7 +48,7 @@
 
   function planFor(ctx, extra) {
     var m = ctx.model, P = m.plan, t = ctx.today();
-    var base = { today: t, nowMin: nowMin(), settings: P.settings, ratios: P.ratios, tasks: m.tasks, events: m.events, google: m.google, blocks: P.blocks, reflow: state.reflow };
+    var base = { today: t, nowMin: nowMin(), settings: P.settings, ratios: P.ratios, tasks: m.tasks, events: m.events, google: m.google, outlook: m.showOutlook ? m.outlook : [], blocks: P.blocks, reflow: state.reflow };
     var probe = E.buildPlan(Object.assign({}, base, { scope: [t], reflow: false }));
     var open = probe.days.filter(function (d) { return d.window; });
     var scope;
@@ -274,6 +274,7 @@
     var c = ctx.chip;
     if (item.type === "event") return c("Event");
     if (item.type === "gcal") return c("Google Calendar");
+    if (item.type === "ocal") return c("Outlook");
     if (item.type === "todo") return c("Fixed time");
     if (item.type === "suggest") return c("Suggested", "plan-suggest-chip");
     if (item.state === "running") return c("Running", "ok");
