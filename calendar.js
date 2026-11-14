@@ -806,7 +806,7 @@
     if (r.state === "estimated") body.appendChild(h("p", "dim", "This date is an estimate. Confirm the exact one at the source, then edit it here."));
     if (r.state === "planned") body.appendChild(h("p", "dim", "A planned rotation date from the security review calendar, not a hard expiry."));
     fact(body, "How to renew it", r.where);
-    fact(body, "Portal", r.link, r.link);
+    fact(body, "Portal", L.safeWebLink(r.link), L.safeWebLink(r.link));   // shown, and linked, only when it is a plain https address
     fact(body, "If it lapses", r.breaks);
     fact(body, "Lead time", r.leadDays !== null && r.leadDays !== undefined ? r.leadDays + (r.leadDays === 1 ? " day" : " days") + " of notice" : "");
     fact(body, "Last renewed", r.lastRenewed ? L.longDate(r.lastRenewed) : "");
