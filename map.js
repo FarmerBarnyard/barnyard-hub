@@ -497,8 +497,8 @@
     if (n.owner) p.appendChild(row("Looked after by", n.owner));
     if (n.location) p.appendChild(row("Where", n.location));
     if (n.runbook) p.appendChild(row("Runbook", n.runbook));
-    if (n.link && /^https:\/\//.test(n.link)) {
-      var a = h("a", "btn btn-sm", "Open its admin page"); a.href = n.link; a.target = "_blank"; a.rel = "noopener noreferrer"; p.appendChild(a);
+    if (M.safeWebLink(n.link)) {
+      var a = h("a", "btn btn-sm", "Open its admin page"); a.href = M.safeWebLink(n.link); a.target = "_blank"; a.rel = "noopener noreferrer"; p.appendChild(a);
     }
 
     p.appendChild(h("h3", "mp-sub", "If it goes down"));

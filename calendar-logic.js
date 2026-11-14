@@ -174,6 +174,13 @@
     return (events || []).filter(isAuto).sort(function (a, b) { return a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : a.source < b.source ? -1 : 1; });
   }
 
+  // An address from the server that may become a link on this page: https only, with no space, quote, angle bracket, backslash or control
+  // character. Anything else (javascript:, data:, a reference such as "PR 444") gives "" and is never made into a link.
+  function safeWebLink(v) {
+    var s = typeof v === "string" ? v.trim() : "";
+    return /^https:\/\/[^\s"'<>\\\u0000-\u001f\u007f-\u009f]{4,300}$/.test(s) ? s : "";
+  }
+
   // Where an automatic entry's source is, as a page address inside the hub (never an outside address).
   function autoHref(ev) {
     var l = ev && typeof ev.link === "string" ? ev.link : "";
@@ -680,7 +687,7 @@
     if (f.due && !isYmd(f.due)) return { error: "That date doesn’t look right.", field: "due" };
     if (f.state === "needed" && f.due) f = Object.assign({}, f, { state: "estimated" });
     if (!f.due && f.state !== "auto") f = Object.assign({}, f, { state: "needed" });
-    if (f.link && !/^https:\/\/[^\s"'<>]{4,300}$/.test(f.link)) return { error: "The link needs to start with https://", field: "link" };
+    if (f.link && !safeWebLink(f.link)) return { error: "The link needs to start with https://", field: "link" };
     if (f.renewed && !isYmd(f.renewed)) return { error: "The “last renewed” date doesn’t look right.", field: "renewed" };
     if (f.leadDays !== "" && f.leadDays !== null && f.leadDays !== undefined && !(+f.leadDays >= 0 && +f.leadDays <= 365 && Math.floor(+f.leadDays) === +f.leadDays)) return { error: "Lead time is a whole number of days, 0 to 365.", field: "leadDays" };
     var kind = KINDS.some(function (k) { return k[0] === f.kind; }) ? f.kind : "other";
@@ -763,7 +770,7 @@
     groupTasks: groupTasks, widgetTasks: widgetTasks, taskDueText: taskDueText, dueCount: dueCount, monthGrid: monthGrid, weekDays: weekDays,
     icsEscape: icsEscape, icsFold: icsFold, buildIcs: buildIcs, buildDetails: buildDetails, renewalBody: renewalBody, parseRef: parseRef, refHref: refHref,
     taskBody: taskBody, eventBody: eventBody, parseQuick: parseQuick, googleEntries: googleEntries, outlookEntries: outlookEntries, m365Entries: m365Entries, m365State: m365State,
-    isAuto: isAuto, autoCovered: autoCovered, visibleEvents: visibleEvents, autoEntries: autoEntries, autoHref: autoHref, autoLine: autoLine, agoText: agoText
+    isAuto: isAuto, autoCovered: autoCovered, visibleEvents: visibleEvents, autoEntries: autoEntries, autoHref: autoHref, safeWebLink: safeWebLink, autoLine: autoLine, agoText: agoText
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

@@ -641,6 +641,13 @@
     forbidden: "This page is for the person who runs the hub."
   };
 
+  // An address from the server that may become a link on this page: https only, with no space, quote, angle bracket, backslash or control
+  // character. Anything else (javascript:, data:, a reference such as "PR 444") gives "" and is never made into a link.
+  function safeWebLink(v) {
+    var s = typeof v === "string" ? v.trim() : "";
+    return /^https:\/\/[^\s"'<>\\\u0000-\u001f\u007f-\u009f]{4,300}$/.test(s) ? s : "";
+  }
+
   function errorText(body, status) {
     var code = body && body.error;
     if (code && ERRORS[code]) return ERRORS[code];
@@ -653,7 +660,7 @@
     radius: radius, whatBreaksText: whatBreaksText, incidentText: incidentText, stateModel: stateModel, banner: banner, downReport: downReport,
     biggestRadius: biggestRadius, visible: visible, matches: matches, kindCounts: kindCounts, layout: layout, edgePath: edgePath, wrapName: wrapName, boxHeight: boxHeight, countCrossings: countCrossings, neighbours: neighbours, edgeRole: edgeRole,
     linkChoices: linkChoices, setLink: setLink, sameList: sameList, planText: planText, stateWord: stateWord, gapsText: gapsText,
-    weakestModel: weakestModel, errorText: errorText
+    weakestModel: weakestModel, errorText: errorText, safeWebLink: safeWebLink
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

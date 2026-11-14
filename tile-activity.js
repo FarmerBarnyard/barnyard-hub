@@ -30,7 +30,8 @@
     if (!String(v.undo).trim()) return { error: "Say how to undo it: one line is enough.", field: "undo" };
     var body = { what: String(v.what).trim(), undo: String(v.undo).trim() };
     ["where", "why", "link"].forEach(function (k) { if (String(v[k]).trim()) body[k] = String(v[k]).trim(); });
-    if (body.link && !/^https:\/\/[^\s"'<>]{4,300}$/.test(body.link) && !/^[A-Za-z0-9 #._\/:()-]{1,60}$/.test(body.link)) return { error: "A link starts with https:// (or is a short reference such as PR 444).", field: "link" };
+    // The Worker's rule (link-rules.js): https, a path inside the hub, or a short plain reference with no colon. A script address is refused here too.
+    if (body.link && !K.linkKind(body.link)) return { error: "A link starts with https:// (or is a short reference such as PR 444, with no colon).", field: "link" };
     return { body: body };
   }
 
