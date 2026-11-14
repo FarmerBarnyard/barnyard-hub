@@ -52,14 +52,27 @@
   function plural(n, one, many) { return n + " " + (n === 1 ? one : many); }
 
   // Why the whole read failed: a short sentence with Microsoft's own code when there is one.
+  // How a call failed, in a few fixed words: the HTTP status Microsoft sent, or that it never answered (timed out, no connection,
+  // not JSON), then Microsoft's own short code. The Worker sends only these (status, kind, detail), never Microsoft's message.
+  var KIND_WORDS = { timeout: "timed out", network: "no answer", bad_body: "unreadable answer" };
+  function failureFacts(f) {
+    var out = [];
+    if (f && typeof f.status === "number" && f.status >= 100 && f.status <= 599) out.push("HTTP " + Math.floor(f.status));
+    if (f && KIND_WORDS[f.kind]) out.push(KIND_WORDS[f.kind]);
+    if (f && typeof f.detail === "string" && /^[A-Za-z0-9_]{1,60}$/.test(f.detail)) out.push(f.detail);
+    return out;
+  }
+
   function failureText(f) {
     if (!f) return "";
     var code = f.detail ? " (" + f.detail + ")" : "";
+    var facts = failureFacts(f);
+    var how = facts.length ? " (" + facts.join(", ") + ")" : "";
     if (f.reason === "auth") return "The read-only app could not sign in" + code + ". Its secret may have expired or been changed. Check it under Calendar renewals, then press Refresh.";
     if (f.reason === "throttled") return "Microsoft asked us to slow down. The numbers below are from the last good read. Try again in a few minutes.";
-    if (f.reason === "unavailable") return "Microsoft could not be reached. The numbers below are from the last good read.";
+    if (f.reason === "unavailable") return "Microsoft could not be reached" + how + ". The numbers below are from the last good read.";
     if (f.reason === "registry_unavailable") return "The Worker's store is not available, so nothing can be kept.";
-    return "Microsoft could not be read" + code + ". The numbers below are from the last good read.";
+    return "Microsoft could not be read" + how + ". The numbers below are from the last good read.";
   }
 
   // ---- the state of a card -------------------------------------------------------------------------------------------------
@@ -70,7 +83,7 @@
     if (s.state === "needs_permission") return { tone: "attn", head: "Needs " + (s.needs && s.needs.length === 1 ? "a permission" : "permissions"), text: "Add " + (s.needs || []).join(" and ") + " to the read-only app, grant admin consent, then press Refresh.", needs: s.needs || [] };
     if (s.state === "needs_premium") return { tone: "", head: "Needs Entra ID P1 or P2", text: "Microsoft only gives this to tenants with a premium Entra ID licence. Adding permissions will not change that.", needs: [] };
     if (s.state === "not_available") return { tone: "", head: "Not available", text: "Microsoft has nothing to show for this in your tenant." };
-    if (s.state === "error") return { tone: "alert", head: "Could not be read", text: failureText({ reason: s.reason, detail: s.detail }).replace(/ The numbers below are from the last good read\./, ""), needs: [] };
+    if (s.state === "error") return { tone: "alert", head: "Could not be read", text: failureText({ reason: s.reason, detail: s.detail, status: s.status, kind: s.kind }).replace(/ The numbers below are from the last good read\./, ""), needs: [] };
     return null;
   }
 

@@ -47,6 +47,12 @@ test("why a whole read failed, in words, with Microsoft's own code when there is
   assert.ok(/slow down/.test(M.failureText({ reason: "throttled" })));
   assert.ok(/could not be reached/.test(M.failureText({ reason: "unavailable" })));
   assert.strictEqual(M.failureText(null), "");
+  assert.ok(/could not be reached \(HTTP 503, serviceNotAvailable\)/.test(M.failureText({ reason: "unavailable", status: 503, detail: "serviceNotAvailable" })), "a Microsoft outage says which status it sent");
+  assert.ok(/could not be reached \(timed out\)/.test(M.failureText({ reason: "unavailable", kind: "timeout" })));
+  assert.ok(/could not be read \(HTTP 400, Request_UnsupportedQuery\)/.test(M.failureText({ reason: "bad_request", status: 400, detail: "Request_UnsupportedQuery" })));
+  assert.ok(!/\(\)/.test(M.failureText({ reason: "unavailable", status: "<b>", kind: "x y", detail: "not a code!" })), "anything that is not a status, a fixed word or a short code is left out");
+  var card = M.stateModel("score", { state: "error", reason: "unavailable", transient: true, status: 504, http: "5xx" });
+  assert.ok(/could not be reached \(HTTP 504\)\.?$/.test(card.text), "a failing card says the status too");
 });
 
 test("errorText words each refusal, and an unknown code still says something", function () {
