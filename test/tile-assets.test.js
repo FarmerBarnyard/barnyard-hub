@@ -150,4 +150,75 @@ test("the status line is red inside a week, amber while there is anything to do,
   assert.deepStrictEqual([A.statusLine({ renewing: [], expiring: 0, needed: 0 }).tone, A.statusLine({ renewing: [], expiring: 0, needed: 0 }).pill], ["ok", "All good"]);
 });
 
+
+// ---- weak links: identity kind, monitors and accepted gaps in the asset form ---------------------------------------------
+
+test("the form offers the identity kind and the two new monitors", function () {
+  assert.ok(A.KINDS.some(function (k) { return k[0] === "identity" && k[1] === "Identity app or setting" && k[2] === "Identity apps and settings"; }));
+  var order = A.KINDS.map(function (k) { return k[0]; });
+  assert.ok(order.indexOf("identity") === order.indexOf("account") + 1);
+  assert.strictEqual(A.groupByKind([{ kind: "identity", name: "x" }])[0].label, "Identity apps and settings");
+  var src = fs.readFileSync(path.join(__dirname, "..", "tile-assets.js"), "utf8");
+  assert.ok(/\["vmh01", "BARNYARDVMH01 \(VMware host\)"\]/.test(src) && /\["worker-api", "Barnyard API \(the Worker\)"\]/.test(src));
+});
+
+test("which gaps a kind of asset can accept mirrors the Worker's rules", function () {
+  var words = function (kind) { return A.gapsFor(kind).map(function (g) { return g[0]; }); };
+  assert.deepStrictEqual(words("server"), ["monitor", "backup", "runbook"]);
+  assert.deepStrictEqual(words("app"), ["monitor", "backup", "runbook"]);
+  assert.deepStrictEqual(words("network"), ["monitor", "runbook"]);
+  assert.deepStrictEqual(words("identity"), ["runbook", "watch"]);
+  assert.deepStrictEqual(words("domain"), []);
+});
+
+test("accepted gaps: a reason and a review day are required, the day is within 12 months, and what the kind is not asked for is dropped", function () {
+  var NOW = Date.parse("2026-11-14T10:00:00Z");
+  var ok = A.checkAccepted([{ gap: "watch", reason: "  On   the Calendar ", review: "2027-02-14" }], "identity", NOW);
+  assert.deepStrictEqual(ok.value, [{ gap: "watch", reason: "On the Calendar", review: "2027-02-14" }]);
+  assert.strictEqual(A.checkAccepted([{ gap: "watch", reason: "", review: "2027-02-14" }], "identity", NOW).field, "accept-watch-reason");
+  assert.strictEqual(A.checkAccepted([{ gap: "watch", reason: "x".repeat(141), review: "2027-02-14" }], "identity", NOW).field, "accept-watch-reason");
+  assert.strictEqual(A.checkAccepted([{ gap: "watch", reason: "ok", review: "" }], "identity", NOW).field, "accept-watch-review");
+  assert.strictEqual(A.checkAccepted([{ gap: "watch", reason: "ok", review: "2027-13-40" }], "identity", NOW).field, "accept-watch-review");
+  assert.strictEqual(A.checkAccepted([{ gap: "watch", reason: "ok", review: "2027-11-14" }], "identity", NOW).error, undefined, "exactly 12 months is fine");
+  assert.ok(/12 months/.test(A.checkAccepted([{ gap: "watch", reason: "ok", review: "2027-11-15" }], "identity", NOW).error));
+  assert.deepStrictEqual(A.checkAccepted([{ gap: "watch", reason: "ok", review: "2027-01-01" }], "server", NOW).value, [], "a server is never asked for a watch");
+  assert.strictEqual(A.farthestReview(NOW), "2027-11-14");
+  assert.strictEqual(A.defaultReview(NOW), "2027-02-12");
+});
+
+test("saving sends acceptedGaps only when they changed, and clearing sends an empty list", function () {
+  var cur = asset({ kind: "identity", acceptedGaps: [{ gap: "watch", reason: "On the Calendar", review: "2027-02-14" }] });
+  var vals = A.formValues(cur);
+  vals.acceptedGaps = [{ gap: "watch", reason: "On the Calendar", review: "2027-02-14" }];
+  assert.deepStrictEqual(A.formToBody(vals, cur).body, {}, "unchanged: nothing sent");
+  vals.acceptedGaps = [{ gap: "watch", reason: "Calendar renewal", review: "2027-02-14" }];
+  assert.deepStrictEqual(A.formToBody(vals, cur).body, { acceptedGaps: [{ gap: "watch", reason: "Calendar renewal", review: "2027-02-14" }] });
+  vals.acceptedGaps = [];
+  assert.deepStrictEqual(A.formToBody(vals, cur).body, { acceptedGaps: [] });
+  var fresh = A.formValues(null);
+  fresh.name = "Entra app"; fresh.kind = "identity"; fresh.acceptedGaps = [];
+  assert.strictEqual("acceptedGaps" in A.formToBody(fresh, null).body, false, "a new asset with nothing accepted sends nothing");
+  fresh.acceptedGaps = [{ gap: "runbook", reason: "Written next month", review: "2027-01-01" }];
+  assert.deepStrictEqual(A.formToBody(fresh, null).body.acceptedGaps, [{ gap: "runbook", reason: "Written next month", review: "2027-01-01" }]);
+  fresh.acceptedGaps = [{ gap: "runbook", reason: "", review: "2027-01-01" }];
+  assert.strictEqual(A.formToBody(fresh, null).field, "accept-runbook-reason", "an empty reason stops the save with its field");
+  // a form that does not carry the list (the older callers) is unchanged
+  var plain = A.formValues(cur);
+  assert.deepStrictEqual(A.formToBody(plain, cur).body, {});
+});
+
+test("the accepted-gaps editor is part of the register form, which already needs a recent sign-in to save", function () {
+  var src = fs.readFileSync(path.join(__dirname, "..", "tile-assets.js"), "utf8");
+  assert.ok(/function acceptedEditor\(asset, form\)/.test(src) && /acceptedEditor\(asset, form\)/.test(src));
+  assert.ok(/vals\.acceptedGaps = acceptBox\.read\(\)/.test(src), "the form sends the list through formToBody and the same PATCH");
+  assert.ok(/K\.call\("PATCH", "\/reg\/assets\/" \+ asset\.id, built\.body\)/.test(src));
+  assert.ok(/review\.type = "date"/.test(src) && /review\.max = farthestReview/.test(src), "the day picker stops at 12 months");
+  assert.ok(/aria-label/.test(src.slice(src.indexOf("function acceptedEditor"))), "each control is labelled");
+  assert.ok(!/innerHTML/.test(src));
+  var kit = require(path.join(__dirname, "..", "tile-kit.js"));
+  assert.ok(/review day/.test(kit.errorText({ error: "acceptedGaps_review_too_far" }, 400)));
+  assert.ok(/accepted-gap reason/.test(kit.errorText({ error: "secret_detected", field: "acceptedGaps.0.reason" }, 422)));
+});
+
+
 console.log("\n" + passed + " passed");

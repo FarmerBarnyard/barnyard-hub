@@ -159,7 +159,7 @@ test("uptime and the report lines read like a person would say them", function (
 
 test("a card per server: reporting, silent, waiting, expired, or no key, and how many more keys can be made", function () {
   var cards = Mon.reporterCards([rp(), rp({ id: "rp_aaaaaaaaaaaa", server: "cld01", state: "silent", lastSeen: NOW - 10 * MIN }), rp({ id: "rp_bbbbbbbbbbbb", server: "vtt", state: "waiting", lastSeen: null, report: null })], NOW);
-  assert.deepStrictEqual(cards.map(function (c) { return c.id; }), ["app02", "cld01", "vtt"]);
+  assert.deepStrictEqual(cards.map(function (c) { return c.id; }), ["app02", "cld01", "vtt", "vmh01"]);
   assert.deepStrictEqual([cards[0].tone, cards[0].label], ["ok", "Reporting"]);
   assert.ok(/Last report 2 min ago/.test(cards[0].line)); assert.strictEqual(cards[0].lines.length, 7);
   assert.deepStrictEqual([cards[1].tone, cards[1].label], ["attn", "Silent"]); assert.ok(/may have stopped/.test(cards[1].line));
@@ -175,7 +175,7 @@ test("a card per server: reporting, silent, waiting, expired, or no key, and how
   assert.strictEqual(three.canMake, false, "three keys is the most");
   var best = Mon.reporterCards([rp({ id: "rp_000000000001", lastSeen: NOW - 50 * MIN, state: "silent" }), rp({ id: "rp_000000000002", lastSeen: NOW - MIN })], NOW)[0];
   assert.strictEqual(best.label, "Reporting", "the key that reported most recently decides");
-  assert.strictEqual(Mon.reporterCards(null, NOW).length, 3);
+  assert.strictEqual(Mon.reporterCards(null, NOW).length, 4);
 });
 
 test("the key is shown as the two lines for the env file", function () {
@@ -577,5 +577,44 @@ test("the page shows the push health and remembers services without storing anyt
   assert.ok(/st\.pushHealth/.test(js), "the Phone alerts block and the Dashboard read pushHealth");
   assert.ok(/rememberServices/.test(js) && !/localStorage|sessionStorage/.test(js), "known services live in memory only");
 });
+
+
+// ---- weak links: the Worker's own check and BARNYARDVMH01's heartbeat ----------------------------------------------------
+
+test("BARNYARDVMH01 is one of the servers that can have a key, and its key is shown bare for the heartbeat installer", function () {
+  assert.deepStrictEqual(Mon.SERVERS.map(function (s) { return s.id; }), ["app02", "cld01", "vtt", "vmh01"]);
+  var key = "mr_0123456789ab_" + "A".repeat(32);
+  assert.strictEqual(Mon.envLines("vmh01", key), key, "no env-file lines: the heartbeat installer takes the key itself");
+  assert.strictEqual(Mon.envLines("vtt", key), "BR_SERVER=vtt\nBR_KEY=" + key + "\n", "the others are unchanged");
+  var src = fs.readFileSync(path.join(root, "monitoring.js"), "utf8");
+  assert.ok(/BH_KEY parameter of the UMBRA script run/.test(src) && /Never paste it into the script itself/.test(src));
+});
+
+test("a heartbeat monitor with no heartbeat yet is waiting, not 'checked within 5 minutes'; once checked it reads like any other", function () {
+  var wait = Mon.tileModel(mon({ id: "vmh01", name: "BARNYARDVMH01 (VMware host)", heartbeat: true, status: "unknown", lastCheck: null, since: null, lastOk: null, lastMs: null }), NOW);
+  assert.strictEqual(wait.label, "Waiting for its heartbeat");
+  assert.ok(!/within 5 minutes/.test(wait.line) && /heartbeat is installed once on the host/.test(wait.line));
+  assert.strictEqual(wait.tone, "");
+  assert.strictEqual(wait.fix.href, "https://github.com/FarmerBarnyard/ClaudeRepo/tree/main/reporter");
+  assert.strictEqual(Mon.cardModel(mon({ id: "vmh01", heartbeat: true, status: "unknown", lastCheck: null }), NOW, null).facts.indexOf("No heartbeat yet") !== -1, true);
+  var ok = Mon.tileModel(mon({ id: "vmh01", heartbeat: true }), NOW);
+  assert.strictEqual(ok.label, "Up");
+  var down = Mon.tileModel(mon({ id: "vmh01", heartbeat: true, status: "down", downSince: NOW - 12 * MIN, detail: "heartbeat_silent" }), NOW);
+  assert.strictEqual(down.label, "Down");
+  assert.ok(/No heartbeat has arrived/.test(down.detail));
+});
+
+test("the Worker checking itself: a stale self-check reads 'can't tell' with the reason, and it sits in the Services group", function () {
+  var stale = Mon.tileModel(mon({ id: "worker-api", name: "Barnyard API (the Worker)", group: "services", alert: false, self: true, status: "unknown", detail: "self_stale", lastCheck: NOW - 40 * MIN }), NOW);
+  assert.strictEqual(stale.label, "Can't tell");
+  assert.ok(/outside watcher on GitHub/.test(stale.detail) && /not trusted/.test(stale.detail));
+  assert.strictEqual(stale.fix.href, "https://www.cloudflarestatus.com/");
+  var groups = Mon.groupCards([mon({ id: "worker-api", group: "services", name: "Barnyard API (the Worker)" })], NOW, null);
+  assert.deepStrictEqual(groups.map(function (g) { return g.id; }), ["services"]);
+  assert.ok(/real outage alarm/.test(groups[0].note));
+  var up = Mon.tileModel(mon({ id: "worker-api", group: "services", self: true }), NOW);
+  assert.strictEqual(up.label, "Up");
+});
+
 
 console.log("\n" + passed + " tests passed");

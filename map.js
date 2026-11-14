@@ -477,6 +477,23 @@
     return ul;
   }
 
+  // Accepted gaps as a list: the gap, then the plain sentence ("Accepted until 14 Feb 2027: reason"); `withName` puts the asset first.
+  function acceptedList(rows, withName) {
+    var ul = h("ul", "mp-list mp-accepted");
+    rows.forEach(function (r) {
+      var li = h("li");
+      if (withName) {
+        var bt = h("button", "mp-link", r.name); bt.type = "button";
+        bt.addEventListener("click", function () { select(r.id); var pn = $("mp-panel"); if (pn && pn.scrollIntoView) pn.scrollIntoView({ block: "nearest" }); });
+        li.appendChild(bt);
+      }
+      li.appendChild(chip(r.label, r.overdue ? "alert" : "info"));
+      li.appendChild(h("span", r.overdue ? "" : "dim", r.text));
+      ul.appendChild(li);
+    });
+    return ul;
+  }
+
   function detailPanel(p, n) {
     var rad = M.radius(model.map.nodes, n.id);
     var sm = M.stateModel(n);
@@ -487,8 +504,14 @@
     var meta = h("div", "mp-chips");
     meta.appendChild(chip(M.kindOne(n.kind), "info"));
     if (n.criticality) meta.appendChild(chip(n.criticality, n.criticality === "critical" ? "alert" : ""));
-    (n.gaps || []).forEach(function (g) { meta.appendChild(chip(M.gapsText([g]), "attn")); });
+    (n.gaps || []).forEach(function (g) { var late = (n.overdueGaps || []).indexOf(g) !== -1; meta.appendChild(chip(M.gapsText([g], n.overdueGaps), late ? "alert" : "attn")); });
     p.appendChild(meta);
+    // Accepted gaps are shown apart from the open ones, never left out: what was decided, why, and when it must be looked at again.
+    if ((n.accepted || []).length) {
+      p.appendChild(h("h3", "mp-sub", "Accepted gaps"));
+      p.appendChild(acceptedList(M.acceptedRows(n.accepted.map(function (a) { return { id: n.id, name: n.name, kind: n.kind, gap: a.gap, reason: a.reason, review: a.review, overdue: a.overdue }; })), false));
+      p.appendChild(h("p", "dim", "Change these in the Assets tile on the Overview (Open register, Edit)."));
+    }
     if (n.affectedBy && n.affectedBy.length) {
       var names = n.affectedBy.map(function (id) { var x = nodeById(id); return x ? x.name : "something"; });
       p.appendChild(h("div", "mp-flash attn", "Affected: it needs " + names.join(", ") + ", which " + (names.length === 1 ? "is" : "are") + " down."));
@@ -660,7 +683,7 @@
     wrap.appendChild(a);
     var b2 = h("section", "mp-card");
     b2.appendChild(h("h2", null, "Weakest links"));
-    b2.appendChild(h("p", "dim", "Things others depend on that have no monitor, no backup job that names them, or no runbook."));
+    b2.appendChild(h("p", "dim", "Things others depend on that have no monitor, no backup job that names them, no runbook, or (for identity settings) no expiry watch."));
     var weak = M.weakestModel({ weakest: model.map.weakest }).weakest;
     if (!weak.length) b2.appendChild(h("p", "dim", model.map.stats.links ? "No gaps found." : "Link some things first."));
     else {
@@ -673,6 +696,16 @@
         wl.appendChild(li);
       });
       b2.appendChild(wl);
+    }
+    // The accepted gaps sit under the weakest links and are always listed: they are left out of the list above only until their review day.
+    var acc = M.acceptedRows(model.map.accepted && model.map.accepted.list);
+    var accTotal = model.map.accepted ? Math.max(acc.length, model.map.accepted.total || 0) : 0;
+    b2.appendChild(h("h3", "mp-sub", "Accepted gaps" + (accTotal ? " (" + accTotal + ")" : "")));
+    if (!acc.length) b2.appendChild(h("p", "dim", "None. A gap you decide to live with is listed here, with its reason and the day to look at it again."));
+    else {
+      b2.appendChild(h("p", "dim", "Gaps you decided to live with. They are not counted above until their review day passes, then they count again."));
+      b2.appendChild(acceptedList(acc, true));
+      if (accTotal > acc.length) b2.appendChild(h("p", "dim", "And " + (accTotal - acc.length) + " more."));
     }
     wrap.appendChild(b2);
     return wrap;

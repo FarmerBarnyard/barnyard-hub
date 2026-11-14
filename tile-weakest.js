@@ -1,5 +1,6 @@
-// The Weakest links tile: the assets that other things depend on and that are missing a monitor, a backup job that names them, or a
-// runbook, worst first, with a button to the dependency map (map.html). The tile shows the top five; the map shows eight and
+// The Weakest links tile: the assets that other things depend on and that are missing a monitor, a backup job that names them, a
+// runbook or (identity settings only) an expiry watch, worst first, with a button to the dependency map (map.html). Under the list
+// sits a small "Accepted gaps" section: gaps the owner decided to live with until a review day, always shown with their reason. The tile shows the top five; the map shows eight and
 // the whole picture.
 //
 // Talks to GET /reg/summary on the Worker (owner only), through the shared K.summary() so it costs no extra call when the Assets and
@@ -16,7 +17,7 @@
   var ML = isNode ? require("./map-logic.js") : root.BarnyardMapLogic;
 
   var desc = {
-    id: "weakest", title: "Weakest links", about: "The things others depend on that have no monitor, backup or runbook.",
+    id: "weakest", title: "Weakest links", about: "The things others depend on that have no monitor, backup, runbook or expiry watch.",
     w: 5, h: 6, minW: 3, minH: 3, maxW: 12, maxH: 24, ownerOnly: true, permission: "tile.weakest"
   };
 
@@ -24,7 +25,7 @@
   function model(summary) {
     var m = ML.weakestModel(summary && summary.links);
     var state = !m.assets ? "empty" : !m.links ? "unlinked" : m.weakest.length ? "weak" : "clean";
-    return { state: state, assets: m.assets, links: m.links, linked: m.linked, unlinked: m.unlinked, cycles: m.cycles, weakest: m.weakest };
+    return { state: state, assets: m.assets, links: m.links, linked: m.linked, unlinked: m.unlinked, cycles: m.cycles, weakest: m.weakest, accepted: m.accepted, acceptedCount: m.acceptedCount };
   }
 
   var helpers = { model: model, descriptor: desc };
@@ -56,26 +57,43 @@
       }
       var fix = m.weakest.filter(function (w) { return w.tone === "alert"; }).length;
       body.appendChild(m.state === "clean" && !m.cycles
-        ? K.summaryRow("ok", "No weak spots", "Everything that others depend on has a monitor, a backup that names it and a runbook.")
+        ? K.summaryRow("ok", "No weak spots", "Everything that others depend on has what it needs" + (m.acceptedCount ? ", apart from the accepted gaps below." : "."))
         : K.summaryRow(fix || m.cycles ? "alert" : "attn", fix || m.cycles ? "Needs fixing" : "Gaps to fill", K.plural(m.weakest.length, "weak spot") + (m.cycles ? ", " + K.plural(m.cycles, "loop") + " in the links" : "") + "."));
       body.appendChild(K.statGrid([
         { value: String(m.linked), label: "linked of " + m.assets + " items" },
         { value: String(m.links), label: m.links === 1 ? "link between them" : "links between them" },
         { value: String(m.weakest.length), label: m.weakest.length === 1 ? "weak spot" : "weak spots", tone: K.countTone(m.weakest.length, "attn") }
       ].concat(m.cycles ? [{ value: String(m.cycles), label: m.cycles === 1 ? "loop in the links" : "loops in the links", tone: "alert" }] : [])));
-      if (m.state === "clean") return;
-      body.appendChild(h("p", "tl-sub", "Worst first"));
-      var ul = h("ul", "tl-list");
-      m.weakest.forEach(function (w) {
-        var li = h("li");
-        var a = h("a", null, w.name);
-        a.href = "map.html#" + w.id;
-        li.appendChild(a);
-        li.appendChild(chip(w.tone === "alert" ? "Fix first" : "Gap", w.tone));
-        li.appendChild(h("span", "dim tl-li-note", w.line));
-        ul.appendChild(li);
-      });
-      body.appendChild(ul);
+      if (m.state !== "clean") {
+        body.appendChild(h("p", "tl-sub", "Worst first"));
+        var ul = h("ul", "tl-list");
+        m.weakest.forEach(function (w) {
+          var li = h("li");
+          var a = h("a", null, w.name);
+          a.href = "map.html#" + w.id;
+          li.appendChild(a);
+          li.appendChild(chip(w.tone === "alert" ? "Fix first" : "Gap", w.tone));
+          li.appendChild(h("span", "dim tl-li-note", w.line));
+          ul.appendChild(li);
+        });
+        body.appendChild(ul);
+      }
+      // Accepted gaps are never hidden: the same section whether or not anything is weak.
+      if (m.accepted.length) {
+        body.appendChild(h("p", "tl-sub", "Accepted gaps" + (m.acceptedCount > m.accepted.length ? " (" + m.acceptedCount + ")" : "")));
+        var al = h("ul", "tl-list");
+        m.accepted.forEach(function (r) {
+          var li = h("li");
+          var a = h("a", null, r.name);
+          a.href = "map.html#" + r.id;
+          li.appendChild(a);
+          li.appendChild(chip(r.label, r.overdue ? "alert" : "info"));
+          li.appendChild(h("span", "dim tl-li-note", r.text));
+          al.appendChild(li);
+        });
+        body.appendChild(al);
+        if (m.acceptedCount > m.accepted.length) body.appendChild(h("p", "dim", "And " + (m.acceptedCount - m.accepted.length) + " more on the map."));
+      }
     }
 
     function load() {

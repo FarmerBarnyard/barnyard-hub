@@ -10,14 +10,15 @@
 (function (root) {
   "use strict";
 
-  var KINDS = [["server", "Servers"], ["network", "Network"], ["app", "Apps and sites"], ["domain", "Domains"], ["certificate", "Certificates"], ["account", "Accounts and tenants"], ["licence", "Licences"], ["subscription", "Subscriptions"], ["other", "Other"]];
+  var KINDS = [["server", "Servers"], ["network", "Network"], ["app", "Apps and sites"], ["domain", "Domains"], ["certificate", "Certificates"], ["account", "Accounts and tenants"], ["identity", "Identity apps and settings"], ["licence", "Licences"], ["subscription", "Subscriptions"], ["other", "Other"]];
   var KIND_LABEL = {};
   KINDS.forEach(function (k) { KIND_LABEL[k[0]] = k[1]; });
-  var KIND_ONE = { server: "Server", network: "Network", app: "App or site", domain: "Domain", certificate: "Certificate", account: "Account", licence: "Licence", subscription: "Subscription", other: "Other" };
+  var KIND_ONE = { server: "Server", network: "Network", app: "App or site", domain: "Domain", certificate: "Certificate", account: "Account", identity: "Identity app or setting", licence: "Licence", subscription: "Subscription", other: "Other" };
   var KIND_RANK = {};
   KINDS.forEach(function (k, i) { KIND_RANK[k[0]] = i; });
   var CRIT_RANK = { critical: 0, high: 1, normal: 2, low: 3, "": 4 };
-  var GAP_WORDS = { monitor: "no monitor", backup: "no backup job names it", runbook: "no runbook" };
+  var GAP_WORDS = { monitor: "no monitor", backup: "no backup job names it", runbook: "no runbook", watch: "no expiry watch" };
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   // Box size and spacing of the diagram, in drawing units.
   var NODE_W = 224, NODE_H = 50, GAP_X = 14, GAP_Y = 64, PAD = 28, LANE_HEAD = 24, LANE_FOOT = 8, TRACK = 8, START_SHUFFLES = 10;
@@ -605,24 +606,54 @@
 
   // ---- the Overview tile -----------------------------------------------------------------------------------------
 
-  // "no monitor, no runbook"
-  function gapsText(gaps) {
-    var w = (gaps || []).map(function (g) { return GAP_WORDS[g] || g; });
+  // "no monitor, no runbook"; a gap in `overdue` (an accepted gap whose review day has passed, so it counts again) says so.
+  function gapsText(gaps, overdue) {
+    var late = overdue || [];
+    var w = (gaps || []).map(function (g) { return (GAP_WORDS[g] || g) + (late.indexOf(g) !== -1 ? " (review overdue)" : ""); });
     return w.join(", ");
   }
 
-  // The tile's numbers and rows from GET /reg/summary's `links`: { linked, links, weakest: [{ id, name, line, tone }] }
+  // "2027-02-14" -> "14 Feb 2027" (read as written: no time zone can move it).
+  function dayWords(ymd) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ""));
+    if (!m || +m[2] < 1 || +m[2] > 12) return String(ymd || "");
+    return +m[3] + " " + MONTHS[+m[2] - 1] + " " + m[1];
+  }
+
+  // One accepted gap as it is always shown, never hidden: { gap, label, overdue, text }.
+  //   "Accepted until 14 Feb 2027: Renewal is on the Calendar"
+  //   "Review overdue (was accepted until 14 Feb 2027): Renewal is on the Calendar"
+  function acceptedLine(a) {
+    var reason = a.reason ? ": " + a.reason : "";
+    return {
+      gap: a.gap, label: GAP_WORDS[a.gap] || a.gap, overdue: !!a.overdue, review: a.review,
+      text: a.overdue ? "Review overdue (was accepted until " + dayWords(a.review) + ")" + reason : "Accepted until " + dayWords(a.review) + reason
+    };
+  }
+
+  // The accepted gaps of a summary or a map answer ({ list, total } or a bare list) as rows: { id, name, kind, gap, label, overdue, text }.
+  function acceptedRows(list) {
+    return (Array.isArray(list) ? list : []).map(function (a) {
+      var l = acceptedLine(a);
+      return { id: a.id, name: a.name, kind: a.kind, gap: l.gap, label: l.label, overdue: l.overdue, review: l.review, text: l.text };
+    });
+  }
+
+  // The tile's numbers and rows from GET /reg/summary's `links`: { linked, links, weakest: [{ id, name, line, tone }], accepted }.
+  // `accepted` is the Worker's first few accepted gaps and `acceptedCount` how many there are in all.
   function weakestModel(links) {
     var l = links || { assets: 0, links: 0, linked: 0, unlinked: 0, cycles: 0, weakest: [] };
+    var accepted = acceptedRows(l.accepted);
     return {
       assets: l.assets || 0, links: l.links || 0, linked: l.linked || 0, unlinked: l.unlinked || 0, cycles: l.cycles || 0,
       weakest: (l.weakest || []).map(function (w) {
         return {
           id: w.id, name: w.name, kind: w.kind,
-          line: w.dependents + (w.dependents === 1 ? " thing depends on it" : " things depend on it") + "; " + gapsText(w.gaps),
+          line: w.dependents + (w.dependents === 1 ? " thing depends on it" : " things depend on it") + "; " + gapsText(w.gaps, w.overdue),
           tone: w.criticality === "critical" || w.criticality === "high" || w.dependents >= 5 ? "alert" : "attn"
         };
-      })
+      }),
+      accepted: accepted, acceptedCount: Math.max(accepted.length, l.acceptedCount || 0)
     };
   }
 
@@ -660,7 +691,7 @@
     radius: radius, whatBreaksText: whatBreaksText, incidentText: incidentText, stateModel: stateModel, banner: banner, downReport: downReport,
     biggestRadius: biggestRadius, visible: visible, matches: matches, kindCounts: kindCounts, layout: layout, edgePath: edgePath, wrapName: wrapName, boxHeight: boxHeight, countCrossings: countCrossings, neighbours: neighbours, edgeRole: edgeRole,
     linkChoices: linkChoices, setLink: setLink, sameList: sameList, planText: planText, stateWord: stateWord, gapsText: gapsText,
-    weakestModel: weakestModel, errorText: errorText, safeWebLink: safeWebLink
+    dayWords: dayWords, acceptedLine: acceptedLine, acceptedRows: acceptedRows, weakestModel: weakestModel, errorText: errorText, safeWebLink: safeWebLink
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
