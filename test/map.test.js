@@ -8,6 +8,7 @@ var assert = require("assert");
 var fs = require("fs");
 var path = require("path");
 var M = require(path.join(__dirname, "..", "map-logic.js"));
+var F = require(path.join(__dirname, "map-fixture.js"));
 var root = path.join(__dirname, "..");
 
 var passed = 0;
@@ -127,26 +128,35 @@ test("kindCounts lists the kinds that are on the map, in display order", functio
   assert.deepStrictEqual(M.kindCounts([]), []);
 });
 
-test("layout: foundations on the bottom row, dependents above, no two boxes overlap, every box inside the drawing", function () {
-  var s = sample();
-  var L = M.layout(s.nodes, s.edges);
-  assert.strictEqual(L.rows, 3);
-  var y = function (id) { return L.pos[id].y; };
-  assert.ok(y("web") < y("api") && y("api") < y("db"), "needers above what they need");
-  assert.strictEqual(y("db"), y("cdn"));
-  assert.strictEqual(y("db"), y("lone"));
+// every box inside the drawing and no two boxes touching
+function assertSound(L, label) {
   var ids = Object.keys(L.pos);
-  assert.strictEqual(ids.length, 5);
   ids.forEach(function (a) {
-    assert.ok(L.pos[a].x >= 0 && L.pos[a].x + M.NODE_W <= L.width, a + " inside the width");
-    assert.ok(L.pos[a].y >= 0 && L.pos[a].y + M.NODE_H <= L.height, a + " inside the height");
+    var A = L.pos[a];
+    assert.ok(A.x >= 0 && A.x + A.w <= L.width, label + ": " + a + " inside the width");
+    assert.ok(A.y >= 0 && A.y + A.h <= L.height, label + ": " + a + " inside the height");
     ids.forEach(function (b) {
       if (a >= b) return;
-      var overlap = Math.abs(L.pos[a].x - L.pos[b].x) < M.NODE_W && Math.abs(L.pos[a].y - L.pos[b].y) < M.NODE_H;
-      assert.ok(!overlap, a + " and " + b + " do not overlap");
+      var B = L.pos[b];
+      var apart = A.x + A.w <= B.x || B.x + B.w <= A.x || A.y + A.h <= B.y || B.y + B.h <= A.y;
+      assert.ok(apart, label + ": " + a + " and " + b + " do not overlap");
     });
   });
+}
+
+test("layout: foundations on the bottom row, dependents above, boxes with no link in a tray, no overlap, all inside the drawing", function () {
+  var s = sample();
+  var L = M.layout(s.nodes, s.edges);
+  assert.strictEqual(L.rows, 4, "three layers and the tray");
+  var y = function (id) { return L.pos[id].y; };
+  assert.ok(y("web") < y("api") && y("api") < y("db"), "needers above what they need");
+  assert.ok(Math.abs(y("db") + L.pos.db.h / 2 - (y("cdn") + L.pos.cdn.h / 2)) < 1, "same layer, same row");
+  assert.ok(y("lone") > y("db"), "a box with no link sits in the tray under the rest");
+  assert.deepStrictEqual(L.lanes.map(function (l) { return l.title; }), ["Level 2", "Level 1", "Foundations", "Not linked to anything"]);
+  assert.strictEqual(Object.keys(L.pos).length, 5);
+  assertSound(L, "sample");
   assert.deepStrictEqual(M.layout(s.nodes, s.edges), L, "the same input draws the same way");
+  assert.deepStrictEqual(L.order.slice().sort(), ["api", "cdn", "db", "lone", "web"], "every box is in the reading order once");
 });
 
 test("layout keeps links short: a box sits near what it needs, not across the row", function () {
@@ -156,15 +166,27 @@ test("layout keeps links short: a box sits near what it needs, not across the ro
   var L = M.layout(nodes, edges);
   assert.ok(Math.abs(L.pos.x.x - L.pos.d.x) <= Math.abs(L.pos.x.x - L.pos.a.x), "x sits nearer d than a");
   assert.ok(Math.abs(L.pos.y.x - L.pos.a.x) <= Math.abs(L.pos.y.x - L.pos.d.x), "y sits nearer a than d");
+  assert.strictEqual(L.crossings, 0, "two links that need not cross do not");
 });
 
 test("layout copes with nothing, one box, a filtered map with a gap in its rows, and a stray edge", function () {
-  assert.deepStrictEqual(M.layout([], []), { pos: {}, width: 0, height: 0, rows: 0 });
+  assert.deepStrictEqual(M.layout([], []), { pos: {}, lines: {}, width: 0, height: 0, rows: 0, lanes: [], order: [], edges: [], crossings: 0 });
   var one = M.layout([node("a")], []);
   assert.strictEqual(one.rows, 1);
   var gap = M.layout([node("top", { layer: 5, dependsOn: ["low"] }), node("low", { layer: 0 })], [{ from: "top", to: "low" }]);
   assert.strictEqual(gap.rows, 2, "empty rows between are squeezed out");
   assert.doesNotThrow(function () { M.layout([node("a")], [{ from: "a", to: "ghost" }, { from: "ghost", to: "a" }]); });
+  // a loop in the data (a needs b, b needs a, on the same layer) is drawn, not lost
+  var loop = M.layout([node("a", { layer: 1 }), node("b", { layer: 1 })], [{ from: "a", to: "b" }, { from: "b", to: "a" }]);
+  assert.strictEqual(loop.edges.length, 2);
+  assert.ok(loop.edges.every(function (e) { return /^M/.test(e.d); }));
+  assertSound(loop, "loop");
+  // twenty boxes and no links at all wrap into tray rows instead of one endless row
+  var wide = [];
+  for (var i = 0; i < 20; i++) wide.push(node("n" + i, { name: "Box " + i }));
+  var tray = M.layout(wide, []);
+  assert.ok(tray.rows >= 3, "wrapped into several tray rows");
+  assertSound(tray, "tray");
 });
 
 test("edgePath is a curve from the bottom of the needer to the top of what it needs", function () {
@@ -173,10 +195,45 @@ test("edgePath is a curve from the bottom of the needer to the top of what it ne
   assert.ok(/ 200$/.test(d), "ends at the top of the lower box");
 });
 
-test("fitName cuts a long name to fit a box", function () {
-  assert.strictEqual(M.fitName("Short"), "Short");
-  assert.strictEqual(M.fitName("Microsoft 365 tenant (Entra, Exchange, SharePoint)").length, 22);
-  assert.strictEqual(M.fitName(null), "");
+test("wrapName keeps the whole name: a bracket starts a new line, at most three lines, only a huge name is cut", function () {
+  assert.deepStrictEqual(M.wrapName("Short"), ["Short"]);
+  assert.deepStrictEqual(M.wrapName("Campaign site (campaign.barnyard.site)"), ["Campaign site", "(campaign.barnyard.site)"]);
+  var long = "Barnyard-Graph-Read (Entra app: Users list, M365 Health, Services)";
+  var l = M.wrapName(long);
+  assert.ok(l.length <= 3 && l[0] === "Barnyard-Graph-Read");
+  assert.strictEqual(l.join(" "), long, "nothing lost");
+  l.forEach(function (x) { assert.ok(x.length <= 31); });
+  assert.deepStrictEqual(M.wrapName(null), [""]);
+  var huge = M.wrapName(new Array(40).join("word "));
+  assert.strictEqual(huge.length, 3);
+  assert.strictEqual(huge[2].slice(-1), "…");
+  assert.strictEqual(M.wrapName("x".repeat(80)).length, 3, "an unbroken word is broken into lines too");
+  assert.strictEqual(M.boxHeight("Short"), M.wrapName("Short").length * 14 + 36);
+});
+
+test("countCrossings counts pairs of links that cross, and not links that meet at a point", function () {
+  var X = [[{ x: 0, y: 0 }, { x: 10, y: 10 }], [{ x: 10, y: 0 }, { x: 0, y: 10 }]];
+  assert.strictEqual(M.countCrossings(X), 1);
+  assert.strictEqual(M.countCrossings([[{ x: 0, y: 0 }, { x: 0, y: 10 }], [{ x: 5, y: 0 }, { x: 5, y: 10 }]]), 0);
+  assert.strictEqual(M.countCrossings([[{ x: 0, y: 0 }, { x: 5, y: 10 }], [{ x: 0, y: 0 }, { x: 9, y: 10 }]]), 0, "the same start is not a crossing");
+  assert.strictEqual(M.countCrossings([]), 0);
+});
+
+test("neighbours and edgeRole: direct links for a hover, the whole blast radius for a pick, colours that never mix", function () {
+  var n = sample().nodes;
+  var direct = M.neighbours(n, "api", false);
+  assert.deepStrictEqual(Object.keys(direct.needs), ["db"]);
+  assert.deepStrictEqual(Object.keys(direct.dependents), ["web"]);
+  var db = M.neighbours(n, "db", true);
+  assert.deepStrictEqual(Object.keys(db.dependents).sort(), ["api", "web"], "web is hit through api");
+  assert.deepStrictEqual(Object.keys(M.neighbours(n, "db", false).dependents), ["api"], "a hover stops at the direct link");
+  assert.deepStrictEqual(M.neighbours(n, "ghost", true), { needs: {}, dependents: {} });
+  assert.strictEqual(M.edgeRole({ from: "web", to: "api" }, "api", direct, false), "dependent");
+  assert.strictEqual(M.edgeRole({ from: "api", to: "db" }, "api", direct, false), "need");
+  assert.strictEqual(M.edgeRole({ from: "web", to: "cdn" }, "api", direct, false), "", "unrelated links fade");
+  assert.strictEqual(M.edgeRole({ from: "web", to: "api" }, "db", db, true), "dependent", "the pick's blast radius reaches web -> api");
+  assert.strictEqual(M.edgeRole({ from: "web", to: "api" }, "db", M.neighbours(n, "db", false), false), "", "a hover does not light links that do not touch the box");
+  assert.strictEqual(M.edgeRole({ from: "web", to: "cdn" }, "db", db, true), "");
 });
 
 test("linkChoices: not itself, and not anything that already needs it; setLink ticks and unticks without repeats", function () {
@@ -230,12 +287,132 @@ test("errorText words each refusal; an unknown code still says something", funct
   assert.strictEqual(M.errorText(null, 500), "That did not work (error 500).");
 });
 
+// ---- the owner's real graph: 27 boxes, 47 links --------------------------------------------------------------------------
+
+// The layout this page used before (rows by layer, boxes averaged toward their neighbours, a line from box centre to box centre),
+// kept only to show that the new one crosses fewer links.
+function legacyLinks(nodes, edges) {
+  var W = 196, H = 48, GX = 18, GY = 86;
+  var layerSet = {};
+  nodes.forEach(function (n) { layerSet[n.layer || 0] = true; });
+  var layers = Object.keys(layerSet).map(Number).sort(function (a, b) { return b - a; });
+  var rowOf = {};
+  layers.forEach(function (l, i) { rowOf[l] = i; });
+  var KR = { server: 0, network: 1, app: 2, domain: 3, certificate: 4, account: 5, licence: 6, subscription: 7, other: 8 };
+  var rows = layers.map(function () { return []; });
+  nodes.slice().sort(function (a, b) { return (KR[a.kind] - KR[b.kind]) || a.name.localeCompare(b.name); }).forEach(function (n) { rows[rowOf[n.layer || 0]].push(n.id); });
+  var up = {}, down = {};
+  nodes.forEach(function (n) { up[n.id] = []; down[n.id] = []; });
+  edges.forEach(function (e) { down[e.from].push(e.to); up[e.to].push(e.from); });
+  var step = W + GX, widest = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 1), xOf = {};
+  function place() { rows.forEach(function (r) { var off = (widest - r.length) * step / 2; r.forEach(function (id, i) { xOf[id] = off + i * step; }); }); }
+  place();
+  function sweep(order, nb) {
+    order.forEach(function (ri) {
+      var key = {};
+      rows[ri].forEach(function (id) { var ns = nb[id]; key[id] = ns.length ? ns.reduce(function (s, n) { return s + xOf[n]; }, 0) / ns.length : xOf[id]; });
+      rows[ri].sort(function (a, b) { return key[a] - key[b]; });
+    });
+    place();
+  }
+  var td = rows.map(function (_, i) { return i; }), bu = td.slice().reverse();
+  for (var pass = 0; pass < 4; pass++) { sweep(td, up); sweep(bu, down); }
+  var pos = {};
+  rows.forEach(function (r, ri) { r.forEach(function (id) { pos[id] = { x: xOf[id], y: ri * (H + GY) }; }); });
+  return edges.map(function (e) {
+    return [{ x: pos[e.from].x + W / 2, y: pos[e.from].y + H }, { x: pos[e.to].x + W / 2, y: pos[e.to].y }];
+  });
+}
+
+test("the owner's real map: fewer crossings than the old ordering, the same drawing every time, nothing overlapping, everything inside", function () {
+  var f = F.mapFixture();
+  assert.strictEqual(f.nodes.length, 27);
+  assert.strictEqual(f.edges.length, 47);
+  var L = M.layout(f.nodes, f.edges);
+  var before = M.countCrossings(legacyLinks(f.nodes, f.edges));
+  assert.ok(L.crossings < before, "crossings fell from " + before + " to " + L.crossings);
+  assert.strictEqual(L.crossings, M.countCrossings(L.edges.map(function (e) { return e.points; })), "the count is of the links as drawn");
+  assert.deepStrictEqual(M.layout(F.mapFixture().nodes, F.mapFixture().edges), L, "deterministic");
+  assertSound(L, "owner map");
+  assert.strictEqual(Object.keys(L.pos).length, 27);
+  assert.strictEqual(L.edges.length, 47, "every link is drawn");
+  L.edges.forEach(function (e) { assert.ok(/^M[-0-9. ]+[LC]/.test(e.d) && e.points.length >= 2, e.from + " to " + e.to + " has a path"); });
+  console.log("  crossings: " + before + " before, " + L.crossings + " now; drawing " + Math.round(L.width) + " x " + Math.round(L.height));
+});
+
+test("the owner's real map: the whole name is on every box, lanes read top to bottom, the unlinked two sit in the tray", function () {
+  var f = F.mapFixture();
+  var L = M.layout(f.nodes, f.edges);
+  f.nodes.forEach(function (n) {
+    assert.ok(L.lines[n.id].length <= 3);
+    assert.strictEqual(L.lines[n.id].join(" "), n.name.replace(/\s+/g, " "), n.name + " is shown in full");
+  });
+  assert.deepStrictEqual(L.lanes.map(function (l) { return l.title; }), ["Level 4", "Level 3", "Level 2", "Level 1", "Foundations", "Not linked to anything"]);
+  for (var i = 1; i < L.lanes.length; i++) assert.ok(L.lanes[i].y >= L.lanes[i - 1].y + L.lanes[i - 1].h, "lanes do not overlap");
+  var tray = L.lanes[5];
+  ["VTT VPS (barnyardvps01)", "Claude subscription"].forEach(function (name) {
+    var n = f.nodes.filter(function (x) { return x.name === name; })[0];
+    assert.ok(L.pos[n.id].y >= tray.y, name + " is in the tray");
+  });
+  // a box sits in its layer's lane: everything on layer 4 above everything on layer 3, and so on
+  var maxY = function (layer) { return Math.max.apply(null, f.nodes.filter(function (n) { return n.layer === layer; }).map(function (n) { return L.pos[n.id].y + L.pos[n.id].h; })); };
+  var minY = function (layer) { return Math.min.apply(null, f.nodes.filter(function (n) { return n.layer === layer; }).map(function (n) { return L.pos[n.id].y; })); };
+  for (var l = 4; l > 1; l--) assert.ok(maxY(l) < minY(l - 1), "layer " + l + " above layer " + (l - 1));
+  assert.deepStrictEqual(L.order.slice().sort(), f.nodes.map(function (n) { return n.id; }).sort(), "every box in the reading order once");
+});
+
+test("the owner's real map: links leave a box from different points, end on the box they need, and never run through a box", function () {
+  var f = F.mapFixture();
+  var L = M.layout(f.nodes, f.edges);
+  var startAt = {}, endAt = {};
+  L.edges.forEach(function (e) {
+    var a = L.pos[e.from], b = L.pos[e.to], p0 = e.points[0], p1 = e.points[e.points.length - 1];
+    assert.ok(Math.abs(p0.y - (a.y + a.h)) < 0.01 && p0.x >= a.x && p0.x <= a.x + a.w, "starts on the bottom of " + e.from);
+    assert.ok(Math.abs(p1.y - b.y) < 0.01 && p1.x >= b.x && p1.x <= b.x + b.w, "ends on the top of " + e.to);
+    var s = e.from + "@" + Math.round(p0.x), t = e.to + "@" + Math.round(p1.x);
+    assert.ok(!startAt[s], "two links start at one point: " + s); startAt[s] = true;
+    assert.ok(!endAt[t], "two links end at one point: " + t); endAt[t] = true;
+    // no point of the path (the track a skipping link runs along) lies inside any box
+    e.points.slice(1, -1).forEach(function (p) {
+      Object.keys(L.pos).forEach(function (id) {
+        var q = L.pos[id];
+        assert.ok(!(p.x > q.x - 1 && p.x < q.x + q.w + 1 && p.y > q.y && p.y < q.y + q.h), e.from + " to " + e.to + " runs through " + id);
+      });
+    });
+  });
+});
+
+test("the owner's real map: pointing at the Worker lights its 6 needs and 8 dependents and nothing else", function () {
+  var f = F.mapFixture();
+  var worker = f.nodes.filter(function (n) { return /Worker/.test(n.name); })[0].id;
+  var sets = M.neighbours(f.nodes, worker, false);
+  assert.strictEqual(Object.keys(sets.needs).length, 6);
+  assert.strictEqual(Object.keys(sets.dependents).length, 8);
+  var lit = f.edges.filter(function (e) { return M.edgeRole(e, worker, sets, false); });
+  assert.strictEqual(lit.length, 14, "6 + 8 links touch it");
+  var all = M.neighbours(f.nodes, worker, true);
+  assert.ok(Object.keys(all.needs).length > 6, "a pick follows the needs on down to the foundations");
+});
+
 test("map.html loads the rules before the page, and only from this site", function () {
   var html = fs.readFileSync(path.join(root, "map.html"), "utf8");
   assert.ok(html.indexOf("map-logic.js") !== -1 && html.indexOf("map-logic.js") < html.indexOf("map.js"));
   assert.ok(/script-src 'self'/.test(html));
   assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>/.test(html), "no inline script");
   assert.ok(!/ style=/.test(html), "no inline style attribute");
+});
+
+test("the page's own files: keyboard, reduced motion, full names, a key for the colours, no markup from the server", function () {
+  var js = fs.readFileSync(path.join(root, "map.js"), "utf8"), css = fs.readFileSync(path.join(root, "map.css"), "utf8");
+  assert.ok(/ev\.key === "Escape"/.test(js), "Escape clears the pick");
+  assert.ok(/ev\.key === "Enter"/.test(js) && /tabindex: "0"/.test(js), "boxes can be reached and picked from the keyboard");
+  assert.ok(/addEventListener\("focus"/.test(js) && /addEventListener\("mouseenter"/.test(js), "focus lights the links the way pointing does");
+  assert.ok(/aria-label/.test(js) && /s\("title"/.test(js), "boxes have an accessible name and a tooltip");
+  assert.ok(/prefers-reduced-motion: reduce/.test(css), "motion is switched off when asked");
+  assert.ok(/What the box needs/.test(js) && /What needs the box/.test(js), "a key for the two colours");
+  assert.ok(!/innerHTML|insertAdjacentHTML|outerHTML/.test(js.replace(/^\s*\/\/.*$/gm, "")), "server text reaches the page as text");
+  assert.ok(!/fitName/.test(js), "no more cutting names short");
+  assert.ok(!/#[0-9a-f]{3,8}\b/i.test(css.replace(/\/\*[\s\S]*?\*\//g, "")), "colours come from the theme tokens");
 });
 
 test("the sidebar has a Blast radius entry: owner only, pointing at map.html, with its own icon and palette words", function () {

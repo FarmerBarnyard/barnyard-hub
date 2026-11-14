@@ -20,7 +20,7 @@
   var GAP_WORDS = { monitor: "no monitor", backup: "no backup job names it", runbook: "no runbook" };
 
   // Box size and spacing of the diagram, in drawing units.
-  var NODE_W = 196, NODE_H = 48, GAP_X = 18, GAP_Y = 86, PAD = 28;
+  var NODE_W = 224, NODE_H = 50, GAP_X = 14, GAP_Y = 64, PAD = 28, LANE_HEAD = 24, LANE_FOOT = 8, TRACK = 8, START_SHUFFLES = 10;
 
   function kindLabel(kind) { return KIND_LABEL[kind] || "Other"; }
   function kindOne(kind) { return KIND_ONE[kind] || "Other"; }
@@ -190,69 +190,373 @@
 
   // ---- the diagram -----------------------------------------------------------------------------------------------
 
-  // Where each box goes. Things nothing is underneath (foundations) are the bottom row, and each thing sits above the deepest
-  // thing it needs. Boxes in a row are ordered to keep the links short (a few passes of averaging the neighbours' places).
-  // -> { pos: { id: { x, y } }, width, height, rows: n }
-  function layout(nodes, edges) {
-    var list = nodes || [];
-    if (!list.length) return { pos: {}, width: 0, height: 0, rows: 0 };
-    var layerSet = {};
-    list.forEach(function (n) { layerSet[n.layer || 0] = true; });
-    var layers = Object.keys(layerSet).map(Number).sort(function (a, b) { return b - a; });   // top row = highest layer
-    var rowOf = {};
-    layers.forEach(function (l, i) { rowOf[l] = i; });
-    var rows = layers.map(function () { return []; });
-    list.slice().sort(function (a, b) { return (KIND_RANK[a.kind] - KIND_RANK[b.kind]) || a.name.localeCompare(b.name); })
-      .forEach(function (n) { rows[rowOf[n.layer || 0]].push(n.id); });
-    var up = {}, down = {};                                   // neighbours: up = needs this one (row above), down = this needs it
-    list.forEach(function (n) { up[n.id] = []; down[n.id] = []; });
-    (edges || []).forEach(function (e) {
-      if (!up[e.to] || !down[e.from]) return;
-      down[e.from].push(e.to);
-      up[e.to].push(e.from);
+  // Reading it: each box sits in a lane (its layer: foundations at the bottom, the things built on them above). A link runs from a
+  // box down to what it needs. Boxes in a lane are ordered to cross as few links as possible; a link that skips lanes is drawn
+  // through a private track between the boxes of the lanes it passes, so it never runs behind a box; each box hands its links
+  // out of separate points on its edge. Boxes with no link at all sit in a tray at the bottom.
+
+  var NAME_CHARS = 31, NAME_LINES = 3, LINE_H = 14, TRAY_GAP = 30;
+
+  // A name cut into at most three lines of 31 characters, so the whole name can be read on the box. A bracketed part
+  // ("(campaign.barnyard.site)") starts a new line. Only a name longer than all three lines is cut, with an ellipsis.
+  function wrapName(name, chars, maxLines) {
+    var width = chars || NAME_CHARS, limit = maxLines || NAME_LINES;
+    var text = String(name || "").replace(/\s+/g, " ").trim();
+    if (!text) return [""];
+    var at = text.indexOf(" (");
+    var parts = at > 0 ? [text.slice(0, at), text.slice(at + 1)] : [text];
+    var lines = [];
+    parts.forEach(function (part) {
+      var cur = "";
+      part.split(" ").forEach(function (word) {
+        while (word.length > width) {                      // a word longer than a line is broken
+          if (cur) { lines.push(cur); cur = ""; }
+          lines.push(word.slice(0, width)); word = word.slice(width);
+        }
+        if (!cur) cur = word;
+        else if (cur.length + 1 + word.length <= width) cur += " " + word;
+        else { lines.push(cur); cur = word; }
+      });
+      if (cur) lines.push(cur);
     });
-    var step = NODE_W + GAP_X;
-    var widest = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 1);
-    var xOf = {};
-    function place() {
-      rows.forEach(function (r) {
-        var offset = (widest - r.length) * step / 2;
-        r.forEach(function (id, i) { xOf[id] = offset + i * step; });
-      });
+    if (lines.length > limit) {
+      lines = lines.slice(0, limit);
+      var last = lines[limit - 1];
+      lines[limit - 1] = (last.length >= width ? last.slice(0, width - 1) : last) + "…";
     }
-    place();
-    function sweep(order, neighbours) {
-      order.forEach(function (ri) {
-        var r = rows[ri];
-        var key = {};
-        r.forEach(function (id, i) {
-          var ns = neighbours[id].filter(function (n) { return xOf[n] !== undefined; });
-          key[id] = ns.length ? ns.reduce(function (s, n) { return s + xOf[n]; }, 0) / ns.length : xOf[id];
-        });
-        r.sort(function (a, b) { return key[a] - key[b]; });
-      });
-      place();
-    }
-    var topDown = rows.map(function (_, i) { return i; });
-    var bottomUp = topDown.slice().reverse();
-    for (var pass = 0; pass < 4; pass++) { sweep(topDown, up); sweep(bottomUp, down); }
-    var pos = {};
-    rows.forEach(function (r, ri) { r.forEach(function (id) { pos[id] = { x: PAD + xOf[id], y: PAD + ri * (NODE_H + GAP_Y) }; }); });
-    return { pos: pos, width: PAD * 2 + (widest - 1) * step + NODE_W, height: PAD * 2 + (rows.length - 1) * (NODE_H + GAP_Y) + NODE_H, rows: rows.length };
+    return lines;
   }
 
-  // The curve from the bottom of `from` (the thing that needs) to the top of `to` (what it needs), as an SVG path.
+  function boxHeight(name) { return wrapName(name).length * LINE_H + 36; }
+
+  // How many pairs of links cross. `lines` is one list of points per link ([{ x, y }, ...]); two links that meet at the very same
+  // point (the same box) do not count.
+  function countCrossings(lines) {
+    function orient(a, b, c) { var v = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); return v > 1e-9 ? 1 : v < -1e-9 ? -1 : 0; }
+    function same(a, b) { return Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6; }
+    function cross(a, b, c, d) {
+      if (same(a, c) || same(a, d) || same(b, c) || same(b, d)) return false;
+      var o1 = orient(a, b, c), o2 = orient(a, b, d), o3 = orient(c, d, a), o4 = orient(c, d, b);
+      return o1 * o2 < 0 && o3 * o4 < 0;
+    }
+    var n = 0;
+    for (var i = 0; i < lines.length; i++) {
+      for (var j = i + 1; j < lines.length; j++) {
+        var hit = false;
+        for (var a = 0; a + 1 < lines[i].length && !hit; a++) {
+          for (var b = 0; b + 1 < lines[j].length && !hit; b++) hit = cross(lines[i][a], lines[i][a + 1], lines[j][b], lines[j][b + 1]);
+        }
+        if (hit) n++;
+      }
+    }
+    return n;
+  }
+
+  function laneHint(list) {
+    var c = {};
+    list.forEach(function (n) { c[n.kind] = (c[n.kind] || 0) + 1; });
+    return Object.keys(c).sort(function (a, b) { return c[b] - c[a] || (KIND_RANK[a] || 99) - (KIND_RANK[b] || 99); }).slice(0, 3).map(kindLabel).join(", ");
+  }
+
+  // Least-squares x for items kept in order with a minimum gap between neighbours (pool adjacent violators).
+  function settle(want, gaps) {
+    var off = [0];
+    for (var i = 1; i < want.length; i++) off.push(off[i - 1] + gaps[i - 1]);
+    var blocks = [];
+    want.forEach(function (t, i) {
+      blocks.push({ sum: t - off[i], n: 1, from: i });
+      while (blocks.length > 1 && blocks[blocks.length - 2].sum / blocks[blocks.length - 2].n > blocks[blocks.length - 1].sum / blocks[blocks.length - 1].n) {
+        var b = blocks.pop(), a = blocks[blocks.length - 1];
+        a.sum += b.sum; a.n += b.n;
+      }
+    });
+    var out = new Array(want.length);
+    blocks.forEach(function (b) { for (var k = 0; k < b.n; k++) out[b.from + k] = b.sum / b.n + off[b.from + k]; });
+    return out;
+  }
+
+  // Where each box goes, and how every link runs. -> { pos: { id: { x, y, w, h } }, lines: { id: [text lines] }, width, height,
+  // rows, lanes: [{ title, hint, y, h }], order: [ids in reading order], edges: [{ from, to, d, points }], crossings }
+  function layout(nodes, edges) {
+    var list = nodes || [];
+    var empty = { pos: {}, lines: {}, width: 0, height: 0, rows: 0, lanes: [], order: [], edges: [], crossings: 0 };
+    if (!list.length) return empty;
+    var by = index(list);
+    var good = [], seenEdge = {};
+    (edges || []).forEach(function (e) {
+      var k = e.from + ">" + e.to;
+      if (!by[e.from] || !by[e.to] || e.from === e.to || seenEdge[k]) return;
+      seenEdge[k] = true;
+      good.push({ from: e.from, to: e.to });
+    });
+    var linked = {};
+    good.forEach(function (e) { linked[e.from] = true; linked[e.to] = true; });
+    var byName = function (a, b) { return (KIND_RANK[by[a].kind] - KIND_RANK[by[b].kind]) || by[a].name.localeCompare(by[b].name) || (a < b ? -1 : a > b ? 1 : 0); };
+
+    // ranks: one per layer that holds a linked box, the top row being the highest layer
+    var layerSet = {};
+    list.forEach(function (n) { if (linked[n.id]) layerSet[n.layer || 0] = true; });
+    var layers = Object.keys(layerSet).map(Number).sort(function (a, b) { return b - a; });
+    var rankOf = {};
+    layers.forEach(function (l, i) { rankOf[l] = i; });
+    var R = layers.length;
+    var rank = {};
+    list.forEach(function (n) { if (linked[n.id]) rank[n.id] = rankOf[n.layer || 0]; });
+
+    // each link that runs down through the ranks becomes a chain of items; a link that skips ranks gets a track item in each
+    // rank it passes. A link that does not run downward (a loop in the data) is drawn straight and takes no part in the ordering.
+    var items = {};                                      // id -> { rank, real }
+    var ranks = [];
+    for (var r = 0; r < R; r++) ranks.push([]);
+    var ids = Object.keys(linked).sort(byName);
+    ids.forEach(function (id) { items[id] = { rank: rank[id], real: true }; ranks[rank[id]].push(id); });
+    var chains = [], loose = [], segs = [];
+    good.forEach(function (e, i) {
+      var ra = rank[e.from], rb = rank[e.to];
+      if (rb <= ra) { loose.push(e); return; }
+      var chain = [e.from];
+      for (var k = ra + 1; k < rb; k++) { var d = "~" + i + ":" + k; items[d] = { rank: k, real: false }; ranks[k].push(d); chain.push(d); }
+      chain.push(e.to);
+      chains.push({ e: e, chain: chain });
+      for (var m = 0; m + 1 < chain.length; m++) segs.push([chain[m], chain[m + 1]]);
+    });
+    var up = {}, down = {};
+    Object.keys(items).forEach(function (id) { up[id] = []; down[id] = []; });
+    segs.forEach(function (sg) { down[sg[0]].push(sg[1]); up[sg[1]].push(sg[0]); });
+
+    // order of the boxes inside each rank: a few sweeps of averaging the neighbours' places, then swapping neighbours while that
+    // removes a crossing; the least crossed of a few fixed starting orders wins
+    function placeOf(order) {
+      var p = {};
+      order.forEach(function (row) { row.forEach(function (id, i) { p[id] = i; }); });
+      return p;
+    }
+    function crossBetween(order, p, r0) {                // crossings between rank r0 and r0 + 1
+      var s = [];
+      order[r0].forEach(function (u) { down[u].forEach(function (v) { s.push([p[u], p[v]]); }); });
+      var n = 0;
+      for (var i = 0; i < s.length; i++) for (var j = i + 1; j < s.length; j++) if ((s[i][0] - s[j][0]) * (s[i][1] - s[j][1]) < 0) n++;
+      return n;
+    }
+    function total(order) {
+      var p = placeOf(order), n = 0;
+      for (var r0 = 0; r0 + 1 < R; r0++) n += crossBetween(order, p, r0);
+      return n;
+    }
+    function sweep(order, ri, neighbours) {
+      var p = placeOf(order), row = order[ri], key = {};
+      row.forEach(function (id, i) {
+        var ns = neighbours[id];
+        var own = (i + 0.5) / row.length;
+        key[id] = ns.length ? ns.reduce(function (sum, n) { return sum + (p[n] + 0.5) / order[items[n].rank].length; }, 0) / ns.length : own;
+      });
+      var at = {};
+      row.forEach(function (id, i) { at[id] = i; });
+      order[ri] = row.slice().sort(function (a, b) { return key[a] - key[b] || at[a] - at[b]; });
+    }
+    function transpose(order) {
+      for (var pass = 0; pass < 8; pass++) {
+        var moved = false;
+        for (var ri = 0; ri < R; ri++) {
+          for (var i = 0; i + 1 < order[ri].length; i++) {
+            var p = placeOf(order);
+            var before = (ri > 0 ? crossBetween(order, p, ri - 1) : 0) + (ri + 1 < R ? crossBetween(order, p, ri) : 0);
+            var row = order[ri];
+            var a = row[i]; row[i] = row[i + 1]; row[i + 1] = a;
+            var q = placeOf(order);
+            var after = (ri > 0 ? crossBetween(order, q, ri - 1) : 0) + (ri + 1 < R ? crossBetween(order, q, ri) : 0);
+            if (after < before) moved = true;
+            else { a = row[i]; row[i] = row[i + 1]; row[i + 1] = a; }
+          }
+        }
+        if (!moved) break;
+      }
+    }
+    function scramble(seed, id) {                        // a fixed shuffle: the same seed always orders the same way
+      var v = seed * 2654435761;
+      for (var i = 0; i < id.length; i++) v = (Math.imul(v ^ id.charCodeAt(i), 16777619) + seed) >>> 0;
+      return v;
+    }
+    var starts = [
+      function (a, b) { return byName(a, b); },
+      function (a, b) { return -byName(a, b); }
+    ];
+    for (var seed = 1; seed <= START_SHUFFLES; seed++) starts.push((function (sd) { return function (a, b) { return scramble(sd, a) - scramble(sd, b) || (a < b ? -1 : 1); }; })(seed));
+    var best = null, bestN = Infinity;
+    starts.forEach(function (cmp) {
+      var order = ranks.map(function (row) {
+        var reals = row.filter(function (id) { return items[id].real; }).sort(cmp);
+        return reals.concat(row.filter(function (id) { return !items[id].real; }).sort());
+      });
+      var n = total(order);
+      if (n < bestN) { bestN = n; best = order.map(function (row) { return row.slice(); }); }
+      for (var it = 0; it < 16 && bestN > 0; it++) {
+        if (it % 2 === 0) for (var ri = 1; ri < R; ri++) sweep(order, ri, up);
+        else for (var rj = R - 2; rj >= 0; rj--) sweep(order, rj, down);
+        transpose(order);
+        n = total(order);
+        if (n < bestN) { bestN = n; best = order.map(function (row) { return row.slice(); }); }
+      }
+    });
+    var order = best || ranks;
+
+    // sideways places: start packed and centred, then pull each item toward its neighbours, row by row, up and down
+    function widthOf(id) { return items[id].real ? NODE_W : 0; }
+    function gapBetween(a, b) { return items[a].real && items[b].real ? GAP_X : items[a].real || items[b].real ? TRACK + 2 : TRACK; }
+    function gapsOf(row) { var g = []; for (var i = 0; i + 1 < row.length; i++) g.push((widthOf(row[i]) + widthOf(row[i + 1])) / 2 + gapBetween(row[i], row[i + 1])); return g; }
+    var cx = {};
+    var spans = order.map(function (row) { var g = gapsOf(row); return g.reduce(function (s, v) { return s + v; }, 0); });
+    var widest = spans.reduce(function (m, v) { return Math.max(m, v); }, 0);
+    order.forEach(function (row, ri) {
+      var x = (widest - spans[ri]) / 2, g = gapsOf(row);
+      row.forEach(function (id, i) { cx[id] = x; if (i < g.length) x += g[i]; });
+    });
+    function pull(ri, neighbours) {
+      var row = order[ri];
+      if (!row.length) return;
+      var want = row.map(function (id) {
+        var ns = neighbours[id];
+        return ns.length ? ns.reduce(function (sum, n) { return sum + cx[n]; }, 0) / ns.length : cx[id];
+      });
+      var xs = settle(want, gapsOf(row));
+      row.forEach(function (id, i) { cx[id] = xs[i]; });
+    }
+    var both = {};
+    Object.keys(items).forEach(function (id) { both[id] = up[id].concat(down[id]); });
+    for (var pass = 0; pass < 6; pass++) {
+      for (var ri = 1; ri < R; ri++) pull(ri, up);
+      for (var rj = R - 2; rj >= 0; rj--) pull(rj, down);
+    }
+    for (var pass2 = 0; pass2 < 3; pass2++) { for (var rk = 0; rk < R; rk++) pull(rk, both); }
+    var minX = Infinity, maxX = -Infinity;
+    Object.keys(items).forEach(function (id) { var w = widthOf(id) / 2; minX = Math.min(minX, cx[id] - w); maxX = Math.max(maxX, cx[id] + w); });
+    var shift = PAD - (isFinite(minX) ? minX : 0);
+    Object.keys(cx).forEach(function (id) { cx[id] += shift; });
+    var drawW = isFinite(maxX) ? maxX - minX + PAD * 2 : PAD * 2;
+
+    // rows and lanes, top to bottom
+    var pos = {}, lines = {}, lanes = [], rows = [], cursor = PAD;
+    function rowOf(ids2, title, hint, head, gap) {
+      var top = cursor, boxTop = top + head, h = 0;
+      ids2.forEach(function (id) { lines[id] = wrapName(by[id].name); h = Math.max(h, lines[id].length * LINE_H + 36); });
+      lanes.push({ title: title, hint: hint, y: top, h: head + h + LANE_FOOT });
+      cursor = top + head + h + LANE_FOOT + gap;
+      return { boxTop: boxTop, h: h };
+    }
+    order.forEach(function (row, ri) {
+      var reals = row.filter(function (id) { return items[id].real; }).map(function (id) { return by[id]; });
+      var layer = layers[ri];
+      rows.push(rowOf(row.filter(function (id) { return items[id].real; }), layer === 0 ? "Foundations" : "Level " + layer, laneHint(reals), LANE_HEAD, GAP_Y));
+      var info = rows[ri];
+      row.forEach(function (id) {
+        if (!items[id].real) return;
+        var h = lines[id].length * LINE_H + 36;
+        pos[id] = { x: cx[id] - NODE_W / 2, y: info.boxTop + Math.round((info.h - h) / 2), w: NODE_W, h: h };
+      });
+    });
+    var tray = list.filter(function (n) { return !linked[n.id]; }).map(function (n) { return n.id; }).sort(byName);
+    var perRow = Math.max(4, Math.min(8, Math.floor((Math.max(drawW, 5 * (NODE_W + GAP_X)) - PAD * 2 + GAP_X) / (NODE_W + GAP_X))));
+    var trayRows = [];
+    for (var t = 0; t < tray.length; t += perRow) trayRows.push(tray.slice(t, t + perRow));
+    var trayW = 0;
+    if (R && trayRows.length) cursor -= GAP_Y - TRAY_GAP;
+    trayRows.forEach(function (row, ti) {
+      var info = rowOf(row, ti === 0 ? "Not linked to anything" : "", ti === 0 ? laneHint(row.map(function (id) { return by[id]; })) : "", ti === 0 ? LANE_HEAD : 6, ti === trayRows.length - 1 ? 0 : 12);
+      row.forEach(function (id, i) {
+        var h = lines[id].length * LINE_H + 36;
+        pos[id] = { x: PAD + i * (NODE_W + GAP_X), y: info.boxTop + Math.round((info.h - h) / 2), w: NODE_W, h: h };
+      });
+      trayW = Math.max(trayW, PAD * 2 + row.length * NODE_W + (row.length - 1) * GAP_X);
+      rows.push(info);
+    });
+    var width = Math.max(drawW, trayW);
+    var height = lanes[lanes.length - 1].y + lanes[lanes.length - 1].h + PAD;
+
+    // links: separate points along the bottom of the box that needs and the top of the box that is needed, nearest neighbour first
+    var outs = {}, ins = {};
+    chains.forEach(function (c, i) {
+      (outs[c.e.from] = outs[c.e.from] || []).push({ at: i, next: c.chain[1] });
+      (ins[c.e.to] = ins[c.e.to] || []).push({ at: i, prev: c.chain[c.chain.length - 2] });
+    });
+    var portOut = {}, portIn = {};
+    function spread(group, key, into) {
+      Object.keys(group).forEach(function (id) {
+        var g = group[id].slice().sort(function (a, b) { return cx[a[key]] - cx[b[key]] || a.at - b.at; });
+        var n = g.length, span = n > 1 ? Math.min(NODE_W - 28, (n - 1) * 28) : 0, mid = pos[id].x + NODE_W / 2;
+        g.forEach(function (x, i) { into[x.at] = n > 1 ? mid - span / 2 + i * span / (n - 1) : mid; });
+      });
+    }
+    spread(outs, "next", portOut);
+    spread(ins, "prev", portIn);
+    function f(v) { return Math.round(v * 10) / 10; }
+    function curve(x0, y0, x1, y1) {
+      if (Math.abs(x0 - x1) < 0.5) return "L" + f(x1) + " " + f(y1);
+      var dy = (y1 - y0) / 2;
+      return "C" + f(x0) + " " + f(y0 + dy) + " " + f(x1) + " " + f(y1 - dy) + " " + f(x1) + " " + f(y1);
+    }
+    var outEdges = [], byKey = {};
+    chains.forEach(function (c, i) {
+      var from = pos[c.e.from], to = pos[c.e.to];
+      var x = portOut[i], y = from.y + from.h;
+      var d = "M" + f(x) + " " + f(y), pts = [{ x: x, y: y }];
+      for (var m = 1; m + 1 < c.chain.length; m++) {
+        var info = rows[items[c.chain[m]].rank], tx = cx[c.chain[m]];
+        d += curve(x, y, tx, info.boxTop) + "L" + f(tx) + " " + f(info.boxTop + info.h);
+        pts.push({ x: tx, y: info.boxTop }, { x: tx, y: info.boxTop + info.h });
+        x = tx; y = info.boxTop + info.h;
+      }
+      d += curve(x, y, portIn[i], to.y);
+      pts.push({ x: portIn[i], y: to.y });
+      byKey[c.e.from + ">" + c.e.to] = { from: c.e.from, to: c.e.to, d: d, points: pts };
+    });
+    loose.forEach(function (e) {
+      var pa = pos[e.from], pb = pos[e.to];
+      byKey[e.from + ">" + e.to] = { from: e.from, to: e.to, d: edgePath(pa, pb), points: [{ x: pa.x + pa.w / 2, y: pa.y + pa.h }, { x: pb.x + pb.w / 2, y: pb.y }] };
+    });
+    good.forEach(function (e) { if (byKey[e.from + ">" + e.to]) outEdges.push(byKey[e.from + ">" + e.to]); });
+    var reading = [];
+    order.forEach(function (row) { row.forEach(function (id) { if (items[id].real) reading.push(id); }); });
+    tray.forEach(function (id) { reading.push(id); });
+    return {
+      pos: pos, lines: lines, width: width, height: height, rows: lanes.length, lanes: lanes, order: reading, edges: outEdges,
+      crossings: countCrossings(outEdges.map(function (e) { return e.points; }))
+    };
+  }
+
+  // A straight-down curve from the bottom of `from` (the thing that needs) to the top of `to` (what it needs), as an SVG path.
+  // Used for a link the ordering could not place (one that runs upward, which only a loop in the data makes).
   function edgePath(pa, pb) {
-    var x1 = pa.x + NODE_W / 2, y1 = pa.y + NODE_H, x2 = pb.x + NODE_W / 2, y2 = pb.y;
+    var x1 = pa.x + (pa.w || NODE_W) / 2, y1 = pa.y + (pa.h || NODE_H), x2 = pb.x + (pb.w || NODE_W) / 2, y2 = pb.y;
     var dy = Math.max(30, Math.abs(y2 - y1) / 2);
     var sign = y2 >= y1 ? 1 : -1;
     return "M" + x1 + " " + y1 + " C" + x1 + " " + (y1 + sign * dy) + " " + x2 + " " + (y2 - sign * dy) + " " + x2 + " " + y2;
   }
 
-  // A name that fits a box: cut at 22 characters with an ellipsis.
-  function fitName(name) {
-    var s = String(name || "");
-    return s.length > 22 ? s.slice(0, 21) + "…" : s;
+  // ---- what to light up -----------------------------------------------------------------------------------------
+
+  // The boxes to light for `id`: what it needs and what needs it. `through` follows the links all the way (the blast radius);
+  // without it only the boxes it is directly linked to. -> { needs: { id: true }, dependents: { id: true } }
+  function neighbours(nodes, id, through) {
+    var adj = adjacency(nodes), needs = {}, dependents = {};
+    if (!adj.deps[id]) return { needs: needs, dependents: dependents };
+    if (through) {
+      reach(adj.deps, id).forEach(function (x) { needs[x.id] = true; });
+      reach(adj.dependents, id).forEach(function (x) { dependents[x.id] = true; });
+    } else {
+      adj.deps[id].forEach(function (x) { needs[x] = true; });
+      adj.dependents[id].forEach(function (x) { dependents[x] = true; });
+    }
+    return { needs: needs, dependents: dependents };
+  }
+
+  // Which colour a link takes while `id` is picked: "need" (on a path to something it needs), "dependent" (on a path from
+  // something that needs it) or "" (not part of it, so it fades). Without `through`, only links that touch `id` count.
+  function edgeRole(e, id, sets, through) {
+    if (!through && e.from !== id && e.to !== id) return "";
+    var inDep = function (x) { return x === id || sets.dependents[x]; }, inNeed = function (x) { return x === id || sets.needs[x]; };
+    if (inDep(e.from) && inDep(e.to)) return "dependent";
+    if (inNeed(e.from) && inNeed(e.to)) return "need";
+    return "";
   }
 
   // ---- editing the links -----------------------------------------------------------------------------------------
@@ -347,7 +651,7 @@
   var api = {
     KINDS: KINDS, NODE_W: NODE_W, NODE_H: NODE_H, kindLabel: kindLabel, kindOne: kindOne, index: index, adjacency: adjacency, reach: reach,
     radius: radius, whatBreaksText: whatBreaksText, incidentText: incidentText, stateModel: stateModel, banner: banner, downReport: downReport,
-    biggestRadius: biggestRadius, visible: visible, matches: matches, kindCounts: kindCounts, layout: layout, edgePath: edgePath, fitName: fitName,
+    biggestRadius: biggestRadius, visible: visible, matches: matches, kindCounts: kindCounts, layout: layout, edgePath: edgePath, wrapName: wrapName, boxHeight: boxHeight, countCrossings: countCrossings, neighbours: neighbours, edgeRole: edgeRole,
     linkChoices: linkChoices, setLink: setLink, sameList: sameList, planText: planText, stateWord: stateWord, gapsText: gapsText,
     weakestModel: weakestModel, errorText: errorText
   };

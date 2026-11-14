@@ -18,12 +18,12 @@
   var API = "https://api.barnyard.site";
   var POLL_MS = 60000;
   var SVG_NS = "http://www.w3.org/2000/svg";
-  var MIN_K = 0.2, MAX_K = 2.5;
+  var MIN_K = 0.2, MAX_K = 2.5, READABLE_K = 0.55;
 
   // ---- data -----------------------------------------------------------------------------------------------------
 
   var model = {
-    state: "loading", map: null, selected: null, sim: false, hidden: {}, q: "", flash: null, busy: false,
+    state: "loading", map: null, selected: null, hover: null, sim: false, hidden: {}, q: "", flash: null, busy: false,
     view: { x: 0, y: 0, k: 1 }, fit: true, mode: "detail", draft: null, linkQ: "", plan: null, stamp: 0
   };
 
@@ -142,12 +142,13 @@
     }
 
     root.appendChild(filterBar());
+    root.appendChild(legend());
     var grid = h("div", "mp-grid");
     grid.appendChild(stage());
     grid.appendChild(panel());
     root.appendChild(grid);
     root.appendChild(listsSection());
-    if (model.fit) { fitView(); model.fit = false; }
+    if (model.fit) { fitView(true); model.fit = false; }
     applyView();
     // A link from the Overview tile (map.html#as_...) opens with that box selected, once.
     if (!model.hashDone) {
@@ -184,44 +185,104 @@
 
   // ---- the diagram ----------------------------------------------------------------------------------------------
 
-  var ui = { svg: null, world: null, nodes: {}, edges: [], layout: null, drag: null };
+  var ui = { svg: null, world: null, nodes: {}, edges: [], layout: null, drag: null, edgeLayer: null };
+
+  // The key under the filters: how to read the lines, and what pointing at a box and picking it do.
+  function legend() {
+    var box = h("div", "mp-legend");
+    [["need", "What the box needs"], ["aff", "What needs the box"]].forEach(function (l) {
+      var item = h("span", "mp-legend-item");
+      var sw = s("svg", { width: "30", height: "10", viewBox: "0 0 30 10", "aria-hidden": "true" });
+      sw.appendChild(s("path", { d: "M1 5 H29" }, "mp-edge " + l[0]));
+      item.appendChild(sw);
+      item.appendChild(h("span", null, l[1]));
+      box.appendChild(item);
+    });
+    box.appendChild(h("span", "dim", "Point at a box to light up what it is linked to. Click it to see everything that breaks if it goes down."));
+    return box;
+  }
+
+  // A status shape that does not rely on colour: circle = up, triangle = down, diamond = affected, ring = not monitored.
+  function statusShape(tone) {
+    if (tone === "alert") return s("path", { d: "M14 11.5 L19.5 22 L8.5 22 Z" }, "mp-dot");
+    if (tone === "attn") return s("path", { d: "M14 11.5 L19.5 17 L14 22.5 L8.5 17 Z" }, "mp-dot");
+    if (tone === "ok") return s("circle", { cx: "14", cy: "17", r: "5" }, "mp-dot");
+    return s("circle", { cx: "14", cy: "17", r: "4.2" }, "mp-dot ring");
+  }
+
+  // The layout takes a moment to work out, and the page redraws every minute, so it is kept until the boxes or links change.
+  var layoutMemo = { key: "", value: null };
+  function layoutFor(vis) {
+    var key = vis.nodes.map(function (n) { return n.id + ":" + n.layer + ":" + n.kind + ":" + n.name; }).join("|") + "#" + vis.edges.map(function (e) { return e.from + ">" + e.to; }).join(",");
+    if (layoutMemo.key !== key) layoutMemo = { key: key, value: M.layout(vis.nodes, vis.edges) };
+    return layoutMemo.value;
+  }
 
   function stage() {
     var vis = M.visible(model.map, { hidden: model.hidden });
-    var L = M.layout(vis.nodes, vis.edges);
+    var L = layoutFor(vis);
     ui.layout = L;
     var box = h("div", "mp-stage");
     box.tabIndex = 0;
     box.setAttribute("role", "group");
-    box.setAttribute("aria-label", "Dependency diagram. Arrow of each line points at what the box above needs. Press plus or minus to zoom, zero to fit.");
+    box.setAttribute("aria-label", "Dependency diagram. Each line runs from a box down to something it needs. Press plus or minus to zoom, zero to fit, Escape to clear the pick.");
     var svg = s("svg", { "class": "mp-svg", width: "100%", height: "100%" });
     var defs = s("defs", {});
-    var marker = s("marker", { id: "mp-arrow", viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
-    marker.appendChild(s("path", { d: "M0 0 L10 5 L0 10 z" }, "mp-arrowhead"));
-    defs.appendChild(marker);
+    [["mp-arrow", "mp-arrowhead"], ["mp-arrow-need", "mp-arrowhead need"], ["mp-arrow-aff", "mp-arrowhead aff"], ["mp-arrow-hit", "mp-arrowhead hit"]].forEach(function (m) {
+      var marker = s("marker", { id: m[0], viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "6", markerHeight: "6", orient: "auto-start-reverse" });
+      marker.appendChild(s("path", { d: "M0 0 L10 5 L0 10 z" }, m[1]));
+      defs.appendChild(marker);
+    });
     svg.appendChild(defs);
     svg.appendChild(s("rect", { x: "-100000", y: "-100000", width: "200000", height: "200000" }, "mp-bg"));
     var world = s("g", {});
     svg.appendChild(world);
     ui.svg = svg; ui.world = world; ui.nodes = {}; ui.edges = [];
+    model.hover = null;                                  // the old boxes are gone, so nothing is pointed at
 
-    vis.edges.forEach(function (e) {
-      var p = s("path", { d: M.edgePath(L.pos[e.from], L.pos[e.to]), "marker-end": "url(#mp-arrow)" }, "mp-edge");
-      world.appendChild(p);
+    // lanes first, so they sit under everything: a faint band and a quiet label for each layer
+    L.lanes.forEach(function (lane) {
+      world.appendChild(s("rect", { x: "10", y: lane.y, width: Math.max(0, L.width - 20), height: lane.h, rx: "10" }, "mp-lane"));
+      if (!lane.title) return;
+      var t = s("text", { x: "24", y: lane.y + 17 }, "mp-lane-title");
+      t.textContent = lane.title;
+      if (lane.hint) { var hint = s("tspan", {}, "mp-lane-hint"); hint.textContent = "   " + lane.hint; t.appendChild(hint); }
+      world.appendChild(t);
+    });
+    var edgeLayer = s("g", {});
+    world.appendChild(edgeLayer);
+    ui.edgeLayer = edgeLayer;
+    L.edges.forEach(function (e) {
+      var p = s("path", { d: e.d, "marker-end": "url(#mp-arrow)" }, "mp-edge");
+      edgeLayer.appendChild(p);
       ui.edges.push({ el: p, from: e.from, to: e.to });
     });
-    vis.nodes.forEach(function (n) {
-      var pos = L.pos[n.id];
+    var byId = M.index(vis.nodes);
+    L.order.forEach(function (id) {
+      var n = byId[id], pos = L.pos[id], lines = L.lines[id];
       var g = s("g", { transform: "translate(" + pos.x + " " + pos.y + ")", tabindex: "0", role: "button" }, "mp-node");
-      g.appendChild(s("rect", { width: M.NODE_W, height: M.NODE_H, rx: "9" }, "mp-box"));
-      var t1 = s("text", { x: "28", y: "21" }, "mp-name"); t1.textContent = M.fitName(n.name); g.appendChild(t1);
-      var t2 = s("text", { x: "28", y: "38" }, "mp-kindline");
-      t2.textContent = M.kindOne(n.kind) + (n.dependentsCount ? " · " + n.dependentsCount + " depend on it" : "");
-      g.appendChild(t2);
-      g.appendChild(s("circle", { cx: "14", cy: "18", r: "5" }, "mp-dot"));
-      var title = s("title", {}); title.textContent = n.name; g.appendChild(title);
+      g.appendChild(s("rect", { width: pos.w, height: pos.h, rx: "9" }, "mp-box"));
+      var name = s("text", { x: "28", y: "19" }, "mp-name");
+      lines.forEach(function (line, i) {
+        var ts = s("tspan", { x: "28", dy: i ? "14" : "0" });
+        ts.textContent = line;
+        name.appendChild(ts);
+      });
+      g.appendChild(name);
+      var kind = s("text", { x: "28", y: 19 + (lines.length - 1) * 14 + 17 }, "mp-kindline");
+      kind.textContent = M.kindOne(n.kind) + (n.dependentsCount ? " · " + n.dependentsCount + " depend on it" : "");
+      g.appendChild(kind);
+      g.appendChild(statusShape(M.stateModel(n).tone));
+      g.appendChild(s("title", {}));
       g.addEventListener("click", function (ev) { ev.stopPropagation(); select(n.id); });
-      g.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(n.id); } });
+      g.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(n.id); }
+        else if (ev.key === "Escape") { ev.preventDefault(); select(null); }
+      });
+      g.addEventListener("mouseenter", function () { setHover(n.id); });
+      g.addEventListener("mouseleave", function () { setHover(null); });
+      g.addEventListener("focus", function () { setHover(n.id); });
+      g.addEventListener("blur", function () { setHover(null); });
       world.appendChild(g);
       ui.nodes[n.id] = g;
     });
@@ -231,41 +292,53 @@
     return box;
   }
 
-  // Classes on the boxes and links: the selection, what it needs, what breaks with it, a search match, the live state.
+  function setHover(id) {
+    if (model.hover === id) return;
+    model.hover = id;
+    drawNodes();
+  }
+
+  // Classes on the boxes and links. Picking a box (click, Enter) lights its whole blast radius: everything it needs in the "needs"
+  // colour and everything that depends on it, through any number of steps, in the "dependents" colour. Only pointing at or tabbing
+  // to a box lights just its direct links. Everything else fades.
   function drawNodes() {
     if (!ui.svg) return;
     var map = model.map;
-    var rad = model.selected ? M.radius(map.nodes, model.selected) : null;
-    var aff = {}, need = {};
-    if (rad) { rad.affected.forEach(function (x) { aff[x.id] = true; }); rad.needs.forEach(function (x) { need[x.id] = true; }); }
+    var hover = model.hover && !model.sim && model.hover !== model.selected && nodeById(model.hover) ? model.hover : null;
+    var focus = hover || model.selected;
+    var through = !hover;
+    var sets = focus ? M.neighbours(map.nodes, focus, through) : null;
+    var simmed = model.sim && !hover;
     map.nodes.forEach(function (n) {
       var g = ui.nodes[n.id];
       if (!g) return;
-      var tone = M.stateModel(n).tone;
-      var cls = "mp-node tone-" + tone;
-      if (rad) {
-        if (n.id === model.selected) cls += model.sim ? " sel simdown" : " sel";
-        else if (aff[n.id]) cls += model.sim ? " hit" : " aff";
-        else if (need[n.id]) cls += " need";
+      var sm = M.stateModel(n);
+      var cls = "mp-node tone-" + sm.tone;
+      if (focus) {
+        if (n.id === focus) cls += simmed ? " sel simdown" : " sel";
+        else if (sets.dependents[n.id]) cls += simmed ? " hit" : " aff";
+        else if (sets.needs[n.id]) cls += " need";
         else cls += " faded";
       }
       if (M.matches(n, model.q)) cls += " match";
       g.setAttribute("class", cls);
-      var sm = M.stateModel(n);
-      g.setAttribute("aria-label", n.name + ", " + M.kindOne(n.kind) + ", " + sm.label + (n.dependentsCount ? ", " + n.dependentsCount + " depend on it" : ""));
+      g.setAttribute("aria-label", n.name + ", " + M.kindOne(n.kind) + ", " + sm.label + (n.needsCount ? ", needs " + n.needsCount : "") + (n.dependentsCount ? ", " + n.dependentsCount + " depend on it" : ""));
       g.setAttribute("aria-pressed", n.id === model.selected ? "true" : "false");
+      g.lastChild.textContent = n.name + " (" + M.kindOne(n.kind) + ", " + sm.label + ")";
     });
+    var raised = [];
     ui.edges.forEach(function (e) {
-      var cls = "mp-edge";
-      if (rad) {
-        var s0 = model.selected;
-        var inHit = function (id) { return id === s0 || aff[id]; }, inNeed = function (id) { return id === s0 || need[id]; };
-        if (inHit(e.from) && inHit(e.to)) cls += model.sim ? " hit" : " aff";
-        else if (inNeed(e.from) && inNeed(e.to)) cls += " need";
+      var cls = "mp-edge", mark = "mp-arrow";
+      if (focus) {
+        var role = M.edgeRole({ from: e.from, to: e.to }, focus, sets, through);
+        if (role === "dependent") { cls += simmed ? " hit" : " aff"; mark = simmed ? "mp-arrow-hit" : "mp-arrow-aff"; raised.push(e.el); }
+        else if (role === "need") { cls += " need"; mark = "mp-arrow-need"; raised.push(e.el); }
         else cls += " faded";
       }
       e.el.setAttribute("class", cls);
+      e.el.setAttribute("marker-end", "url(#" + mark + ")");
     });
+    raised.forEach(function (el) { ui.edgeLayer.appendChild(el); });          // the lit links on top of the faded ones
   }
 
   function wirePanZoom(box, svg) {
@@ -294,6 +367,7 @@
     svg.addEventListener("pointerup", end);
     svg.addEventListener("pointercancel", function () { ui.drag = null; });
     box.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && model.selected) { ev.preventDefault(); select(null); return; }
       if (ev.target !== box) return;
       if (ev.key === "+" || ev.key === "=") { ev.preventDefault(); zoomBy(1.25); }
       else if (ev.key === "-") { ev.preventDefault(); zoomBy(1 / 1.25); }
@@ -308,10 +382,13 @@
     var r = ui.svg ? ui.svg.getBoundingClientRect() : { width: 800, height: 520 };
     return { w: r.width || 800, h: r.height || 520 };
   }
-  function fitView() {
+  // Shows the whole diagram. On a narrow stage (a phone) the whole diagram is too small to read, so when the page first opens
+  // (`readable`) it starts at a readable size at the top left instead, and Fit still shows everything.
+  function fitView(readable) {
     var L = ui.layout, sz = stageSize();
     if (!L || !L.width) { model.view = { x: 0, y: 0, k: 1 }; return; }
     var k = Math.max(MIN_K, Math.min(1.2, sz.w / L.width, sz.h / L.height));
+    if (readable && sz.w < 700 && k < READABLE_K) { model.view = { k: READABLE_K, x: 8, y: 8 }; return; }
     model.view = { k: k, x: (sz.w - L.width * k) / 2, y: (sz.h - L.height * k) / 2 };
   }
   function zoomAt(factor, clientX, clientY) {
@@ -373,11 +450,11 @@
     }
     p.appendChild(h("h3", "mp-sub", "Reading the map"));
     var key = h("ul", "mp-key");
-    [["ok", "Up"], ["alert", "Down"], ["attn", "Affected: needs something that is down"], ["dim", "Not monitored or unknown"]].forEach(function (k) {
+    [["ok", "Up (circle)"], ["alert", "Down (triangle)"], ["attn", "Affected: needs something that is down (diamond)"], ["dim", "Not monitored or unknown (ring)"]].forEach(function (k) {
       var li = h("li"); li.appendChild(h("span", "mp-swatch " + k[0])); li.appendChild(h("span", null, k[1])); key.appendChild(li);
     });
     p.appendChild(key);
-    p.appendChild(h("p", "dim", "A line runs from a box to what it needs; the arrow points at the thing it needs."));
+    p.appendChild(h("p", "dim", "A line runs from a box down to what it needs; the arrow points at the thing it needs. Each row is a layer: foundations at the bottom, the things built on them above."));
   }
 
   function row(label, value) {
