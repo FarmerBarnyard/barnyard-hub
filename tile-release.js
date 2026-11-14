@@ -57,19 +57,21 @@
     function paint(st) {
       clear(body);
       var m = model(st, Date.now());
-      body.appendChild(h("p", "tl-sub", m.text));
+      var word = { ok: "All green", attn: "To look at", alert: "Needs fixing", off: "Switched off", unset: "Not set up", waiting: "Waiting" }[m.state] || "";
+      body.appendChild(K.summaryRow(m.tone, word, m.text));
       if (m.rows.length) {
+        body.appendChild(h("p", "tl-sub", "Repositories to look at"));
         var ul = h("ul", "tl-list");
         m.rows.forEach(function (r) {
           var li = h("li");
           li.appendChild(h("b", null, r.label));
-          li.appendChild(h("span", "dim", " " + r.line + " "));
           li.appendChild(chip(r.tone === "alert" ? "Fix first" : "Look", r.tone));
+          li.appendChild(h("span", "dim tl-li-note", r.line));
           ul.appendChild(li);
         });
         body.appendChild(ul);
       }
-      if (m.checked) body.appendChild(h("p", "dim small", m.checked));
+      if (m.checked) body.appendChild(h("p", "dim", m.checked));
     }
     function load() {
       return K.call("GET", "/release/status").then(function (r) {
