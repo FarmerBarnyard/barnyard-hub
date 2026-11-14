@@ -187,3 +187,21 @@ textarea.cal-input { resize: vertical; }
 .plan-slip-list { display: grid; gap: 4px; }
 .plan-slip { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 @media (max-width: 720px) { .plan-time { min-width: 0; } .plan-actions { margin-left: 0; } }
+
+/* Automatic entries (the server's Calendar sync): the status line and the list under the calendar */
+.cal-auto { margin-top: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.cal-auto-sum { cursor: pointer; padding: 10px 14px; font-size: 13px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+.cal-auto-sum:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cal-auto-body { display: grid; gap: 10px; padding: 4px 14px 14px; }
+.cal-auto-body > p { margin: 0; font-size: 13px; }
+.cal-auto-preview { display: grid; gap: 4px; padding: 8px 10px; border: 1px dashed var(--accent); border-radius: 8px; }
+.cal-auto-pvh { margin: 0; font-weight: 600; font-size: 13px; }
+.cal-auto-pv { margin: 0; padding-left: 20px; display: grid; gap: 2px; font-size: 13px; }
+.cal-auto-list { display: grid; }
+.cal-auto-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.cal-auto-row:first-child { border-top: 0; }
+.cal-auto-row .cal-main { flex: 1 1 200px; min-width: 0; text-align: left; }
+.cal-auto-when { min-width: 90px; font-variant-numeric: tabular-nums; }
+.cal-auto-note { font-size: 12px; }
+.cal-auto-chip { border-style: dashed; }
+.cal-auto-row.is-pinned .cal-main { font-style: italic; }

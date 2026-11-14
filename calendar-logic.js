@@ -142,6 +142,81 @@
     return { type: type, id: o.id, label: o.label, kind: o.kind || "", state: o.state || "known", due: o.due, time: o.time || "", endTime: o.endTime || "", allDay: !!o.allDay, ref: o.ref };
   }
 
+  // ---- automatic entries (the Worker's Calendar sync, calendar-autosync.js) ------------------------------
+  //
+  // The Worker writes an event for each renewal, milestone, Ops item or step of the owner's with a due date, and for each dated to-do
+  // (`auto: true`, a stable `source` key such as "ops:it_ab12cd34", "ops:it_ab12cd34:2" or "planner:td_0a1b2c3d", a `link` back to
+  // the source, and `pinned` when the owner has told automation to leave it alone). This page already shows renewals, Ops items and
+  // to-dos from their own sources, so an automatic event is hidden from the days while its source is shown on the same date (no
+  // double entry); it is listed under "Automatic entries" either way. Steps have no entry of their own, so theirs always show.
+
+  function isAuto(ev) { return !!(ev && ev.auto === true && typeof ev.source === "string" && ev.source); }
+
+  function autoCovered(ev, data) {
+    var s = ev.source;
+    if (s.indexOf("planner:") === 0) {
+      var id = s.slice(8);
+      return (data.tasks || []).some(function (t) { return t.id === id && t.status === "open" && t.due === ev.startDate; });
+    }
+    var m = /^ops:(it_[a-z0-9]+)$/.exec(s);
+    if (!m) return false;
+    return (data.renewals || []).some(function (r) { return r.id === m[1] && r.due === ev.startDate && r.state !== "auto"; }) ||
+      (data.dueItems || []).some(function (d) { return d.id === m[1] && d.due === ev.startDate; });
+  }
+
+  // The events to draw on the days: the owner's own, and the automatic ones whose source is not already drawn.
+  function visibleEvents(data) {
+    return (data.events || []).filter(function (ev) { return !(isAuto(ev) && autoCovered(ev, data)); });
+  }
+
+  // The automatic events, soonest first (for the list under the calendar).
+  function autoEntries(events) {
+    return (events || []).filter(isAuto).sort(function (a, b) { return a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : a.source < b.source ? -1 : 1; });
+  }
+
+  // Where an automatic entry's source is, as a page address inside the hub (never an outside address).
+  function autoHref(ev) {
+    var l = ev && typeof ev.link === "string" ? ev.link : "";
+    return /^(ops|calendar)\.html(#[A-Za-z0-9_]{1,40})?$/.test(l) ? l : "";
+  }
+
+  function agoText(ms, now) {
+    var s = Math.max(0, Math.round((now - ms) / 1000));
+    if (s < 60) return "just now";
+    if (s < 3600) return Math.round(s / 60) + " min ago";
+    if (s < 86400) return Math.round(s / 3600) + " h ago";
+    return Math.round(s / 86400) + " d ago";
+  }
+
+  var OUTLOOK_WRITE_STATE = {
+    not_setup: "", disabled: "Outlook write is off", ready: "", ok: "Outlook is in step", permission_not_granted: "Outlook: no write permission yet",
+    mailbox_not_found: "Outlook: mailbox not found", auth_failed: "Outlook: sign-in failed", throttled: "Outlook: busy, will retry",
+    unavailable: "Outlook: couldn’t be reached", list_failed: "Outlook: couldn’t be read, nothing written"
+  };
+
+  // The one small status line: the switch, the last run and what it did. `mode` is "on" | "dry" | "off" (from GET /planner/all), `status`
+  // the last run the Worker recorded (or null), `count` how many automatic entries there are.
+  function autoLine(mode, status, count, now) {
+    if (mode !== "on" && mode !== "dry" && mode !== "off") return "";
+    var parts = [];
+    if (mode === "off") parts.push("Automatic entries are off on the server");
+    else if (mode === "dry") parts.push("Automatic entries: dry run, nothing is written");
+    else parts.push("Automatic entries: on");
+    if (status && Number.isFinite(status.at)) {
+      parts.push((status.dryRun ? "last checked " : "last sync ") + agoText(status.at, now));
+      if (status.error) parts.push(status.error === "empty_board_read" ? "the last run was refused because the Ops board read came back empty" : "the last run couldn’t read the Ops board");
+      else if (status.counts) {
+        var c = status.counts;
+        if (status.dryRun) parts.push("would add " + (c.wouldCreate || 0) + ", move " + (c.wouldMove || 0) + ", clear " + (c.wouldClear || 0));
+        else if ((c.created || 0) + (c.moved || 0) + (c.cleared || 0)) parts.push("added " + (c.created || 0) + ", moved " + (c.moved || 0) + ", cleared " + (c.cleared || 0));
+      }
+      var o = status.outlook && OUTLOOK_WRITE_STATE[status.outlook.state];
+      if (o) parts.push(o);
+    } else if (mode !== "off") parts.push("no run yet");
+    parts.push(count + (count === 1 ? " entry" : " entries"));
+    return parts.join(" · ");
+  }
+
   // Everything that falls on a date between `from` and `to`, as { "2026-10-27": [entry, ...] }. `data` is
   // { renewals, dueItems, tasks, events }; `kind` filters renewals only. Open to-dos are placed on their date;
   // ticked ones are left out (the To-dos view lists them).
@@ -154,7 +229,7 @@
       if (t.status !== "open" || !isYmd(t.due)) return;
       put(t.due, entryOf("task", { id: t.id, label: t.title, due: t.due, time: t.time, ref: t }));
     });
-    (data.events || []).forEach(function (ev) {
+    visibleEvents(data).forEach(function (ev) {
       eventDays(ev, from, to).forEach(function (day) {
         put(day.date, entryOf("event", { id: ev.id, label: ev.title, due: day.date, time: day.startTime, endTime: day.endTime, allDay: day.allDay, ref: { event: ev, day: day } }));
       });
@@ -433,7 +508,7 @@
       alarm("-P6DT15H", r.label + " runs out in 7 days");
       lines.push("END:VEVENT");
     });
-    (data.events || []).forEach(function (ev) {
+    visibleEvents(data).forEach(function (ev) {
       lines.push("BEGIN:VEVENT");
       lines.push("UID:event-" + String(ev.id).replace(/[^A-Za-z0-9_-]/g, "-") + "@barnyard.site");
       lines.push("DTSTAMP:" + icsStamp(nowMs));
@@ -687,7 +762,8 @@
     urgency: urgency, entriesByDate: entriesByDate, sortInDay: sortInDay, filterKind: filterKind, agenda: agenda, upcoming: upcoming, renewalGroups: renewalGroups,
     groupTasks: groupTasks, widgetTasks: widgetTasks, taskDueText: taskDueText, dueCount: dueCount, monthGrid: monthGrid, weekDays: weekDays,
     icsEscape: icsEscape, icsFold: icsFold, buildIcs: buildIcs, buildDetails: buildDetails, renewalBody: renewalBody, parseRef: parseRef, refHref: refHref,
-    taskBody: taskBody, eventBody: eventBody, parseQuick: parseQuick, googleEntries: googleEntries, outlookEntries: outlookEntries, m365Entries: m365Entries, m365State: m365State
+    taskBody: taskBody, eventBody: eventBody, parseQuick: parseQuick, googleEntries: googleEntries, outlookEntries: outlookEntries, m365Entries: m365Entries, m365State: m365State,
+    isAuto: isAuto, autoCovered: autoCovered, visibleEvents: visibleEvents, autoEntries: autoEntries, autoHref: autoHref, autoLine: autoLine, agoText: agoText
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

@@ -140,7 +140,7 @@
     for (var i = 0; i < horizon; i++) { d = L.addDays(today, i); dates.push(d); }
 
     // what is on the calendar
-    var entries = L.entriesByDate({ renewals: [], dueItems: [], tasks: [], events: input.events || [], google: input.google || [], outlook: input.outlook || [] }, from, to);
+    var entries = L.entriesByDate({ renewals: [], dueItems: [], tasks: [], events: (input.events || []).filter(function (e) { return !e.auto; }), google: input.google || [], outlook: input.outlook || [] }, from, to);
     var tasks = (input.tasks || []).filter(function (t) { return t && t.status === "open"; });
     var taskById = {};
     (input.tasks || []).forEach(function (t) { taskById[t.id] = t; });
