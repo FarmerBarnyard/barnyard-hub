@@ -72,6 +72,33 @@
 
   function sameTiles(a, b) { return JSON.stringify(Layout.toBoard(a)) === JSON.stringify(Layout.toBoard(b)); }
 
+  // Tiles that size themselves to their content (display only: nothing here is saved, and Customise shows the saved sizes).
+  // `auto` maps a tile id to the rows its content needs at this width. A tile never loses content to a scroll: if it needs more rows
+  // than it has it grows (up to its own maximum). A tile still at its standard height (the catalogue's) also shrinks to fit, so a
+  // short list does not sit in a tall empty box; one the owner resized by hand is never made smaller. `fixed(id)` opts a tile out
+  // (one that works out its own contents from its height). The result is settled again so the tiles below move with it.
+  function standardHeight(t) { var s = Layout.spec(t.id); return !!s && t.h === s.h; }
+  function withAutoHeights(tiles, cols, auto, fixed) {
+    if (!auto) return tiles;
+    var changed = false;
+    var next = tiles.map(function (t) {
+      var rows = auto[t.id];
+      if (!rows || (fixed && fixed(t.id))) return t;
+      var s = Layout.spec(t.id) || { minH: 1, maxH: 40 };
+      var want = Math.max(s.minH, Math.min(s.maxH, rows));
+      if (want < t.h && !standardHeight(t)) return t;
+      if (want === t.h) return t;
+      changed = true;
+      return { id: t.id, x: t.x, y: t.y, w: t.w, h: want };
+    });
+    if (!changed) return tiles;
+    if (cols <= 1) {
+      var y = 0;
+      return next.slice().sort(function (a, b) { return a.y - b.y || a.x - b.x; }).map(function (t) { var o = { id: t.id, x: 0, y: y, w: 1, h: t.h }; y += t.h; return o; });
+    }
+    return Layout.settle(next, null, cols);
+  }
+
   // The tiles to draw for a layout: `tiles` as the layout holds them, plus the default-on tiles (`ids`, in order) put at the top
   // unless `seen` says this layout (`key`) was saved from Customise since they existed, in which case a missing one is hidden on purpose.
   function withDefaultTiles(tiles, seen, key, ids) {
@@ -79,7 +106,7 @@
     return ids && ids.length ? Layout.addAtTop(tiles, ids) : tiles;
   }
 
-  var helpers = { columnsFor: columnsFor, stepsFor: stepsFor, cellAt: cellAt, sizeFrom: sizeFrom, rowsFor: rowsFor, keyIntent: keyIntent, mergeList: mergeList, sameTiles: sameTiles, withDefaultTiles: withDefaultTiles, WIDE_MIN: WIDE_MIN, MID_MIN: MID_MIN };
+  var helpers = { columnsFor: columnsFor, stepsFor: stepsFor, cellAt: cellAt, sizeFrom: sizeFrom, rowsFor: rowsFor, keyIntent: keyIntent, mergeList: mergeList, sameTiles: sameTiles, withDefaultTiles: withDefaultTiles, withAutoHeights: withAutoHeights, WIDE_MIN: WIDE_MIN, MID_MIN: MID_MIN };
 
   if (typeof document === "undefined") {
     if (typeof module !== "undefined" && module.exports) module.exports = helpers;
@@ -111,9 +138,10 @@
     var S = {
       editing: false, cols: 12, working: null, start: null, picked: null, preview: null, drag: null,
       panel: false, confirmReset: false, menu: null, focusId: null, barFocus: null,
-      cls: Layout.deviceClass(root.innerWidth), layoutId: null, layouts: false, renaming: null, confirmDelete: null, layoutMsg: ""
+      cls: Layout.deviceClass(root.innerWidth), layoutId: null, layouts: false, renaming: null, confirmDelete: null, layoutMsg: "",
+      auto: {}   // columns -> { tile id -> rows its content needs }: what the tiles measured themselves at (display only)
     };
-    var bar = null, live = null, panelEl = null, ghost = null, resizeTimer = null;
+    var bar = null, live = null, panelEl = null, ghost = null, resizeTimer = null, autoTimer = null, autoBudget = { at: 0, n: 0 };
 
     function say(text) { if (opts.say) opts.say(text); }
     function title(id) { return titles[id] || (Layout.spec(id) && Layout.spec(id).title) || id; }
@@ -154,6 +182,46 @@
       e.mounted = true;
       try { e.inst = e.desc.render(e.body, { board: true }) || null; }
       catch (err) { e.body.appendChild(el("p", "dim", "This tile could not be drawn.")); }
+      // The tile's content is as tall as it is (it is not stretched to the tile), so its size changing means its content, or the room
+      // it has, changed: measure again.
+      if (typeof root.ResizeObserver === "function") new root.ResizeObserver(function () { scheduleAuto(); }).observe(e.body);
+    }
+
+    // ---- tiles that size themselves to their content ----
+    //
+    // Each tile's content is laid out at its natural height (tiles.css), so the height of the first thing in it, plus the tile's border,
+    // is how much room it needs. That becomes a number of rows per column count in S.auto and render() applies it (withAutoHeights).
+    // Only done outside Customise, which shows and edits the sizes as saved. A tile still loading (an empty body) is not measured yet.
+
+    function measureAuto() {
+      if (S.editing || S.drag) return false;
+      var map = S.auto[S.cols] || (S.auto[S.cols] = {}), changed = false;
+      var cs = root.getComputedStyle(box), rowPx = parseFloat(cs.getPropertyValue("--board-row")) || ROW_FALLBACK, gap = parseFloat(cs.rowGap) || 0;
+      Object.keys(ext).forEach(function (id) {
+        var e = ext[id];
+        if (!e.mounted || e.node.hidden) return;
+        var kid = e.body.firstElementChild;
+        if (!kid) return;
+        var inner = kid.querySelector(".tl-body");
+        if (inner && !inner.firstChild) return;
+        var px = kid.getBoundingClientRect().height + (e.node.offsetHeight - e.node.clientHeight);
+        if (!(px > 8)) return;
+        var rows = rowsFor(px, rowPx, gap);
+        if (map[id] !== rows) { map[id] = rows; changed = true; }
+      });
+      return changed;
+    }
+
+    function scheduleAuto() {
+      if (autoTimer) return;
+      autoTimer = root.setTimeout(function () {
+        autoTimer = null;
+        // A guard against two things pushing each other back and forth: at most 30 passes that change something per 5 seconds.
+        var now = Date.now();
+        if (now - autoBudget.at > 5000) autoBudget = { at: now, n: 0 };
+        if (autoBudget.n >= 30) return;
+        if (measureAuto()) { autoBudget.n++; render(true); }
+      }, 60);
     }
 
     function extraIds() {
@@ -205,6 +273,9 @@
       var base = S.editing ? (S.preview || S.working) : saved();
       var cols = S.editing ? editCols() : S.cols;
       var tiles = cols === 12 ? base : Layout.toColumns(base, cols);
+      var standard = {};
+      tiles.forEach(function (t) { standard[t.id] = standardHeight(t); });
+      if (!S.editing) tiles = withAutoHeights(tiles, cols, S.auto[cols], function (id) { return !!(ext[id] && ext[id].desc.fixedHeight); });
       var byId = {};
       tiles.forEach(function (t) { byId[t.id] = t; });
       box.classList.add("is-board");
@@ -220,8 +291,11 @@
         node.hidden = false;
         place(node, t);
         if (ext[id]) mountExt(id);
+        // "is-auto": this tile's height follows its content (a tile may read it to decide how much to show)
+        node.classList.toggle("is-auto", !S.editing && !!ext[id] && !!standard[id]);
         refreshControls(node, id, t);
       });
+      if (!S.editing) scheduleAuto();
       var none = document.getElementById("all-hidden");
       if (!any) {
         if (!none) { none = el("p", "all-hidden", "Every tile is hidden. Press Customise, then Tiles, to put some back."); none.id = "all-hidden"; box.appendChild(none); }

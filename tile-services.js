@@ -68,23 +68,36 @@
     function paint(sum) {
       clear(body);
       var line = summaryLine(sum);
-      body.appendChild(h("p", "tl-sub", line.text));
+      body.appendChild(K.summaryRow(line.tone, line.tone === "ok" ? "On target" : line.tone === "alert" ? "Below target" : "No data", line.text));
       var list = rows(sum);
       if (list.length) {
+        var uptime = h("div", "tl-section");
+        uptime.appendChild(h("p", "tl-sub", "Uptime over 30 days"));
         var ul = h("ul", "tl-list");
         list.forEach(function (r) {
           var li = h("li");
-          li.appendChild(h("b", null, r.name + " "));
-          li.appendChild(chip(r.pct, r.tone));
-          li.appendChild(h("span", "dim", " target " + r.target + (r.budget ? ", " + r.budget : "")));
+          li.appendChild(h("b", null, r.name));
+          li.appendChild(chip(r.pct + " · " + (r.tone === "ok" ? "on target" : "below target"), r.tone));
+          li.appendChild(h("span", "dim", "target " + r.target + (r.budget ? ", " + r.budget : "")));
           ul.appendChild(li);
         });
-        body.appendChild(ul);
+        uptime.appendChild(ul);
+        body.appendChild(uptime);
       }
       var s = soonest(sum);
-      if (s) { var p = h("p", "tl-sub"); p.appendChild(chip(s.name + " " + s.text, s.tone)); body.appendChild(p); }
+      if (s) {
+        var fc = h("div", "tl-section");
+        fc.appendChild(h("p", "tl-sub", "Soonest to fill"));
+        fc.appendChild(K.summaryRow(s.tone, s.name, s.text));
+        body.appendChild(fc);
+      }
       var cl = codeLine(sum, Date.now());
-      if (cl) { var cp = h("p", "tl-sub"); cp.appendChild(chip(cl.text, cl.tone)); body.appendChild(cp); }
+      if (cl) {
+        var cs = h("div", "tl-section");
+        cs.appendChild(h("p", "tl-sub", "Code and dependencies"));
+        cs.appendChild(K.summaryRow(cl.tone, cl.tone === "ok" ? "Clean" : cl.tone === "alert" ? "Act now" : "To update", cl.text.replace(/^Code: /, "")));
+        body.appendChild(cs);
+      }
     }
     function load() {
       return K.call("GET", "/services/summary").then(function (r) {

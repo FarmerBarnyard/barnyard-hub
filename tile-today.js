@@ -49,10 +49,11 @@
     }
     function paint(b) {
       clear(body);
-      body.appendChild(h("p", "tl-sub", headline(b) + (b.partial ? " (some sources did not answer)" : "")));
+      var any = b && b.count > 0;
+      body.appendChild(K.summaryRow(any ? "attn" : "ok", any ? K.plural(b.count, "thing") + " for you" : "All clear", headline(b) + (b.partial ? " Some sources did not answer." : "")));
       b.sections.forEach(function (s) {
         var v = sectionView(s);
-        var sec = h("section");
+        var sec = h("section", "tl-section");
         var title = h("p", "tl-sub", v.title + " · " + v.count);
         sec.appendChild(title);
         var ul = h("ul", "tl-list");

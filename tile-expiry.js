@@ -51,7 +51,7 @@
     w: 12, h: 6, minW: 3, minH: 3, maxW: 12, maxH: 24, ownerOnly: true, permission: "tile.expiry", defaultOn: true, order: 1
   };
 
-  var HEAD_PX = 44, ROW_PX = 38;
+  var HEAD_PX = 44, ROW_PX = 38, AUTO_ROWS = 6;
   var helpers = { expiryRows: expiryRows, rowsThatFit: rowsThatFit, visibleRows: visibleRows, descriptor: desc, HEAD_PX: HEAD_PX, ROW_PX: ROW_PX };
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
   if (typeof document === "undefined") return;
@@ -87,7 +87,10 @@
       }
       if (!known) { body.appendChild(h("p", "dim", "Checking…")); return; }
       if (!rows.length) { body.appendChild(h("p", "dim", "Nothing with a date in the next year. Give an Ops item a Due date and it shows here.")); return; }
-      var fit = rowsThatFit(tile ? tile.clientHeight : 0, HEAD_PX, ROW_PX, rows.length), v = visibleRows(rows, fit);
+      // A tile at its standard height sizes itself to its content (board.js marks it "is-auto"), so it shows up to AUTO_ROWS rows and the
+      // rest are one click away; one the owner has sized by hand shows as many rows as its height holds.
+      var auto = !!(tile && tile.classList && tile.classList.contains("is-auto"));
+      var fit = auto ? Math.min(rows.length, AUTO_ROWS) : rowsThatFit(tile ? tile.clientHeight : 0, HEAD_PX, ROW_PX, rows.length), v = visibleRows(rows, fit);
       var ul = h("ul", "tl-exp-list");
       ul.setAttribute("role", "list");
       v.shown.forEach(function (r) {

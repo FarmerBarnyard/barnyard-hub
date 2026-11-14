@@ -37,21 +37,55 @@
     return "needs " + (w.length === 1 ? w[0] : w.slice(0, -1).join(", ") + " and " + w[w.length - 1]);
   }
 
-  // The numbers on the tile, from GET /reg/summary.
-  function glance(summary) {
+  // Free accounts, subscriptions and licences have no renewal to act on: a date on one is a review or sign-in reminder, not money or an
+  // outage. They are left out of the renewing list and its count (a free certificate or domain still counts: those really do lapse).
+  // An asset is free when its cost is entered as 0 (the register's "Free"); the Worker may also say so with `free: true`.
+  var FREE_KINDS = ["account", "subscription", "licence"];
+  function isFreeNoRenewal(entry, asset) {
+    if (!entry || FREE_KINDS.indexOf(entry.kind) === -1) return false;
+    if (entry.free === true) return true;
+    return !!asset && asset.costCents === 0;
+  }
+  // The expiring list without the free ones: { list, freeCount }. `byId` maps an asset id to its register entry (from GET /reg/assets);
+  // without it nothing is left out, so a failed or missing answer never hides a renewal.
+  function renewals(expiring, byId) {
+    var list = [], free = 0;
+    (expiring || []).forEach(function (e) {
+      if (isFreeNoRenewal(e, byId && byId[e.id])) free++; else list.push(e);
+    });
+    return { list: list, freeCount: free };
+  }
+
+  // The numbers on the tile, from GET /reg/summary (and, when it is known, the register entries by id, so free ones are not counted).
+  function glance(summary, byId) {
     var a = summary && summary.assets ? summary.assets : { count: 0, neededCount: 0, expiring: [], totals: [] };
-    var soon = a.expiring && a.expiring.length ? a.expiring[0] : null;
+    var r = renewals(a.expiring, byId);
+    var soon = r.list.length ? r.list[0] : null;
     var cost = a.totals && a.totals.length ? a.totals.map(function (t) { return K.moneyText(t.monthlyCents, t.currency); }).join(" + ") : "";
     return {
-      count: a.count || 0, needed: a.neededCount || 0, expiring: (a.expiring || []).length,
+      count: a.count || 0, needed: a.neededCount || 0, expiring: r.list.length, freeCount: r.freeCount, renewing: r.list,
       soonestDays: soon ? soon.daysLeft : null, costMonthly: cost,
       annual: a.totals && a.totals.length ? a.totals.map(function (t) { return K.moneyText(t.annualCents, t.currency); }).join(" + ") : ""
     };
   }
 
+  // The tile's status pill and the sentence under it: { tone, pill, text }. A renewal within a week (or already late) is red, anything
+  // else to do (details missing, a renewal within 60 days) is amber, and nothing to do is calm green.
+  function statusLine(g) {
+    var week = g.renewing.filter(function (e) { return e.daysLeft <= 7; }).length;
+    if (week) return { tone: "alert", pill: "Renewal due", text: K.plural(week, "item") + " renew" + (week === 1 ? "s" : "") + " within 7 days." + (g.needed ? " " + K.plural(g.needed, "item") + " still need details." : "") };
+    var bits = [];
+    if (g.expiring) bits.push(g.expiring + " renewing within 60 days");
+    if (g.needed) bits.push(K.plural(g.needed, "item") + " still " + (g.needed === 1 ? "needs" : "need") + " details");
+    if (bits.length) return { tone: "attn", pill: "Needs a look", text: bits.join(", ") + "." };
+    return { tone: "ok", pill: "All good", text: "Nothing renews in the next 60 days and every item has its details." };
+  }
+
   // One expiry as the tile and the list say it: { text, tone, source }.
   function expiryModel(asset, now) {
     var date = asset.rdapExpires || asset.expires || "";
+    // A free account's date is a reminder to look at it, not a renewal: no countdown, no warning colour.
+    if (isFreeNoRenewal(asset, asset)) return { text: date ? "Free, no renewal (date " + K.dateText(date) + ")" : "Free, no renewal", tone: "", source: "" };
     if (!date) return { text: asset.dateState === "auto" ? "Renews itself" : "No date", tone: asset.dateState === "auto" ? "" : "attn", source: "" };
     var days = K.dayDiff(date, now);
     return {
@@ -116,7 +150,8 @@
 
   var helpers = {
     KINDS: KINDS, KIND_ONE: KIND_ONE, KIND_MANY: KIND_MANY, needText: needText, glance: glance, expiryModel: expiryModel,
-    costLine: costLine, filterAssets: filterAssets, groupByKind: groupByKind, formValues: formValues, formToBody: formToBody
+    costLine: costLine, filterAssets: filterAssets, groupByKind: groupByKind, formValues: formValues, formToBody: formToBody,
+    renewals: renewals, isFreeNoRenewal: isFreeNoRenewal, statusLine: statusLine
   };
   var desc = {
     id: "assets", title: "Assets & services", about: "What you run, who looks after it, when it renews and what it costs.",
@@ -131,7 +166,7 @@
   var h = K.h, clear = K.clear, chip = K.chip;
 
   function render(container) {
-    var state = { summary: null, busy: false };
+    var state = { summary: null, byId: null, busy: false };
     var wrap = h("div", "tl");
     var head = h("div", "tl-head");
     head.appendChild(h("h3", "tl-title", desc.title));
@@ -158,7 +193,7 @@
     function paint(message, isError) {
       var s = state.summary;
       clear(body);
-      var g = glance(s);
+      var g = glance(s, state.byId);
       if (message) body.appendChild(h("div", "tk-msg" + (isError ? " alert" : ""), message));
       if (!g.count) {
         var empty = h("div", "tl-notice");
@@ -168,17 +203,18 @@
         body.appendChild(empty);
         return;
       }
-      var stats = h("ul", "tl-stats");
-      function stat(n, label, tone) { var li = h("li", "tl-stat" + (tone ? " " + tone : "")); li.appendChild(h("b", null, n)); li.appendChild(h("span", null, label)); stats.appendChild(li); }
-      stat(String(g.count), K.plural(g.count, "item").replace(/^\d+ /, ""));
-      stat(String(g.needed), "need details", g.needed ? "attn" : "");
-      stat(String(g.expiring), "renewing within 60 days", g.soonestDays !== null && g.soonestDays <= 7 ? "alert" : g.expiring ? "attn" : "");
-      stat(g.costMonthly || "None", g.costMonthly ? "a month" : "costs entered");
-      body.appendChild(stats);
+      var line = statusLine(g);
+      body.appendChild(K.summaryRow(line.tone, line.pill, line.text));
+      body.appendChild(K.statGrid([
+        { value: String(g.count), label: K.plural(g.count, "item").replace(/^\d+ /, "") + " in the register" },
+        { value: String(g.needed), label: g.needed === 1 ? "item needs details" : "items need details", tone: K.countTone(g.needed, "attn") },
+        { value: String(g.expiring), label: "renewing within 60 days", tone: g.soonestDays !== null && g.soonestDays <= 7 ? "alert" : K.countTone(g.expiring, "attn") },
+        g.costMonthly ? { value: g.costMonthly, label: "a month, all costs", text: true } : { value: "None", label: "costs entered yet", text: true, tone: "attn" }
+      ]));
 
       var more = h("div", "tl-more");
       more.appendChild(h("p", "tl-sub", "Renewing soon"));
-      var soon = (s.assets.expiring || []).slice(0, 4);
+      var soon = g.renewing.slice(0, 4);
       if (!soon.length) more.appendChild(h("p", "dim", "Nothing renews in the next 60 days."));
       else {
         var ul = h("ul", "tl-list");
@@ -189,7 +225,9 @@
           ul.appendChild(li);
         });
         more.appendChild(ul);
+        if (g.renewing.length > soon.length) more.appendChild(K.moreButton("Show all " + g.renewing.length + " renewals", function () { openRegister(draw); }));
       }
+      if (g.freeCount) more.appendChild(h("p", "dim", K.plural(g.freeCount, "free account") + " left out: nothing to renew."));
       body.appendChild(more);
 
       var rich = h("div", "tl-rich");
@@ -199,14 +237,24 @@
         var nl = h("ul", "tl-list");
         need.forEach(function (n) { var li = h("li", "tl-row"); li.appendChild(h("span", null, n.name)); li.appendChild(h("span", "dim", needText(n.missing))); nl.appendChild(li); });
         rich.appendChild(nl);
+        if (g.needed > need.length) rich.appendChild(K.moreButton("Show all " + g.needed + " in the register", function () { openRegister(draw); }));
       }
       body.appendChild(rich);
     }
 
     function load() {
       return K.summary().then(function (r) {
-        if (r.status === 200) { state.summary = r.body; paint(); return; }
-        K.loadFailure(body, r, load);
+        if (r.status !== 200) { K.loadFailure(body, r, load); return; }
+        state.summary = r.body;
+        // Whether a renewal is on a free account is on the register entry, not in the summary: read the register once, but only when
+        // the summary lists something that could be free. If that read fails the list is shown whole, never hidden.
+        var maybeFree = ((r.body.assets && r.body.assets.expiring) || []).some(function (e) { return FREE_KINDS.indexOf(e.kind) !== -1 && e.free !== true; });
+        if (!maybeFree) { state.byId = null; paint(); return; }
+        return K.call("GET", "/reg/assets").then(function (ra) {
+          state.byId = null;
+          if (ra.status === 200 && ra.body && Array.isArray(ra.body.assets)) { state.byId = {}; ra.body.assets.forEach(function (a) { state.byId[a.id] = a; }); }
+          paint();
+        });
       });
     }
     function draw() { return load(); }

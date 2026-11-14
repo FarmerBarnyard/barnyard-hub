@@ -127,4 +127,27 @@ test("the tile only reads and writes the registry's own routes", function () {
   assert.ok(!/\/ops\/|\/mon\//.test(src.replace(/\/\/[^\n]*/g, "")), "no other API");
 });
 
+test("free accounts, subscriptions and licences are left out of the renewing list; free certificates and domains are not", function () {
+  var exp = [
+    { id: "a1", name: "GitHub", kind: "account", daysLeft: 17 }, { id: "a2", name: "Cloudflare", kind: "account", daysLeft: 34 },
+    { id: "a3", name: "Free cert", kind: "certificate", daysLeft: 20 }, { id: "a4", name: "Flagged", kind: "subscription", daysLeft: 9, free: true }
+  ];
+  var byId = { a1: { costCents: 0 }, a2: { costCents: 500 }, a3: { costCents: 0 } };
+  var r = A.renewals(exp, byId);
+  assert.deepStrictEqual(r.list.map(function (e) { return e.name; }), ["Cloudflare", "Free cert"]);
+  assert.strictEqual(r.freeCount, 2);
+  assert.strictEqual(A.renewals(exp, null).freeCount, 1, "without the register only an explicit free flag counts: nothing is hidden by guesswork");
+  var g = A.glance({ assets: { count: 4, neededCount: 0, expiring: exp, totals: [] } }, byId);
+  assert.deepStrictEqual([g.expiring, g.freeCount, g.soonestDays], [2, 2, 34]);
+  var m = A.expiryModel({ kind: "account", costCents: 0, expires: "2026-11-13", dateState: "estimated" }, NOW);
+  assert.deepStrictEqual([m.tone, /in \d+ days/.test(m.text), /^Free, no renewal/.test(m.text)], ["", false, true], "no countdown and no warning colour on a free account");
+});
+
+test("the status line is red inside a week, amber while there is anything to do, green when there is nothing", function () {
+  assert.strictEqual(A.statusLine({ renewing: [{ daysLeft: 2 }], expiring: 1, needed: 0 }).tone, "alert");
+  assert.strictEqual(A.statusLine({ renewing: [{ daysLeft: 20 }], expiring: 1, needed: 0 }).tone, "attn");
+  assert.strictEqual(A.statusLine({ renewing: [], expiring: 0, needed: 3 }).tone, "attn");
+  assert.deepStrictEqual([A.statusLine({ renewing: [], expiring: 0, needed: 0 }).tone, A.statusLine({ renewing: [], expiring: 0, needed: 0 }).pill], ["ok", "All good"]);
+});
+
 console.log("\n" + passed + " passed");

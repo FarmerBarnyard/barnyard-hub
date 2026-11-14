@@ -54,22 +54,25 @@
         body.appendChild(n);
         return;
       }
-      var stats = h("ul", "tl-stats");
-      function stat(v, label, tone) { var li = h("li", "tl-stat" + (tone ? " " + tone : "")); li.appendChild(h("b", null, v)); li.appendChild(h("span", null, label)); stats.appendChild(li); }
-      stat(String(m.linked), "linked of " + m.assets);
-      stat(String(m.links), m.links === 1 ? "link" : "links");
-      stat(String(m.weakest.length), m.weakest.length === 1 ? "weak spot" : "weak spots", m.weakest.length ? "attn" : "");
-      if (m.cycles) stat(String(m.cycles), "in a loop", "alert");
-      body.appendChild(stats);
-      if (m.state === "clean") { body.appendChild(h("p", "dim", "Everything that others depend on has a monitor, a backup that names it and a runbook.")); return; }
+      var fix = m.weakest.filter(function (w) { return w.tone === "alert"; }).length;
+      body.appendChild(m.state === "clean" && !m.cycles
+        ? K.summaryRow("ok", "No weak spots", "Everything that others depend on has a monitor, a backup that names it and a runbook.")
+        : K.summaryRow(fix || m.cycles ? "alert" : "attn", fix || m.cycles ? "Needs fixing" : "Gaps to fill", K.plural(m.weakest.length, "weak spot") + (m.cycles ? ", " + K.plural(m.cycles, "loop") + " in the links" : "") + "."));
+      body.appendChild(K.statGrid([
+        { value: String(m.linked), label: "linked of " + m.assets + " items" },
+        { value: String(m.links), label: m.links === 1 ? "link between them" : "links between them" },
+        { value: String(m.weakest.length), label: m.weakest.length === 1 ? "weak spot" : "weak spots", tone: K.countTone(m.weakest.length, "attn") }
+      ].concat(m.cycles ? [{ value: String(m.cycles), label: m.cycles === 1 ? "loop in the links" : "loops in the links", tone: "alert" }] : [])));
+      if (m.state === "clean") return;
+      body.appendChild(h("p", "tl-sub", "Worst first"));
       var ul = h("ul", "tl-list");
       m.weakest.forEach(function (w) {
-        var li = h("li", "tl-row");
+        var li = h("li");
         var a = h("a", null, w.name);
         a.href = "map.html#" + w.id;
         li.appendChild(a);
-        li.appendChild(h("span", "dim", w.line));
         li.appendChild(chip(w.tone === "alert" ? "Fix first" : "Gap", w.tone));
+        li.appendChild(h("span", "dim tl-li-note", w.line));
         ul.appendChild(li);
       });
       body.appendChild(ul);

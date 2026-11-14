@@ -1,35 +1,69 @@
 /* The operations tiles (Assets, Backups, Today, Activity, Usage, Approvals) and the drawer they open. Uses the shared
    tokens from shell.css only; nothing inline and nothing remote (the CSP allows only 'self').
 
-   A tile adapts to the room it is given by container width: under 300px it shows the numbers only, from 300px a short list,
-   from 520px the fuller view. Its height is whatever the board gives it and the body scrolls inside. */
+   One look for every tile: the same inner padding, a heading row (title left, its buttons right), a status line (a pill that says how
+   it is, then one plain sentence), the numbers, then short labelled lists. Small text is 13px and never dimmer than --fg-dim.
 
-.tl { container: tile / inline-size; display: flex; flex-direction: column; gap: 10px; min-width: 0; height: 100%; }
-.tl-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.tl-title { margin: 0; font: 600 15px var(--font-display); color: var(--fg-strong); }
-.tl-body { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: auto; }
+   A tile adapts to the room it is given by container width: under 300px it shows the numbers only, from 300px a short list,
+   from 520px the fuller view. Its height follows its content: on the board a tile at its standard height sizes itself to fit
+   (board.js), and one the owner has resized keeps that size, with its own scroll only if the content is taller than the tile. */
+
+.tl { container: tile / inline-size; display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 14px 16px 16px; box-sizing: border-box; }
+.tl-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 30px; }
+.tl-title { margin: 0 auto 0 0; font: 600 16px/1.3 var(--font-display); letter-spacing: -.005em; color: var(--fg-strong); }
+.tl-body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .tl-notice { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .tl-notice p { margin: 0; }
+.tl .dim { font-size: 13px; line-height: 1.45; }
 
-/* the numbers */
+/* a status pill: words first, colour second. The shape in front of the words changes with the state (circle fine, diamond look,
+   triangle act), so it never rests on colour alone. Text and soft background are the shared tokens used by .chip. */
+.tl-pill { display: inline-flex; align-items: center; gap: 7px; padding: 2px 11px 2px 9px; border-radius: 999px; font-size: 13px; font-weight: 600; line-height: 20px; white-space: nowrap; background: var(--panel-2); color: var(--fg); border: 1px solid var(--line); }
+.tl-pill::before { content: ""; flex: none; width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+.tl-pill.ok { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.tl-pill.attn { color: var(--attn); background: var(--attn-soft); border-color: transparent; }
+.tl-pill.attn::before { border-radius: 1px; transform: rotate(45deg) scale(.82); }
+.tl-pill.alert { color: var(--alert); background: var(--alert-soft); border-color: transparent; }
+.tl-pill.alert::before { border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.tl-pill.info { color: var(--info); background: var(--info-soft); border-color: transparent; }
+.tl-pill.info::before { border-radius: 2px; }
+.tl-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.tl-summary-text { font-size: 13.5px; line-height: 1.45; color: var(--fg); min-width: 0; }
+
+/* the numbers: a count that is a problem is calm green at zero, amber or red when it is not, and says so in the label too */
 .tl-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
-.tl-stat { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); min-width: 0; }
-.tl-stat b { font: 600 20px var(--font-display); color: var(--fg-strong); font-variant-numeric: tabular-nums; }
-.tl-stat span { font-size: 12px; color: var(--fg-dim); }
-.tl-stat.alert b { color: var(--alert); }
+.tl-stat { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); min-width: 0; }
+.tl-stat b { font: 600 22px/1.15 var(--font-display); color: var(--fg-strong); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tl-stat.txt b { font-size: 17px; line-height: 1.3; }
+.tl-stat span { font-size: 13px; line-height: 1.35; color: var(--fg-dim); }
+.tl-stat.ok b { color: var(--ok); }
 .tl-stat.attn b { color: var(--attn); }
+.tl-stat.alert b { color: var(--alert); }
+.tl-stat.ok > span::before, .tl-stat.attn > span::before, .tl-stat.alert > span::before { font-weight: 700; margin-right: 4px; }
+.tl-stat.ok > span::before { content: "\2713"; content: "\2713" / ""; color: var(--ok); }
+.tl-stat.attn > span::before { content: "\25C6"; content: "\25C6" / ""; color: var(--attn); }
+.tl-stat.alert > span::before { content: "\25B2"; content: "\25B2" / ""; color: var(--alert); }
 
-/* short lists */
-.tl-sub { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--fg-dim); }
-.tl-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
-.tl-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; font-size: 13px; }
+/* short lists: ruled rows, a name on the left and what it needs on the right */
+.tl-sub { margin: 0; font-size: 13px; font-weight: 600; color: var(--fg-dim); }
+.tl-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0; }
+.tl-list:not(.tl-approvals) > li { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; min-width: 0; padding: 7px 0; border-top: 1px solid var(--line); font-size: 13.5px; line-height: 1.4; }
+.tl-list:not(.tl-approvals) > li:first-child { border-top: 0; padding-top: 2px; }
+.tl-list > li b { font-weight: 600; color: var(--fg-strong); }
+.tl-list:not(.tl-approvals) > li.tl-row { justify-content: space-between; flex-wrap: nowrap; }
 .tl-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tl-li-note { flex: 1 1 100%; }
 .tl-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: auto; }
+.tl-section { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.tl-section > .tl-list { margin-top: -2px; }
+.tl-more-btn { align-self: flex-start; margin-left: -12px; border-color: transparent; color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+.tl-more-btn:hover:not(:disabled) { border-color: var(--line); }
 
 /* what shows at which size */
 .tl-more, .tl-rich { display: none; }
-@container tile (min-width: 300px) { .tl-more { display: flex; flex-direction: column; gap: 6px; } .tl-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@container tile (min-width: 520px) { .tl-rich { display: flex; flex-direction: column; gap: 6px; } .tl-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } .tl-twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; } }
+@container tile (min-width: 300px) { .tl-more { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); } .tl-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container tile (min-width: 520px) { .tl-rich { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); } .tl-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } .tl-twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; } }
+@media (forced-colors: active) { .tl-pill, .tl-stat { border-color: CanvasText; } .tl-pill::before { background: CanvasText; } }
 
 /* the drawer */
 .tk-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(8, 12, 18, .5); display: flex; justify-content: flex-end; }
@@ -69,8 +103,11 @@
 /* rows that appear only when the tile is wide enough, meters, approvals */
 .tl-rich-row { display: none; }
 @container tile (min-width: 300px) { li.tl-rich-row.tl-row { display: flex; } li.tl-rich-row.tl-approval { display: block; } p.tl-rich-row, input.tl-rich-row { display: block; } }
-.tl-meter { display: flex; flex-direction: column; gap: 3px; }
-.tl-meter-label { font-size: 13px; color: var(--fg-strong); }
+.tl-meters { display: flex; flex-direction: column; gap: 12px; }
+.tl-meter { display: flex; flex-direction: column; gap: 4px; }
+.tl-meter-label { font-size: 13.5px; font-weight: 500; color: var(--fg-strong); }
+.tl-meter-text.attn { color: var(--attn); }
+.tl-meter-text.alert { color: var(--alert); }
 .tl-bar { width: 100%; height: 8px; border: 0; border-radius: 99px; overflow: hidden; background: var(--panel-2); accent-color: var(--ok); }
 .tl-bar::-webkit-progress-bar { background: var(--panel-2); }
 .tl-bar::-webkit-progress-value { background: var(--ok); border-radius: 99px; }
@@ -84,7 +121,7 @@
 .tl-approval .tk-bar { margin-top: 6px; }
 
 /* Quick capture and Running out soon (tile-capture.js, tile-expiry.js): the two blocks that used to sit above the board */
-.tl-capture, .tl-expiry { padding: 10px 14px 12px; box-sizing: border-box; }
+.tl-capture, .tl-expiry { padding: 10px 16px 12px; box-sizing: border-box; }
 .tl-capture { height: auto; justify-content: center; gap: 6px; }
 .tl-cap-form { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .tl-cap-form[hidden], .tl-cap-notice[hidden] { display: none; }

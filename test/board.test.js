@@ -184,4 +184,32 @@ test("Quick capture and Running out soon are tiles on the board, not fixed block
   assert.ok(/publishStatus\(model\.status\)/.test(ov) && /subscribe\("refresh"/.test(ov), "it hands the status answer to the tiles and listens for their refresh request");
 });
 
+test("tiles size themselves to their content: they grow to fit, a standard-height tile also shrinks, a hand-sized one never shrinks", function () {
+  L.register({ id: "t-auto", title: "T", w: 4, h: 6, minW: 3, minH: 3, maxW: 12, maxH: 12 });
+  L.register({ id: "t-below", title: "B", w: 4, h: 6, minW: 3, minH: 3, maxW: 12, maxH: 12 });
+  var tiles = [{ id: "t-auto", x: 0, y: 0, w: 4, h: 6 }, { id: "t-below", x: 0, y: 6, w: 4, h: 6 }];
+  var grown = board.withAutoHeights(tiles, 12, { "t-auto": 9 });
+  assert.strictEqual(grown[0].h, 9);
+  assert.strictEqual(grown[1].y, 9, "the tile below moves down with it");
+  var shrunk = board.withAutoHeights(tiles, 12, { "t-auto": 4 });
+  assert.strictEqual(shrunk[0].h, 4);
+  assert.strictEqual(shrunk[1].y, 4, "and floats up when it shrinks");
+  var byHand = [{ id: "t-auto", x: 0, y: 0, w: 4, h: 10 }];
+  assert.strictEqual(board.withAutoHeights(byHand, 12, { "t-auto": 4 })[0].h, 10, "a tile the owner made taller is left alone");
+  assert.strictEqual(board.withAutoHeights([{ id: "t-auto", x: 0, y: 0, w: 4, h: 5 }], 12, { "t-auto": 8 })[0].h, 8, "but it still grows rather than scroll");
+  assert.strictEqual(board.withAutoHeights(tiles, 12, { "t-auto": 40 })[0].h, 12, "never past its own maximum");
+  assert.strictEqual(board.withAutoHeights(tiles, 12, { "t-auto": 2 })[0].h, 3, "nor below its own minimum");
+  assert.strictEqual(board.withAutoHeights(tiles, 12, { "t-auto": 9 }, function (id) { return id === "t-auto"; })[0].h, 6, "a tile can opt out");
+  assert.strictEqual(board.withAutoHeights(tiles, 12, null), tiles, "nothing measured, nothing changed");
+  var one = board.withAutoHeights([{ id: "t-auto", x: 0, y: 0, w: 1, h: 6 }, { id: "t-below", x: 0, y: 6, w: 1, h: 6 }], 1, { "t-auto": 8 });
+  assert.deepStrictEqual(one.map(function (t) { return [t.id, t.y, t.h]; }), [["t-auto", 0, 8], ["t-below", 8, 6]], "one column re-stacks");
+});
+
+test("the board measures tiles for their content and never in Customise; a tile's content is not forced to the tile's height", function () {
+  var src = read("board.js"), css = read("tiles.css");
+  assert.ok(/function measureAuto\(\)/.test(src) && /if \(S\.editing \|\| S\.drag\) return false/.test(src));
+  assert.ok(/\.tl \{[^}]*padding: 14px 16px/.test(css) && !/\.tl \{[^}]*height: 100%/.test(css), "a tile's content sits at its natural height");
+  assert.ok(!/\.tl-body \{[^}]*overflow: auto/.test(css), "no hidden scroll inside a tile body");
+});
+
 console.log("\n" + passed + " tests passed");

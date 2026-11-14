@@ -44,6 +44,34 @@
     };
   }
 
+  // The "next restore test" figure, honest about what is known: { value, label, tone, note }. The Worker names a date (a year after a
+  // good test, a month after any other, or one typed in); it is shown as a date with how far off it is. A date that is not after the
+  // test that set it (logged today, "next test" today) is not a schedule: it says so and how to fix it. `now` is only for tests.
+  function nextRestore(summary, now) {
+    var b = summary && summary.backups ? summary.backups : null;
+    var n = b && b.nextRestore;
+    if (!b || !b.count) return { value: "None yet", label: "next restore test", tone: "", note: "" };
+    if (!n || !n.nextDue) return { value: "No schedule set", label: "next restore test", tone: "attn", note: "No restore test is logged yet. Log one, with a date for the next." };
+    var row = null;
+    (b.rows || []).forEach(function (r) { if (r && r.id === n.jobId) row = r; });
+    var last = row && row.restore ? row.restore.lastTestedOn : "";
+    var days = typeof n.daysLeft === "number" ? n.daysLeft : K.dayDiff(n.nextDue, now);
+    if (last && n.nextDue <= last) {
+      return { value: "No schedule set", label: "next restore test", tone: "attn", note: n.name + " was tested on " + K.dateText(last) + " with no later date set for the next test. Edit that test and add one." };
+    }
+    if (days !== null && days < 0) return { value: K.dateText(n.nextDue), label: "restore test overdue by " + K.plural(-days, "day"), tone: "alert", note: n.name + " was due " + K.dateText(n.nextDue) + "." };
+    if (days === 0) return { value: "Due today", label: "next restore test", tone: "attn", note: n.name + " is due for a restore test today." };
+    return { value: K.dateText(n.nextDue), label: "next restore test, " + K.daysText(days), tone: days !== null && days <= 30 ? "attn" : "", note: n.name + " is next due " + K.dateText(n.nextDue) + "." };
+  }
+
+  // The tile's status pill and the sentence under it: { tone, pill, text }.
+  function statusLine(g) {
+    if (g.needLook) return { tone: "alert", pill: "Needs a look", text: K.plural(g.needLook, "backup") + " overdue or failing." };
+    if (g.unproven) return { tone: "attn", pill: "Restore not proven", text: K.plural(g.unproven, "backup") + (g.unproven === 1 ? " has" : " have") + " never had a restore proven, or it is overdue." };
+    if (g.unmonitored) return { tone: "attn", pill: "Not watched", text: K.plural(g.unmonitored, "job has", "jobs have") + " no check-in link yet, so nothing is watching " + (g.unmonitored === 1 ? "it." : "them.") };
+    return { tone: "ok", pill: "On time", text: "Every watched backup has checked in on time." };
+  }
+
   // One line per thing that needs a look: { name, text, tone }.
   function attentionRows(summary, now) {
     var b = summary && summary.backups ? summary.backups : null;
@@ -98,7 +126,7 @@
     if (String(values.by).trim()) body.by = String(values.by).trim();
     if (String(values.notes).trim()) body.notes = String(values.notes).trim();
     if (String(values.nextDue).trim()) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(values.nextDue)) || values.nextDue < values.testedOn) return { error: "The next test date must be on or after this one.", field: "nextDue" };
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(values.nextDue)) || values.nextDue <= values.testedOn) return { error: "The next test date must be after the date of this test (leave it empty to use a year after a good test, a month after any other).", field: "nextDue" };
       body.nextDue = values.nextDue;
     }
     return { body: body };
@@ -115,6 +143,7 @@
 
   var helpers = {
     STATE: STATE, RESTORE: RESTORE, RESULTS: RESULTS, stateInfo: stateInfo, restoreInfo: restoreInfo, glance: glance, attentionRows: attentionRows,
+    nextRestore: nextRestore, statusLine: statusLine,
     runLine: runLine, formValues: formValues, formToBody: formToBody, testToBody: testToBody, linkSnippets: linkSnippets
   };
   var desc = { id: "backups", title: "Backups", about: "Whether each backup ran, and when you last proved a restore works.", w: 6, h: 7, minW: 3, minH: 3, maxW: 12, maxH: 24, ownerOnly: true, permission: "tile.backups" };
@@ -148,26 +177,31 @@
         empty.appendChild(b); body.appendChild(empty);
         return;
       }
-      var stats = h("ul", "tl-stats");
-      function stat(n, label, tone) { var li = h("li", "tl-stat" + (tone ? " " + tone : "")); li.appendChild(h("b", null, n)); li.appendChild(h("span", null, label)); stats.appendChild(li); }
-      stat(String(g.count), g.count === 1 ? "backup job" : "backup jobs");
-      stat(String(g.needLook), "overdue or failing", g.needLook ? "alert" : "");
-      stat(String(g.unproven), "restore not proven", g.unproven ? "attn" : "");
-      stat(g.next ? K.dateText(g.next.nextDue) : "None", g.next ? "next restore test" : "restore tests set");
-      body.appendChild(stats);
+      var line = statusLine(g), next = nextRestore(state.summary, Date.now());
+      body.appendChild(K.summaryRow(line.tone, line.pill, line.text));
+      body.appendChild(K.statGrid([
+        { value: String(g.count), label: g.count === 1 ? "backup job" : "backup jobs" },
+        { value: String(g.needLook), label: g.needLook === 1 ? "job overdue or failing" : "jobs overdue or failing", tone: K.countTone(g.needLook, "alert") },
+        { value: String(g.unproven), label: g.unproven === 1 ? "job with no proven restore" : "jobs with no proven restore", tone: K.countTone(g.unproven, "attn") },
+        { value: next.value, label: next.label, tone: next.tone, text: true }
+      ]));
 
       var rows = attentionRows(state.summary, Date.now());
       var more = h("div", "tl-more");
-      more.appendChild(h("p", "tl-sub", rows.length ? "Needs a look" : "All on time"));
-      if (!rows.length) more.appendChild(h("p", "dim", g.unmonitored ? K.plural(g.unmonitored, "job has", "jobs have") + " no check-in link yet, so nothing is watching " + (g.unmonitored === 1 ? "it." : "them.") : "Every watched backup has checked in on time."));
+      more.appendChild(h("p", "tl-sub", "Needs a look"));
+      if (!rows.length) more.appendChild(h("p", "dim", "Nothing is overdue, failing or waiting on a restore test."));
       else {
         var ul = h("ul", "tl-list");
         rows.slice(0, 4).forEach(function (r) { var li = h("li", "tl-row"); li.appendChild(h("span", null, r.name)); li.appendChild(chip(r.text, r.tone)); ul.appendChild(li); });
         more.appendChild(ul);
+        if (rows.length > 4) more.appendChild(K.moreButton("Show all " + rows.length + " in Backups", function () { openBackups(load); }));
       }
+      if (next.note) more.appendChild(h("p", "dim", next.note));
       body.appendChild(more);
       var rich = h("div", "tl-rich");
-      rich.appendChild(h("p", "dim", g.threeTwoOne + " of " + g.count + " " + (g.count === 1 ? "job meets" : "jobs meet") + " the 3-2-1 rule (three copies, two kinds of storage, one offsite)."));
+      rich.appendChild(h("p", "tl-sub", "3-2-1 rule"));
+      var all321 = g.count > 0 && g.threeTwoOne === g.count;
+      rich.appendChild(K.summaryRow(all321 ? "ok" : "attn", g.threeTwoOne + " of " + g.count + " meet it", "Three copies, on two kinds of storage, with one offsite."));
       body.appendChild(rich);
     }
 
@@ -358,7 +392,7 @@
       var res = h("select"); RESULTS.forEach(function (o) { var op = h("option", null, o[1]); op.value = o[0]; res.appendChild(op); }); field(form, inputs, "result", "How did it go", res);
       var what = h("input"); what.type = "text"; what.maxLength = 200; field(form, inputs, "what", "What did you restore", what, true, "For example: one VM to a spare host, or a mailbox.");
       var by = h("input"); by.type = "text"; by.maxLength = 60; field(form, inputs, "by", "Who did it", by);
-      var nd = h("input"); nd.type = "date"; field(form, inputs, "nextDue", "Next test due", nd, false, "Leave empty: a year after a good test, a month after any other.");
+      var nd = h("input"); nd.type = "date"; field(form, inputs, "nextDue", "Next test due", nd, false, "Must be after the test date. Leave empty to use a year after a good test, a month after any other.");
       var notes = h("textarea"); notes.maxLength = 400; field(form, inputs, "notes", "Notes", notes, true);
       var msg = h("div"); d.body.appendChild(msg); d.body.appendChild(form);
       var save = h("button", "btn btn-primary", "Log the test"); save.type = "button";

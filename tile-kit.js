@@ -78,6 +78,17 @@
     return plural(Math.round(s / 86400), "day") + " ago";
   }
 
+  // How close a limit is to its ceiling, in words and a tone: amber from 70%, red from 90% (the same cut-offs as the Worker's bars).
+  // -> { tone: "ok" | "attn" | "alert", word }.
+  function limitState(pct) {
+    if (typeof pct !== "number" || !isFinite(pct)) return { tone: "", word: "" };
+    return pct >= 90 ? { tone: "alert", word: "near the limit" } : pct >= 70 ? { tone: "attn", word: "getting close" } : { tone: "ok", word: "plenty of room" };
+  }
+
+  // The tone of a count that is a problem count: nothing wrong is calm green, something wrong is amber or red. `worst` is the tone a
+  // non-zero count takes ("attn" or "alert").
+  function countTone(n, worst) { return n > 0 ? (worst || "attn") : "ok"; }
+
   // The Worker's error codes in plain words. `body` is the parsed answer (may carry field and kind).
   var ERRORS = {
     recent_sign_in_required: "For safety this needs a recent sign-in. Sign in again, then repeat it.",
@@ -119,7 +130,7 @@
 
   var helpers = {
     plural: plural, moneyText: moneyText, parseMoney: parseMoney, dayDiff: dayDiff, daysText: daysText, urgency: urgency,
-    dateText: dateText, agoText: agoText, errorText: errorText, needsSignIn: needsSignIn, ERRORS: ERRORS
+    dateText: dateText, agoText: agoText, errorText: errorText, needsSignIn: needsSignIn, ERRORS: ERRORS, limitState: limitState, countTone: countTone
   };
 
   // ---- 2. the registry of tiles ---------------------------------------------------------------------------------
@@ -170,6 +181,39 @@
   }
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
   function chip(text, tone) { return h("span", "chip" + (tone ? " " + tone : ""), text); }
+
+  // A status pill: words first, colour second. The shape in front of the words differs by tone (circle = fine, diamond = look,
+  // triangle = act; drawn in tiles.css), so the state never rests on colour alone.
+  function pill(tone, text) { return h("span", "tl-pill" + (tone ? " " + tone : ""), text); }
+
+  // The line under a tile's heading: the pill that says how it is, then one plain sentence that says why.
+  function summaryRow(tone, pillText, sentence) {
+    var row = h("div", "tl-summary");
+    row.appendChild(pill(tone, pillText));
+    if (sentence) row.appendChild(h("span", "tl-summary-text", sentence));
+    return row;
+  }
+
+  // The numbers row. Each item: { value, label, tone?, text? }. `tone` colours the number ("ok" is the calm green of a problem count
+  // that is zero), `text` makes it a short phrase instead of a number (a smaller figure).
+  function statGrid(items) {
+    var ul = h("ul", "tl-stats");
+    items.forEach(function (it) {
+      var li = h("li", "tl-stat" + (it.tone ? " " + it.tone : "") + (it.text ? " txt" : ""));
+      li.appendChild(h("b", null, it.value));
+      li.appendChild(h("span", null, it.label));
+      ul.appendChild(li);
+    });
+    return ul;
+  }
+
+  // "and 3 more" with somewhere to go: a quiet button that runs `onClick`, so a short list is never a hidden one.
+  function moreButton(text, onClick) {
+    var b = h("button", "btn btn-sm btn-quiet tl-more-btn", text);
+    b.type = "button";
+    b.addEventListener("click", onClick);
+    return b;
+  }
 
   // The registry summary (GET /reg/summary) is read by the Assets, Backups and Weakest links tiles; they share one answer for a few
   // seconds so tiles that load together cost one call and one registry read. Any write made through call() forgets it.
@@ -257,6 +301,7 @@
   }
 
   helpers.h = h; helpers.clear = clear; helpers.chip = chip; helpers.call = call; helpers.notice = notice;
+  helpers.pill = pill; helpers.summaryRow = summaryRow; helpers.statGrid = statGrid; helpers.moreButton = moreButton;
   helpers.loadFailure = loadFailure; helpers.loginHref = loginHref; helpers.openDrawer = openDrawer; helpers.summary = summary;
   root.BarnyardTiles = helpers;
 })(typeof window !== "undefined" ? window : globalThis);

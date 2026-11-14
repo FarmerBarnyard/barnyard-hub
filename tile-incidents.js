@@ -43,16 +43,18 @@
     function paint(sum) {
       clear(body);
       var line = summaryLine(sum);
-      body.appendChild(h("p", "tl-sub", line.text));
+      var open = sum && sum.open ? sum.open : 0;
+      body.appendChild(K.summaryRow(line.tone, !sum || sum.enabled === false ? "Switched off" : open ? K.plural(open, "open incident") : "All clear", line.text));
       var list = rows(sum, Date.now());
       if (!list.length) return;
+      body.appendChild(h("p", "tl-sub", "Newest open"));
       var ul = h("ul", "tl-list");
       list.forEach(function (r) {
         var li = h("li");
         var a = h("a", null, r.title); a.href = "monitoring.html#incidents/" + r.id;
         li.appendChild(a);
         li.appendChild(chip(r.severity, r.tone));
-        li.appendChild(h("span", "dim", " " + r.since));
+        li.appendChild(h("span", "dim", r.since));
         ul.appendChild(li);
       });
       body.appendChild(ul);

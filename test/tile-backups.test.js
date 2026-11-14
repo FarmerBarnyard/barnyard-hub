@@ -114,4 +114,32 @@ test("the tile is described for the Overview board and only uses the registry's 
   assert.ok(!/localStorage|sessionStorage|document\.cookie/.test(src), "the link is never kept in the browser");
 });
 
+test("the next restore test says what is known: a date and how far off, due today, overdue, or no schedule set", function () {
+  function sum(next, last) { return { backups: { count: 1, nextRestore: next, rows: [{ id: "bj_1", restore: { lastTestedOn: last || "" } }] } }; }
+  var future = T.nextRestore(sum({ jobId: "bj_1", name: "VMs", nextDue: "2027-10-27", daysLeft: 365 }, "2026-10-27"), NOW);
+  assert.deepStrictEqual([future.value, future.tone, future.label], ["27 Oct 2027", "", "next restore test, in 365 days"]);
+  assert.strictEqual(T.nextRestore(sum({ jobId: "bj_1", name: "VMs", nextDue: "2026-11-20", daysLeft: 24 }, "2026-10-27"), NOW).tone, "attn", "within a month");
+  var today = T.nextRestore(sum({ jobId: "bj_1", name: "VMs", nextDue: "2026-10-27", daysLeft: 0 }, "2026-09-01"), NOW);
+  assert.deepStrictEqual([today.value, today.tone], ["Due today", "attn"]);
+  var late = T.nextRestore(sum({ jobId: "bj_1", name: "VMs", nextDue: "2026-10-21", daysLeft: -6 }, "2025-10-21"), NOW);
+  assert.deepStrictEqual([late.value, late.tone, late.label], ["21 Oct 2026", "alert", "restore test overdue by 6 days"]);
+  var same = T.nextRestore(sum({ jobId: "bj_1", name: "VMs", nextDue: "2026-10-27", daysLeft: 0 }, "2026-10-27"), NOW);
+  assert.deepStrictEqual([same.value, same.tone], ["No schedule set", "attn"], "a next date that is the day it was tested is not a schedule");
+  assert.ok(/Edit that test/.test(same.note));
+  assert.strictEqual(T.nextRestore(sum(null), NOW).value, "No schedule set");
+  assert.strictEqual(T.nextRestore({ backups: { count: 0 } }, NOW).value, "None yet");
+});
+
+test("the status line is red for overdue or failing, amber for an unproven restore, green when all is well", function () {
+  assert.strictEqual(T.statusLine({ needLook: 1, unproven: 0, unmonitored: 0 }).tone, "alert");
+  assert.strictEqual(T.statusLine({ needLook: 0, unproven: 2, unmonitored: 0 }).tone, "attn");
+  assert.strictEqual(T.statusLine({ needLook: 0, unproven: 0, unmonitored: 1 }).tone, "attn");
+  assert.deepStrictEqual([T.statusLine({ needLook: 0, unproven: 0, unmonitored: 0 }).tone, T.statusLine({ needLook: 0, unproven: 0, unmonitored: 0 }).pill], ["ok", "On time"]);
+});
+
+test("a restore test's next date must be after the test itself", function () {
+  assert.strictEqual(T.testToBody({ testedOn: "2026-10-01", what: "x", result: "ok", by: "", notes: "", nextDue: "2026-10-01" }).field, "nextDue");
+  assert.ok(T.testToBody({ testedOn: "2026-10-01", what: "x", result: "ok", by: "", notes: "", nextDue: "2026-10-02" }).body);
+});
+
 console.log("\n" + passed + " passed");

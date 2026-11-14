@@ -69,8 +69,21 @@ test("Usage: the tightest meters in order, and the checklist sentence", function
   var u = { meters: [{ id: "a", label: "A" }, { id: "b", label: "B" }, { id: "c", label: "C" }], tightest: ["c", "a", "x"], checklist: [{}, {}, {}, {}], checklistDone: 1 };
   assert.deepStrictEqual(Usage.tightest(u, 3).map(function (m) { return m.id; }), ["c", "a"]);
   assert.strictEqual(Usage.tightest(null).length, 0);
-  assert.strictEqual(Usage.checklistText(u), "1 of 4 paths ticked in the rate-limit rule");
+  assert.strictEqual(Usage.checklistText(u), "1 of 4 paths confirmed");
   assert.strictEqual(Usage.checklistText(null), "");
+});
+
+test("Usage: the rate-limit checklist is a manual checklist, never a failure; the limits line follows the tightest bar", function () {
+  var none = Usage.checklistLine({ checklist: new Array(17).fill({}), checklistDone: 0 });
+  assert.deepStrictEqual([none.tone, none.pill], ["info", "Not started"]);
+  assert.ok(/0 of 17 paths confirmed/.test(none.text) && /by hand/.test(none.text));
+  assert.strictEqual(Usage.checklistLine({ checklist: [{}, {}], checklistDone: 1 }).tone, "attn");
+  assert.strictEqual(Usage.checklistLine({ checklist: [{}, {}], checklistDone: 2 }).tone, "ok");
+  assert.strictEqual(Usage.checklistLine({ checklist: [], checklistDone: 0 }), null);
+  assert.strictEqual(Usage.limitsLine([{ label: "A", pct: 25 }, { label: "B", pct: 92, tone: "alert" }]).tone, "alert");
+  assert.strictEqual(Usage.limitsLine([{ label: "A", pct: 75 }]).tone, "attn");
+  assert.strictEqual(Usage.limitsLine([{ label: "A", pct: 25 }]).tone, "ok");
+  assert.strictEqual(Usage.limitsLine([]).pill, "Not known");
 });
 
 test("Approvals: proposals then questions, oldest first, nothing finished; decisions carry an optional trimmed note", function () {
