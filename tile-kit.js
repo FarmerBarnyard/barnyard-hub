@@ -136,7 +136,28 @@
     return (body && body.error === "recent_sign_in_required") || status === 401;
   }
 
+  // What a link or reference may be, the same three shapes the Worker's link-rules.js stores: "web" (https, no space, quote, angle
+  // bracket, backslash or control character), "hub" (a path starting with one slash, no colon) or "ref" (a short plain label such as
+  // "PR 444", with NO colon so "javascript:..." can never be one). "" for anything else. Only "web" and "hub" may be put in an href;
+  // a "ref" is text.
+  var WEB_LINK = /^https:\/\/[^\s"'<>\\\u0000-\u001f\u007f-\u009f]{4,300}$/;
+  var HUB_PATH = /^\/(?!\/)[^\s"'<>:\\\u0000-\u001f\u007f-\u009f]{0,299}$/;
+  var PLAIN_REF = /^(?=[A-Za-z0-9#(])[A-Za-z0-9 #._\/()-]{1,60}$/;
+  function linkKind(v) {
+    var s = typeof v === "string" ? v.trim() : "";
+    if (!s) return "";
+    if (WEB_LINK.test(s)) return "web";
+    if (HUB_PATH.test(s)) return "hub";
+    return PLAIN_REF.test(s) ? "ref" : "";
+  }
+  // The text to put in an href, or "" (a reference, a script address, anything odd).
+  function linkHref(v) {
+    var s = typeof v === "string" ? v.trim() : "", k = linkKind(s);
+    return k === "web" || k === "hub" ? s : "";
+  }
+
   var helpers = {
+    linkKind: linkKind, linkHref: linkHref,
     plural: plural, moneyText: moneyText, parseMoney: parseMoney, dayDiff: dayDiff, daysText: daysText, urgency: urgency,
     dateText: dateText, agoText: agoText, errorText: errorText, needsSignIn: needsSignIn, ERRORS: ERRORS, limitState: limitState, countTone: countTone
   };
