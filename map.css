@@ -35,18 +35,32 @@
 .mp-svg:active { cursor: grabbing; }
 .mp-bg { fill: transparent; }
 
-.mp-edge { fill: none; stroke: var(--fg-dim); stroke-width: 1.4; opacity: .55; }
-.mp-edge.aff { stroke: var(--attn); stroke-width: 2.2; opacity: 1; }
-.mp-edge.hit { stroke: var(--alert); stroke-width: 2.6; opacity: 1; }
-.mp-edge.need { stroke: var(--info); stroke-width: 2.2; opacity: 1; }
-.mp-edge.faded { opacity: .12; }
-.mp-arrowhead { fill: var(--fg-dim); }
+/* Layers: a faint band and a quiet label for each row of the diagram. */
+.mp-lane { fill: var(--panel); opacity: .55; stroke: var(--line); stroke-width: 1; }
+.mp-lane-title { font: 600 11px var(--font-body, system-ui, sans-serif); letter-spacing: .09em; text-transform: uppercase; fill: var(--fg-dim); pointer-events: none; }
+.mp-lane-hint { font-weight: 400; letter-spacing: .02em; text-transform: none; opacity: .8; }
 
-.mp-node { cursor: pointer; outline: none; }
+/* Links: soft until a box is pointed at or picked. Needs one colour, dependents another; everything else fades. */
+.mp-edge { fill: none; stroke: var(--fg-dim); stroke-width: 1.2; opacity: .34; pointer-events: none; transition: opacity .15s; }
+.mp-edge.aff { stroke: var(--attn); stroke-width: 2.4; opacity: 1; }
+.mp-edge.hit { stroke: var(--alert); stroke-width: 2.6; opacity: 1; }
+.mp-edge.need { stroke: var(--info); stroke-width: 2.4; opacity: 1; }
+.mp-edge.faded { opacity: .05; }
+.mp-arrowhead { fill: var(--fg-dim); }
+.mp-arrowhead.need { fill: var(--info); }
+.mp-arrowhead.aff { fill: var(--attn); }
+.mp-arrowhead.hit { fill: var(--alert); }
+
+.mp-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
+.mp-legend-item { display: inline-flex; align-items: center; gap: 8px; color: var(--fg); }
+.mp-legend .mp-edge { stroke-width: 2.4; opacity: 1; }
+
+.mp-node { cursor: pointer; outline: none; transition: opacity .15s; }
 .mp-box { fill: var(--panel); stroke: var(--line); stroke-width: 1.4; }
-.mp-name { font: 600 12.5px var(--font-body, system-ui, sans-serif); fill: var(--fg-strong); pointer-events: none; }
+.mp-name { font: 600 12px var(--font-body, system-ui, sans-serif); fill: var(--fg-strong); pointer-events: none; }
 .mp-kindline { font: 11px var(--font-body, system-ui, sans-serif); fill: var(--fg-dim); pointer-events: none; }
-.mp-dot { fill: var(--fg-dim); }
+.mp-dot { fill: var(--fg-dim); stroke: none; }
+.mp-dot.ring { fill: none; stroke: var(--fg-dim); stroke-width: 1.6; }
 .mp-node.tone-ok .mp-dot { fill: var(--ok); }
 .mp-node.tone-alert .mp-dot { fill: var(--alert); }
 .mp-node.tone-attn .mp-dot { fill: var(--attn); }
@@ -58,8 +72,9 @@
 .mp-node.need .mp-box { stroke: var(--info); stroke-width: 2.4; }
 .mp-node.sel .mp-box { stroke: var(--accent); stroke-width: 3.2; }
 .mp-node.simdown .mp-box { fill: var(--alert-soft); stroke: var(--alert); stroke-width: 3.2; }
-.mp-node.faded { opacity: .28; }
+.mp-node.faded { opacity: .2; }
 .mp-node:focus-visible .mp-box { stroke: var(--accent); stroke-width: 3.2; }
+@media (prefers-reduced-motion: reduce) { .mp-edge, .mp-node { transition: none; } }
 
 .mp-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; max-height: clamp(480px, calc(100vh - 240px), 1200px); overflow-y: auto; }
 .mp-panel h2 { font: 600 17px var(--font-display); color: var(--fg-strong); margin: 0; }
@@ -84,7 +99,9 @@
 .mp-swatch { width: 12px; height: 12px; border-radius: 50%; background: var(--fg-dim); display: inline-block; }
 .mp-swatch.ok { background: var(--ok); }
 .mp-swatch.alert { background: var(--alert); }
-.mp-swatch.attn { background: var(--attn); }
+.mp-swatch.attn { background: var(--attn); border-radius: 0; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.mp-swatch.alert { border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.mp-swatch.dim { background: transparent; border: 2px solid var(--fg-dim); box-sizing: border-box; }
 
 .mp-choices { display: grid; gap: 2px; max-height: 340px; overflow-y: auto; }
 .mp-choice { display: flex; align-items: baseline; gap: 8px; font-size: 13px; padding: 3px 0; cursor: pointer; }
