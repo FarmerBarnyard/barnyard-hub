@@ -41,7 +41,10 @@
     state: "loading", planner: "loading", renewals: [], dueItems: [], tasks: [], events: [], google: [], googleState: "loading", m365: [], m365State: "loading", partial: false, fromCache: false,
     outlook: [], outlookState: "loading", showOutlook: true, olWin: null, olFail: "", olBusy: false,
     view: "today", kind: "all", month: null, weekOf: null,
-    plan: null            // the day planner's settings, accepted blocks, timer and learned ratios (from GET /planner/all); see plan-view.js
+    plan: null,           // the day planner's settings, accepted blocks, timer and learned ratios (from GET /planner/all); see plan-view.js
+    // The Worker's automatic entries (calendar-autosync.js): `autoMode` on | dry | off (null until the first answer), `autoStatus` the last run it
+    // recorded, `autoBusy` while a Sync now / Preview runs, `autoPreview` what a Preview said, `autoAsked` so the page opens one sync only.
+    autoMode: null, autoStatus: null, autoBusy: false, autoPreview: null, autoAsked: false
   };
   var lastFocus = null;
   var toastTimer = null;
@@ -149,13 +152,62 @@
         model.tasks = Array.isArray(b.data.tasks) ? b.data.tasks : [];
         model.events = Array.isArray(b.data.events) ? b.data.events : [];
         if (b.data.plan && typeof b.data.plan === "object") model.plan = b.data.plan;
+        model.autoMode = b.data.autoMode === "on" || b.data.autoMode === "dry" || b.data.autoMode === "off" ? b.data.autoMode : null;
+        model.autoStatus = b.data.auto && typeof b.data.auto === "object" ? b.data.auto : null;
         model.planner = "ok";
       } else model.planner = b.status === 503 || b.status === 404 ? "unavailable" : "error";
       if (a.status !== 200 && b.status !== 200) { model.state = haveData ? "ok" : "error"; return; }
       model.state = "ok";
       model.fromCache = false;
       writeCache();
-    }).then(render);
+    }).then(render).then(syncIfStale);
+  }
+
+  // ---- automatic entries ------------------------------------------------------------------
+
+  var STALE_MS = 20 * 60 * 1000;
+  // Opening the page when the switch is on and the last sync is old asks the Worker for one (it skips it if one happened in the last ten
+  // minutes). Once per page load; the hourly cron does the rest.
+  function syncIfStale() {
+    if (model.autoAsked || model.autoMode !== "on" || model.state !== "ok" || model.planner !== "ok") return null;
+    var st = model.autoStatus;
+    if (st && !st.dryRun && Number.isFinite(st.at) && Date.now() - st.at < STALE_MS) return null;
+    model.autoAsked = true;
+    return request(PLAN_API, "POST", "/autosync/run", { auto: true }).then(function (r) {
+      if (r && r.state === "done") return load();
+    }, function () { /* the status line keeps saying when the last run was */ });
+  }
+
+  function runSync(dry) {
+    if (model.autoBusy) return;
+    model.autoBusy = true;
+    if (dry) model.autoPreview = null;
+    render();
+    request(PLAN_API, "POST", "/autosync/run", dry ? { dryRun: true } : {}).then(function (r) {
+      model.autoBusy = false;
+      if (r && r.mode) model.autoMode = r.mode;
+      if (dry) { model.autoPreview = r && r.status ? r.status : null; render(); return; }
+      if (r && r.state === "off") { toast("Automatic entries are switched off on the server."); render(); return; }
+      if (r && r.state === "busy") { toast("A sync is already running. Try again in a minute."); render(); return; }
+      if (r && r.state === "refused") toast("Not applied: the Ops board read came back empty.");
+      else toast("Synced.");
+      return load();
+    }, function (e) { model.autoBusy = false; toast(say(e)); render(); });
+  }
+
+  function setPinned(ev, pinned) {
+    return request(PLAN_API, "POST", "/event/pin", { id: ev.id, pinned: pinned }).then(function (r) {
+      applyEvent(r.event); render();
+      toast(pinned ? "Pinned: automation will leave it alone." : "Unpinned: the next sync puts it right.");
+    }, function (e) { toast(say(e)); });
+  }
+
+  // Removing an automatic entry: it stays off the calendar until its source gets a new date. (No Undo: an undo would make a plain event.)
+  function removeAuto(ev) {
+    plan("/event/delete", { id: ev.id }).then(function () {
+      dropEvent(ev.id); render();
+      toast("Removed. It stays off the calendar until its date changes.");
+    }, function (e) { toast(say(e)); });
   }
 
   function request(base, method, path, body) {
@@ -174,7 +226,7 @@
     recent_sign_in_required: "Sign in again to do that, then try once more.",
     unauthenticated: "You’re not signed in, so nothing was changed.", forbidden: "You’re not signed in as the owner, so nothing was changed.",
     tasks_full: "The to-do list is full (3,000). Clear the ticked ones first.", events_full: "There are too many events stored (1,500).",
-    not_found: "That has already gone. Refresh the page.", today_invalid: "This computer’s date is far from the server’s, so the change wasn’t made.",
+    not_auto: "Only automatic entries can be pinned.", not_found: "That has already gone. Refresh the page.", today_invalid: "This computer’s date is far from the server’s, so the change wasn’t made.",
     timer_busy: "Another focus timer is running. Finish or cancel it first.", no_timer: "There is no timer running.",
     block_started: "That block has already started or finished, so it can’t be changed.", blocks_full: "There are too many planned blocks stored. Delete some old ones.",
     task_not_open: "One of those to-dos was ticked off or deleted. Plan again.", estimate_invalid: "Give the estimate in minutes, from 0 to 720.",
@@ -245,7 +297,7 @@
     if (e.type === "item") main.href = e.ref.href || "ops.html"; else main.type = "button";
     main.appendChild(h("b", null, e.label));
     el.appendChild(main);
-    if (e.type === "event") el.appendChild(chip("Event"));
+    if (e.type === "event") { el.appendChild(chip("Event")); if (e.ref.event.auto) el.appendChild(chip(e.ref.event.pinned ? "auto, pinned" : "auto", "cal-auto-chip")); }
     if (e.type === "gcal") el.appendChild(chip("Google Calendar"));
     if (e.type === "ocal") el.appendChild(chip("Outlook"));
     if (e.type === "m365") { el.appendChild(chip("Microsoft 365")); if (e.ref.major) el.appendChild(chip("Major change")); }
@@ -363,7 +415,7 @@
     if (e.type === "item") main.href = e.ref.href || "ops.html"; else { main.type = "button"; main.addEventListener("click", function () { openEntry(e); }); }
     if (e.time && !e.allDay) main.appendChild(h("span", "cal-wtime", L.timeText(e.time)));
     main.appendChild(h("span", null, e.label));
-    main.setAttribute("title", typeName(e));
+    main.setAttribute("title", typeName(e) + (e.type === "event" && e.ref.event.auto ? " (added automatically)" : ""));
     el.appendChild(main);
     return el;
   }
@@ -552,6 +604,65 @@
     st.textContent = model.showOutlook && s !== "ok" && s !== "loading" && OUTLOOK_STATUS[s] ? "(" + OUTLOOK_STATUS[s] + ")" : "";
   }
 
+  var AUTO_KIND = { renewal: "Renewal", milestone: "Milestone", due: "Ops item", step: "Step", todo: "To-do" };
+  var AUTO_VERB = { create: "Add", move: "Move", clear: "Clear" };
+  var autoOpen = false;
+
+  // The "Automatic entries" panel under the calendar: one status line (the summary), the Sync now and Preview buttons, what a Preview said, and
+  // every automatic entry with its source and a Pin switch. Hidden until the Worker has said whether the feature exists.
+  function renderAuto(root) {
+    if (!model.autoMode || model.planner !== "ok") return;
+    var autos = L.autoEntries(model.events);
+    var box = h("details", "cal-auto");
+    box.open = autoOpen;
+    box.addEventListener("toggle", function () { autoOpen = box.open; });
+    box.appendChild(h("summary", "cal-auto-sum", L.autoLine(model.autoMode, model.autoStatus, autos.length, Date.now())));
+    var body = h("div", "cal-auto-body");
+    body.appendChild(h("p", "dim", "The server adds, moves and clears these by itself from your Ops board (renewals, milestones, items and steps that are yours, each with a due date) and your dated to-dos. A changed date moves the entry, a finished item clears it, and your own events are never touched. Pin an entry to stop automation changing it. Where the same thing is already shown from its own source on that day, it is listed here but not drawn twice."));
+    var tools = h("div", "cal-actions");
+    var syncBtn = h("button", "btn btn-sm", model.autoBusy ? "Working…" : "Sync now"); syncBtn.type = "button"; syncBtn.disabled = model.autoBusy || model.autoMode !== "on";
+    syncBtn.addEventListener("click", function () { runSync(false); });
+    var prevBtn = h("button", "btn btn-sm btn-quiet", "Preview"); prevBtn.type = "button"; prevBtn.disabled = model.autoBusy;
+    prevBtn.title = "Shows what a sync would change. Nothing is written.";
+    prevBtn.addEventListener("click", function () { runSync(true); });
+    tools.appendChild(syncBtn); tools.appendChild(prevBtn);
+    body.appendChild(tools);
+    if (model.autoMode === "off") body.appendChild(h("p", "dim", "Switched off on the server (the CAL_AUTOSYNC setting), so nothing is added or changed. Preview still works."));
+    var pv = model.autoPreview;
+    if (pv && pv.counts) {
+      var pc = pv.counts;
+      var box2 = h("div", "cal-auto-preview");
+      box2.appendChild(h("p", "cal-auto-pvh", "Preview: would add " + (pc.wouldCreate || 0) + ", move " + (pc.wouldMove || 0) + ", clear " + (pc.wouldClear || 0) + ". Nothing was written."));
+      var ul = h("ul", "cal-auto-pv");
+      (pv.actions || []).forEach(function (a) { ul.appendChild(h("li", null, (AUTO_VERB[a.action] || a.action) + ": " + a.title + " (" + L.shortDate(a.date) + (a.from ? ", from " + L.shortDate(a.from) : "") + ")")); });
+      if (pv.moreActions) ul.appendChild(h("li", "dim", "and " + pv.moreActions + " more"));
+      if ((pv.actions || []).length) box2.appendChild(ul);
+      body.appendChild(box2);
+    }
+    var data0 = data();
+    if (!autos.length) body.appendChild(h("p", "dim", "No automatic entries yet."));
+    var list = h("div", "cal-auto-list");
+    autos.forEach(function (ev) {
+      var el = h("div", "cal-auto-row" + (ev.pinned ? " is-pinned" : ""));
+      el.appendChild(h("span", "cal-auto-when dim", L.shortDate(ev.startDate) + (ev.startTime ? ", " + L.timeText(ev.startTime) : "")));
+      var title = h("button", "cal-main", ev.title); title.type = "button";
+      title.addEventListener("click", function () { openEvent(ev, null); });
+      el.appendChild(title);
+      el.appendChild(chip(AUTO_KIND[ev.kind] || "Auto"));
+      if (ev.pinned) el.appendChild(chip("Pinned", "attn"));
+      if (L.autoCovered(ev, data0)) el.appendChild(h("span", "dim cal-auto-note", "shown from its source"));
+      var href = L.autoHref(ev);
+      if (href) { var a = h("a", "chip cal-ref", "Source"); a.href = href; el.appendChild(a); }
+      var pin = h("button", "btn btn-sm btn-quiet", ev.pinned ? "Unpin" : "Pin"); pin.type = "button";
+      pin.addEventListener("click", function () { setPinned(ev, !ev.pinned); });
+      el.appendChild(pin);
+      list.appendChild(el);
+    });
+    body.appendChild(list);
+    box.appendChild(body);
+    root.appendChild(box);
+  }
+
   function render() {
     renderTabs();
     renderFilter();
@@ -581,6 +692,7 @@
     else if (model.view === "plan") renderPlan(root, t);
     else if (model.view === "todos") renderTodos(root, t);
     else renderRenewals(root, t);
+    renderAuto(root);
     var n = L.dueCount(data(), t);
     document.title = (n ? "(" + n + ") " : "") + "Calendar · Barnyard";
     ensureOutlook();
@@ -760,6 +872,7 @@
     var body = openDrawer(ev.title);
     var top = h("div", "cal-chips");
     top.appendChild(chip("Event"));
+    if (ev.auto) { top.appendChild(chip("auto", "cal-auto-chip")); if (ev.pinned) top.appendChild(chip("Pinned", "attn")); }
     if (ev.recur) top.appendChild(chip(L.recurTitle(ev.recur)));
     body.appendChild(top);
     var when = ev.endDate && ev.endDate !== ev.startDate ? L.shortDate(ev.startDate) + (ev.startTime ? ", " + L.timeText(ev.startTime) : "") + " to " + L.shortDate(ev.endDate) + (ev.endTime ? ", " + L.timeText(ev.endTime) : "")
@@ -767,6 +880,21 @@
     body.appendChild(h("p", "cal-date", when));
     if (ev.recur && day && day.startDate !== ev.startDate) body.appendChild(h("p", "dim", "This is the repeat on " + L.longDate(day.startDate) + ". Editing changes every repeat."));
     fact(body, "Notes", ev.notes);
+    if (ev.auto) {
+      var src = L.autoHref(ev);
+      var sf = h("div", "cal-fact");
+      sf.appendChild(h("span", "cal-fact-l", "Added automatically from"));
+      if (src) { var sa = h("a", null, "Its source in the hub"); sa.href = src; sf.appendChild(sa); } else sf.appendChild(h("span", null, "the Ops board or your to-dos"));
+      body.appendChild(sf);
+      body.appendChild(h("p", "dim", ev.pinned ? "Pinned: automation leaves this entry exactly as it is." : "The server keeps this entry in step with its source: a new date moves it, a finished source clears it."));
+      var pa = h("div", "cal-actions");
+      var pn = h("button", "btn btn-primary btn-sm", ev.pinned ? "Unpin" : "Pin"); pn.type = "button"; pn.addEventListener("click", function () { setPinned(ev, !ev.pinned); closeDrawer(); });
+      var ed = h("button", "btn btn-sm", "Edit and pin"); ed.type = "button"; ed.addEventListener("click", function () { openEventForm(ev); });
+      var rm = h("button", "btn btn-sm btn-quiet", "Remove"); rm.type = "button"; rm.addEventListener("click", function () { removeAuto(ev); closeDrawer(); });
+      pa.appendChild(pn); pa.appendChild(ed); pa.appendChild(rm);
+      body.appendChild(pa);
+      return;
+    }
     var actions = h("div", "cal-actions");
     var edit = h("button", "btn btn-primary btn-sm", "Edit"); edit.type = "button"; edit.addEventListener("click", function () { openEventForm(ev); });
     var del = h("button", "btn btn-sm btn-quiet", ev.recur ? "Delete every repeat" : "Delete"); del.type = "button"; del.addEventListener("click", function () { removeEvent(ev); closeDrawer(); });

@@ -457,4 +457,84 @@ test("the Plan view is a tab, and the page loads the planner before the calendar
   assert.ok(a > 0 && b > a && c > b, "engine, then view, then the page");
 });
 
+
+// ---- automatic entries (the server's Calendar sync) ---------------------------------------------------------------------------------
+
+function auto(over) {
+  return ev(Object.assign({ id: "ev_a1", title: "Renews: Entra secret", auto: true, source: "ops:it_ren00001", kind: "renewal", link: "ops.html#it_ren00001", pinned: false, startDate: "2027-09-23", notes: "Added automatically from the Ops board." }, over));
+}
+
+test("an automatic event is hidden from the days while its source is drawn on the same date, and shown when it is not", function () {
+  var data = { renewals: [r({ id: "it_ren00001", due: "2027-09-23" })], dueItems: [{ id: "it_you00001", title: "Sign", due: "2026-11-20", href: "ops.html#it_you00001" }], tasks: [t({ id: "td_0a1b2c3d", title: "Call", due: "2026-12-01" })],
+    events: [auto(), auto({ id: "ev_a2", source: "ops:it_you00001", startDate: "2026-11-20", kind: "due" }), auto({ id: "ev_a3", source: "planner:td_0a1b2c3d", startDate: "2026-12-01", kind: "todo" }),
+      auto({ id: "ev_a4", source: "ops:it_you00001:2", startDate: "2026-11-20", kind: "step", title: "To do: Ring them (Sign)" }), ev({ id: "ev_own", title: "Dentist", startDate: "2026-11-20" })] };
+  var shown = Cal.visibleEvents(data).map(function (e) { return e.id; });
+  assert.deepStrictEqual(shown, ["ev_a4", "ev_own"], "a step has no entry of its own, so it shows; the owner's own event always shows");
+  var map = Cal.entriesByDate(data, "2026-11-01", "2027-12-31");
+  assert.deepStrictEqual(ids(map["2026-11-20"]).sort(), ["event:ev_a4", "event:ev_own", "item:it_you00001"]);
+  assert.deepStrictEqual(ids(map["2027-09-23"]), ["renewal:it_ren00001"], "drawn once");
+  assert.deepStrictEqual(ids(map["2026-12-01"]), ["task:td_0a1b2c3d"]);
+});
+
+test("when the source has a different date (a sync has not caught up) the automatic entry shows, and a ticked to-do's mirror shows too", function () {
+  var data = { renewals: [r({ id: "it_ren00001", due: "2027-10-30" })], tasks: [t({ id: "td_0a1b2c3d", due: "2026-12-05" }), t({ id: "td_ffffffff", status: "done", due: "2026-12-01" })],
+    events: [auto(), auto({ id: "ev_a3", source: "planner:td_0a1b2c3d", startDate: "2026-12-01" }), auto({ id: "ev_a5", source: "planner:td_ffffffff", startDate: "2026-12-01" })] };
+  assert.strictEqual(Cal.visibleEvents(data).length, 3);
+  assert.strictEqual(Cal.autoCovered(auto({ source: "ops:it_ren00001", startDate: "2027-10-30" }), data), true);
+  assert.strictEqual(Cal.autoCovered(auto({ source: "ops:it_ren00001", startDate: "2027-09-23" }), data), false);
+});
+
+test("a renewal that renews itself (state auto) is not drawn, so its automatic event is", function () {
+  var data = { renewals: [r({ id: "it_ren00001", due: "2027-09-23", state: "auto" })], events: [auto()] };
+  assert.strictEqual(Cal.visibleEvents(data).length, 1);
+});
+
+test("the .ics file does not repeat what its own source already puts in it", function () {
+  var data = { renewals: [r({ id: "it_ren00001", due: "2027-09-23" })], tasks: [t({ id: "td_0a1b2c3d", title: "Call", due: "2026-12-01" })],
+    events: [auto(), auto({ id: "ev_a3", source: "planner:td_0a1b2c3d", startDate: "2026-12-01", title: "Call" }), ev({ id: "ev_own", title: "Dentist" })] };
+  var ics = Cal.buildIcs(data, 0, "https://dashboard.barnyard.site/calendar.html");
+  assert.strictEqual((ics.match(/BEGIN:VEVENT/g) || []).length, 3, "the renewal, the to-do and the owner's event");
+  assert.ok(ics.indexOf("event-ev_a1@") < 0 && ics.indexOf("event-ev_a3@") < 0 && ics.indexOf("event-ev_own@") > 0);
+  assert.ok(/SUMMARY:Dentist/.test(ics));
+});
+
+test("automatic entries are listed soonest first, only the automatic ones, and an event without a source is not automatic", function () {
+  var list = Cal.autoEntries([auto({ id: "b", startDate: "2027-01-01", source: "ops:it_bb000001" }), ev({ id: "own" }), auto({ id: "a", startDate: "2026-12-01", source: "ops:it_aa000001" }), { id: "x", auto: true, source: "", startDate: "2026-11-01" }]);
+  assert.deepStrictEqual(list.map(function (e) { return e.id; }), ["a", "b"]);
+  assert.strictEqual(Cal.isAuto(ev()), false);
+});
+
+test("the source link stays inside the hub", function () {
+  assert.strictEqual(Cal.autoHref({ link: "ops.html#it_ab12cd34" }), "ops.html#it_ab12cd34");
+  assert.strictEqual(Cal.autoHref({ link: "calendar.html#td_0a1b2c3d" }), "calendar.html#td_0a1b2c3d");
+  ["https://evil.example/", "//evil.example", "javascript:alert(1)", "ops.html#<script>", "../x.html", "", undefined].forEach(function (l) { assert.strictEqual(Cal.autoHref({ link: l }), "", String(l)); });
+});
+
+test("the status line says the switch, the last run and what it did, in plain words", function () {
+  var NOW = 1800000000000;
+  assert.strictEqual(Cal.autoLine("off", null, 0, NOW), "Automatic entries are off on the server · 0 entries");
+  assert.strictEqual(Cal.autoLine("on", null, 3, NOW), "Automatic entries: on · no run yet · 3 entries");
+  assert.strictEqual(Cal.autoLine("on", { at: NOW - 12 * 60000, counts: { created: 2, moved: 1, cleared: 0 }, outlook: { state: "not_setup" } }, 14, NOW), "Automatic entries: on · last sync 12 min ago · added 2, moved 1, cleared 0 · 14 entries");
+  assert.strictEqual(Cal.autoLine("on", { at: NOW - 30000, counts: { created: 0, moved: 0, cleared: 0 } }, 1, NOW), "Automatic entries: on · last sync just now · 1 entry");
+  assert.strictEqual(Cal.autoLine("dry", { at: NOW - 3 * 3600000, dryRun: true, counts: { wouldCreate: 4, wouldMove: 1, wouldClear: 0 } }, 0, NOW), "Automatic entries: dry run, nothing is written · last checked 3 h ago · would add 4, move 1, clear 0 · 0 entries");
+  assert.ok(/refused because the Ops board read came back empty/.test(Cal.autoLine("on", { at: NOW, error: "empty_board_read" }, 5, NOW)));
+  assert.ok(/Outlook: no write permission yet/.test(Cal.autoLine("on", { at: NOW, counts: {}, outlook: { state: "permission_not_granted" } }, 5, NOW)));
+  assert.ok(/Outlook is in step/.test(Cal.autoLine("on", { at: NOW, counts: {}, outlook: { state: "ok" } }, 5, NOW)));
+  assert.strictEqual(Cal.autoLine(null, null, 0, NOW), "", "nothing is said until the server has said whether the feature exists");
+  assert.strictEqual(Cal.autoLine("bogus", null, 0, NOW), "");
+});
+
+test("the day plan never treats an automatic entry as busy time", function () {
+  var src = fs.readFileSync(path.join(root, "planner-engine.js"), "utf8");
+  assert.ok(/filter\(function \(e\) \{ return !e\.auto; \}\)/.test(src));
+});
+
+test("the page shows the panel, the pin switch and the Sync now and Preview buttons, and writes only through the planner routes", function () {
+  var js = fs.readFileSync(path.join(root, "calendar.js"), "utf8");
+  ["/autosync/run", "/event/pin", "Sync now", "Preview", "Unpin"].forEach(function (s) {
+    assert.ok(js.indexOf(s) >= 0, s);
+  });
+  var shell = fs.readFileSync(path.join(root, "shell.js"), "utf8");
+  assert.ok(shell.indexOf("autosync") < 0, "shell.js (copied to four sites) is not touched");
+});
 console.log(passed + " passed");
