@@ -52,4 +52,22 @@ test("the shared summary: one call for tiles that load together, forgotten after
   });
 });
 
+
+test("accepted gaps are in the tile model, in a clean register too (never hidden), and the tile draws them with their reason", function () {
+  var acc = [{ id: "as_bbbbbbbbbb", name: "Mail sender app", kind: "identity", gap: "watch", reason: "Renewal is on the Calendar", review: "2027-02-14", overdue: false },
+    { id: "as_cccccccccc", name: "Tunnel", kind: "network", gap: "monitor", reason: "Cannot be probed", review: "2026-11-01", overdue: true }];
+  var clean = T.model(links({ accepted: acc, acceptedCount: 2 }));
+  assert.strictEqual(clean.state, "clean");
+  assert.deepStrictEqual(clean.accepted.map(function (a) { return a.text; }), ["Accepted until 14 Feb 2027: Renewal is on the Calendar", "Review overdue (was accepted until 1 Nov 2026): Cannot be probed"]);
+  assert.strictEqual(clean.acceptedCount, 2);
+  var weak = T.model(links({ weakest: [{ id: "as_aaaaaaaaaa", name: "app02", kind: "server", criticality: "high", dependents: 7, gaps: ["runbook"] }], accepted: acc, acceptedCount: 2 }));
+  assert.strictEqual(weak.state, "weak");
+  assert.strictEqual(weak.accepted.length, 2);
+  assert.deepStrictEqual(T.model(links()).accepted, []);
+  var src = fs.readFileSync(path.join(root, "tile-weakest.js"), "utf8");
+  assert.ok(/"Accepted gaps"/.test(src) && /m\.accepted\.forEach/.test(src));
+  assert.ok(src.indexOf("if (m.state !== \"clean\")") !== -1 && src.indexOf("m.accepted.length") > src.indexOf("if (m.state !== \"clean\")"), "the accepted section is outside the weak-only branch");
+});
+
+
 console.log("\n" + passed + " passed");

@@ -117,3 +117,5 @@
 .mp-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
 .mp-card h2 { font: 600 17px var(--font-display); color: var(--fg-strong); margin: 0; }
 .mp-card p { margin: 0; font-size: 14px; }
+.mp-accepted li { align-items: baseline; }
+.mp-accepted .chip { flex: none; }

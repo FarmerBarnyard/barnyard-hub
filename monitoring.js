@@ -85,6 +85,9 @@
     if (detail === "timeout") return "It did not answer within 8 seconds.";
     if (detail === "unreachable") return "The Worker could not connect to it.";
     if (detail === "bad_answer") return "It sent an answer that makes no sense.";
+    if (detail === "heartbeat_silent") return "No heartbeat has arrived for a few minutes: the host, its network or the heartbeat service on it is down.";
+    if (detail === "self_stale") return "The Worker has not checked itself for over 15 minutes, so the last answer is not trusted. The outside watcher on GitHub is what raises the alarm if the API is really down.";
+    if (detail === "waiting") return "No heartbeat has arrived yet.";
     var http = /^http_(\d{3})$/.exec(detail);
     if (http) {
       var code = Number(http[1]);
@@ -101,6 +104,8 @@
     app02: { text: "Look at the render service and runners on the System health page", href: "health.html" },
     cld01: { text: "See the CVE catalogue on the Vulnerabilities tab", href: "vulnerabilities.html" },
     vtt: { text: "Check the VTT server and its sign-in key on the Ops board", href: "ops.html" },
+    vmh01: { text: "Heartbeat steps for BARNYARDVMH01", href: "https://github.com/FarmerBarnyard/ClaudeRepo/tree/main/reporter" },
+    "worker-api": { text: "Cloudflare status", href: "https://www.cloudflarestatus.com/" },
     "site-dashboard": { text: "GitHub Pages status", href: "https://www.githubstatus.com/" },
     "site-study": { text: "GitHub Pages status", href: "https://www.githubstatus.com/" },
     "site-campaign": { text: "GitHub Pages status", href: "https://www.githubstatus.com/" },
@@ -116,6 +121,9 @@
     } else if (m.status === "down") {
       tone = "alert"; label = "Down";
       line = (m.downSince ? "Down since " + clockText(m.downSince) + " (" + durationText(now - m.downSince) + "). " : "") + "Checked " + agoText(m.lastCheck, now) + ".";
+    } else if (m.heartbeat && !m.lastCheck) {
+      // a host with no outside check: nothing is asked of it, so "the first check runs within 5 minutes" would be untrue
+      label = "Waiting for its heartbeat"; line = "Nothing has reported from it yet. The heartbeat is installed once on the host; until then there is nothing to alarm about.";
     } else if (m.lastCheck) {
       tone = "attn"; label = "Can't tell";
       line = "Checked " + agoText(m.lastCheck, now) + ". Nothing is wrong that the Worker can see, but it cannot confirm the state either.";
@@ -321,7 +329,7 @@
 
   // ---- the server reporters (a small script on each server; see ClaudeRepo's reporter/) ----------
 
-  var SERVERS = [{ id: "app02", name: "app02" }, { id: "cld01", name: "BARNYARDCLD01" }, { id: "vtt", name: "VTT server" }];
+  var SERVERS = [{ id: "app02", name: "app02" }, { id: "cld01", name: "BARNYARDCLD01" }, { id: "vtt", name: "VTT server" }, { id: "vmh01", name: "BARNYARDVMH01" }];
 
   // The switches under settings.alerts in the Worker (monitor-logic.js): every one is on until the owner turns it off.
   var ALERT_SWITCHES = [
@@ -391,7 +399,10 @@
   }
 
   // What the page tells the owner to paste into /etc/barnyard-reporter/env.
-  function envLines(server, key) { return "BR_SERVER=" + server + "\nBR_KEY=" + key + "\n"; }
+  function envLines(server, key) { return HEARTBEAT_SERVERS.indexOf(server) !== -1 ? key : "BR_SERVER=" + server + "\nBR_KEY=" + key + "\n"; }
+  // A host with no outside check and no tunnel sends a heartbeat from the one-file installer (reporter/barnyard-heartbeat-install.sh),
+  // which takes the bare key as its BH_KEY parameter (or typed silently), not as lines of an env file.
+  var HEARTBEAT_SERVERS = ["vmh01"];
 
   // The words for the reason codes the Worker keeps with an alert from a report (monitor-reporters.js reasonText).
   function reasonText(detail) {
@@ -578,7 +589,7 @@
   var GROUPS = [
     ["servers", "Servers", "checked every 5 minutes from the Worker"],
     ["sites", "Sites", "shown here; no email by default"],
-    ["services", "Services", ""]
+    ["services", "Services", "the Worker's own health answer; GitHub's outside watcher is the real outage alarm"]
   ];
 
   // One card: the state words from tileModel plus the facts the dashboard shows. `trend` is the status's trend block.
@@ -588,7 +599,7 @@
     var facts = [];
     if (m.status === "up" && m.since) facts.push("Up for " + durationText(now - m.since));
     if (m.status === "down" && m.downSince) facts.push("Down for " + durationText(now - m.downSince));
-    facts.push(m.lastCheck ? "Checked " + agoText(m.lastCheck, now) : "Not checked yet");
+    facts.push(m.lastCheck ? "Checked " + agoText(m.lastCheck, now) : m.heartbeat ? "No heartbeat yet" : "Not checked yet");
     if (m.lastMs) facts.push(m.lastMs + " ms");
     var d7 = uptimePct(daily, 7);
     return {
@@ -1514,10 +1525,13 @@
     if (model.newKey) {
       var nk = h("div", "mo-newkey");
       nk.appendChild(h("b", null, "Copy this key now. It will not be shown again."));
-      nk.appendChild(h("span", "dim", "Paste both lines into /etc/barnyard-reporter/env on " + model.newKey.name + ", then run the installer (the install steps are linked above)."));
+      var beat = HEARTBEAT_SERVERS.indexOf(model.newKey.server) !== -1;
+      nk.appendChild(h("span", "dim", beat
+        ? "This host uses the one-file heartbeat installer, not the env file. Give it this key as the BH_KEY parameter of the UMBRA script run, or type it at the silent prompt (the steps are in the reporter README, linked above). Never paste it into the script itself."
+        : "Paste both lines into /etc/barnyard-reporter/env on " + model.newKey.name + ", then run the installer (the install steps are linked above)."));
       var kb = h("textarea", "mo-input mo-keybox");
-      kb.readOnly = true; kb.rows = 2; kb.value = envLines(model.newKey.server, model.newKey.key);
-      kb.setAttribute("aria-label", "The new key, as two lines for the env file");
+      kb.readOnly = true; kb.rows = beat ? 1 : 2; kb.value = envLines(model.newKey.server, model.newKey.key);
+      kb.setAttribute("aria-label", beat ? "The new key" : "The new key, as two lines for the env file");
       kb.addEventListener("focus", function () { kb.select(); });
       nk.appendChild(kb);
       var row = h("div", "mo-row");

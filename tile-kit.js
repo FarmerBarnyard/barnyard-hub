@@ -108,12 +108,20 @@
     link_invalid: "A link must start with https://",
     watch_invalid: "Only a domain can be watched, and it must be a plain domain name.",
     renewalItem_invalid: "The renewal item id looks like it_ followed by 8 letters or numbers.",
+    acceptedGaps_invalid: "Check the accepted gaps: each needs a gap, a short reason and a review day.",
+    acceptedGaps_too_many: "At most four gaps can be accepted on one asset.",
+    acceptedGaps_duplicate: "Each gap can be accepted once.",
+    acceptedGaps_not_applicable: "That kind of asset is not asked for that, so there is nothing to accept.",
+    acceptedGaps_reason_required: "Say why you are accepting the gap (a short sentence, no passwords or keys).",
+    acceptedGaps_reason_too_long: "Keep the reason to 140 characters.",
+    acceptedGaps_review_invalid: "Pick a real review day for each accepted gap.",
+    acceptedGaps_review_too_far: "The review day can be at most 12 months away.",
     request_failed: "Could not reach the Worker. Check your connection and try again."
   };
   function errorText(body, status) {
     var code = body && typeof body.error === "string" ? body.error : "";
     if (code === "secret_detected") {
-      return "That looks like a password or key" + (body.field ? " in the " + body.field + " field" : "") + ". Write where it is kept (for example \"in the password manager under X\") instead.";
+      return "That looks like a password or key" + (body.field ? " in the " + (/^acceptedGaps\.\d+\.reason$/.test(body.field) ? "accepted-gap reason" : body.field) + " field" : "") + ". Write where it is kept (for example \"in the password manager under X\") instead.";
     }
     if (ERRORS[code]) return ERRORS[code];
     if (/_too_long$/.test(code)) return "The " + code.replace(/_too_long$/, "") + " text is too long.";

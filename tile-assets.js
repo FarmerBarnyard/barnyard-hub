@@ -19,7 +19,7 @@
 
   var KINDS = [
     ["server", "Server", "Servers"], ["domain", "Domain", "Domains"], ["certificate", "Certificate", "Certificates"],
-    ["account", "Account", "Accounts and tenants"], ["app", "App or site", "Apps and sites"], ["licence", "Licence", "Licences"],
+    ["account", "Account", "Accounts and tenants"], ["identity", "Identity app or setting", "Identity apps and settings"], ["app", "App or site", "Apps and sites"], ["licence", "Licence", "Licences"],
     ["subscription", "Subscription", "Subscriptions"], ["network", "Network", "Network"], ["other", "Other", "Other"]
   ];
   var KIND_ONE = {}, KIND_MANY = {};
@@ -27,8 +27,37 @@
   var CRITICALITY = [["", "Not set"], ["critical", "Critical"], ["high", "High"], ["normal", "Normal"], ["low", "Low"]];
   var DATE_STATES = [["", "Known"], ["estimated", "Estimated"], ["needed", "Needed"], ["auto", "Renews itself"]];
   var PERIODS = [["month", "a month"], ["year", "a year"], ["once", "once"]];
-  var MONITORS = [["", "None"], ["app02", "app02"], ["cld01", "BARNYARDCLD01"], ["vtt", "VTT server"], ["site-dashboard", "Dashboard site"], ["site-study", "Study site"], ["site-campaign", "Campaign site"], ["site-stocks", "Stocks site"]];
+  var MONITORS = [["", "None"], ["app02", "app02"], ["cld01", "BARNYARDCLD01"], ["vtt", "VTT server"], ["vmh01", "BARNYARDVMH01 (VMware host)"], ["worker-api", "Barnyard API (the Worker)"], ["site-dashboard", "Dashboard site"], ["site-study", "Study site"], ["site-campaign", "Campaign site"], ["site-stocks", "Stocks site"]];
   var NEED_WORDS = { expires: "a date", cost: "a cost", owner: "an owner", runbook: "a runbook" };
+
+  // ---- accepted gaps (the Worker's dependency-logic.js and registry-logic.js hold the rules; these mirror them for the form) ----
+  // A gap the owner decides to live with: { gap, reason, review }. It stays listed on the map and the Weakest links tile, and counts
+  // again once its review day has passed. Which gaps a kind of asset is ever asked for:
+  var GAPS = [["monitor", "no monitor"], ["backup", "no backup job names it"], ["runbook", "no runbook"], ["watch", "no expiry watch"]];
+  var GAP_KINDS = { monitor: ["server", "app", "network"], backup: ["server", "app"], runbook: ["server", "app", "network", "identity"], watch: ["identity"] };
+  var REASON_MAX = 140, MAX_ACCEPTED = 4;
+  function gapsFor(kind) { return GAPS.filter(function (g) { return GAP_KINDS[g[0]].indexOf(kind) !== -1; }); }
+  function ymd(d) { return d.toISOString().slice(0, 10); }
+  // The farthest review day the Worker accepts (twelve months from today, UTC) and a sensible first choice (90 days on).
+  function farthestReview(now) { var d = new Date(now); d.setUTCFullYear(d.getUTCFullYear() + 1); return ymd(d); }
+  function defaultReview(now) { return ymd(new Date(now + 90 * 86400000)); }
+  // The list as the form built it ([{ gap, reason, review }], only the ticked rows) checked for the kind. -> { value } | { error, field }
+  function checkAccepted(list, kind, now) {
+    var out = [], seen = {};
+    var far = farthestReview(now == null ? Date.now() : now);
+    for (var i = 0; i < (list || []).length; i++) {
+      var a = list[i], reason = String(a.reason || "").replace(/\s+/g, " ").trim();
+      if (gapsFor(kind).every(function (g) { return g[0] !== a.gap; }) || seen[a.gap]) continue;
+      seen[a.gap] = true;
+      if (!reason) return { error: "Say why you are accepting this gap (a short sentence, no passwords or keys).", field: "accept-" + a.gap + "-reason" };
+      if (reason.length > REASON_MAX) return { error: "Keep the reason to " + REASON_MAX + " characters.", field: "accept-" + a.gap + "-reason" };
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(a.review || "")) || isNaN(Date.parse(a.review + "T00:00:00Z"))) return { error: "Pick the day to look at this again.", field: "accept-" + a.gap + "-review" };
+      if (a.review > far) return { error: "The review day can be at most 12 months away (" + far + ").", field: "accept-" + a.gap + "-review" };
+      out.push({ gap: a.gap, reason: reason, review: a.review });
+    }
+    return { value: out.slice(0, MAX_ACCEPTED) };
+  }
+  function sameAccepted(a, b) { return JSON.stringify(a || []) === JSON.stringify(b || []); }
 
   // "needs a date and a cost"
   function needText(missing) {
@@ -145,13 +174,20 @@
     if (!current || before.cost !== values.cost) body.costCents = cents;
     if (cents !== null && (!current || before.costPeriod !== values.costPeriod || before.cost !== values.cost)) body.costPeriod = values.costPeriod;
     if (!String(values.name).trim()) return { error: "Give it a name.", field: "name" };
+    // the accepted gaps (only when the form carries them): sent when they differ from what is stored, judged against the chosen kind
+    if (Array.isArray(values.acceptedGaps)) {
+      var acc = checkAccepted(values.acceptedGaps, values.kind);
+      if (acc.error) return acc;
+      if (!sameAccepted(acc.value, current && current.acceptedGaps)) body.acceptedGaps = acc.value;
+    }
     return { body: body };
   }
 
   var helpers = {
     KINDS: KINDS, KIND_ONE: KIND_ONE, KIND_MANY: KIND_MANY, needText: needText, glance: glance, expiryModel: expiryModel,
     costLine: costLine, filterAssets: filterAssets, groupByKind: groupByKind, formValues: formValues, formToBody: formToBody,
-    renewals: renewals, isFreeNoRenewal: isFreeNoRenewal, statusLine: statusLine
+    renewals: renewals, isFreeNoRenewal: isFreeNoRenewal, statusLine: statusLine,
+    GAPS: GAPS, gapsFor: gapsFor, checkAccepted: checkAccepted, farthestReview: farthestReview, defaultReview: defaultReview
   };
   var desc = {
     id: "assets", title: "Assets & services", about: "What you run, who looks after it, when it renews and what it costs.",
@@ -374,6 +410,50 @@
       return n;
     }
 
+    // The "Accepted gaps" part of the form: one row for each thing this kind of asset is asked for (a monitor, a backup, a runbook, an
+    // expiry watch): tick it, say why, pick the day to look at it again. It is added to the form that is being built (`form`, below).
+    // -> { el, fields, show(kind), read() }
+    function acceptedEditor(asset, form) {
+      var have = {};
+      ((asset && asset.acceptedGaps) || []).forEach(function (a) { have[a.gap] = a; });
+      var now = Date.now();
+      var box = h("fieldset", "tk-accept wide");
+      box.appendChild(h("legend", null, "Accepted gaps"));
+      box.appendChild(h("p", "hint", "A gap you have decided to live with for now. It stays listed on the map and the Weakest links tile with your reason, and counts again after the review day. Never put a password or key in the reason."));
+      var rows = {}, fields = {};
+      GAPS.forEach(function (g) {
+        var a = have[g[0]];
+        var row = h("div", "tk-accept-row");
+        var on = h("input"); on.type = "checkbox"; on.checked = !!a; on.id = "accept-" + g[0];
+        var lab = h("label", "tk-check", "Accept: " + g[1]); lab.setAttribute("for", on.id);
+        var reason = h("input"); reason.type = "text"; reason.maxLength = REASON_MAX; reason.value = a ? a.reason : ""; reason.placeholder = "Why (short)"; reason.setAttribute("aria-label", "Why you accept: " + g[1]);
+        var review = h("input"); review.type = "date"; review.value = a ? a.review : ""; review.max = farthestReview(now); review.setAttribute("aria-label", "Look at this again on (" + g[1] + ")");
+        function paintRow() { reason.disabled = review.disabled = !on.checked; if (on.checked && !review.value) review.value = defaultReview(now); }
+        on.addEventListener("change", function () { paintRow(); if (on.checked) reason.focus(); });
+        paintRow();
+        row.appendChild(on); row.appendChild(lab); row.appendChild(reason); row.appendChild(review);
+        box.appendChild(row);
+        rows[g[0]] = { row: row, on: on, reason: reason, review: review };
+        fields["accept-" + g[0] + "-reason"] = reason; fields["accept-" + g[0] + "-review"] = review;
+      });
+      var none = h("p", "hint", "Nothing is asked for on this kind of asset, so there is nothing to accept.");
+      box.appendChild(none);
+      form.appendChild(box);
+      return {
+        el: box, fields: fields,
+        show: function (kind) {
+          var ok = gapsFor(kind).map(function (g) { return g[0]; });
+          GAPS.forEach(function (g) { rows[g[0]].row.hidden = ok.indexOf(g[0]) === -1; });
+          none.hidden = ok.length > 0;
+        },
+        read: function () {
+          var out = [];
+          GAPS.forEach(function (g) { var r = rows[g[0]]; if (r.on.checked) out.push({ gap: g[0], reason: r.reason.value, review: r.review.value }); });
+          return out;
+        }
+      };
+    }
+
     function showForm(asset) {
       clear(d.body); clear(foot);
       d.setTitle(asset ? "Edit " + asset.name : "Add an asset");
@@ -404,6 +484,7 @@
       text("renewalItem", "Ops item that holds the renewal date", false, "Looks like it_ followed by 8 letters or numbers. The Calendar reads the date from there.");
       var watch = text("watch", "Domain to check with the registrar", true, "Only for a domain: its expiry is read from the registrar every day.");
       var notes = h("textarea"); notes.value = v.notes; notes.maxLength = 1000; field("notes", "Notes (never a password or key; say where it is kept)", notes, true);
+      var acceptBox = acceptedEditor(asset, form);
       var msg = h("div"); d.body.appendChild(msg);
       d.body.appendChild(form);
 
@@ -419,13 +500,14 @@
         });
         foot.appendChild(del);
       }
-      function sync() { watch.disabled = inputs.kind.value !== "domain"; }
+      function sync() { watch.disabled = inputs.kind.value !== "domain"; acceptBox.show(inputs.kind.value); }
       inputs.kind.addEventListener("change", sync); sync();
       save.addEventListener("click", function () {
         var vals = {}; Object.keys(inputs).forEach(function (k) { vals[k] = inputs[k].value; });
+        vals.acceptedGaps = acceptBox.read();
         var built = formToBody(vals, asset);
         clear(msg);
-        if (built.error) { msg.appendChild(h("div", "tk-msg alert", built.error)); var bad = inputs[built.field]; if (bad) bad.focus(); return; }
+        if (built.error) { msg.appendChild(h("div", "tk-msg alert", built.error)); var bad = inputs[built.field] || acceptBox.fields[built.field]; if (bad) bad.focus(); return; }
         if (asset && !Object.keys(built.body).length) { say("Nothing changed.", ""); showList(); return; }
         save.disabled = true;
         var p = asset ? K.call("PATCH", "/reg/assets/" + asset.id, built.body) : K.call("POST", "/reg/assets", built.body);

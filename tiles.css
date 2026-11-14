@@ -147,3 +147,13 @@
 .tl-exp-more:hover { color: var(--fg-strong); text-decoration: underline; }
 @container tile (max-width: 420px) { .tl-exp-row { grid-template-columns: minmax(0, 1fr) auto; } .tl-exp-when { display: none; } }
 .b-ext-body:has(> .tl-capture) { height: 100%; display: flex; flex-direction: column; justify-content: center; }
+/* The accepted-gaps part of the asset form: one row per gap the kind of asset is asked for (tick, reason, review day). */
+.tk-accept { grid-column: 1 / -1; margin: 2px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 8px; min-width: 0; }
+.tk-accept legend { padding: 0 6px; font-size: 12px; font-weight: 600; color: var(--fg-dim); }
+.tk-accept .hint { margin: 0; font-weight: 400; font-size: 12px; color: var(--fg-dim); }
+.tk-accept-row { display: grid; grid-template-columns: auto minmax(120px, 0.9fr) minmax(0, 1.6fr) 150px; gap: 6px 10px; align-items: center; }
+.tk-accept-row[hidden], .tk-accept .hint[hidden] { display: none; }
+.tk-accept input[type="checkbox"] { width: 18px; height: 18px; padding: 0; accent-color: var(--accent, currentColor); }
+.tk-accept .tk-check { flex-direction: row; align-items: center; font-weight: 600; color: var(--fg); cursor: pointer; }
+.tk-accept input:disabled { opacity: .55; }
+@media (max-width: 560px) { .tk-accept-row { grid-template-columns: auto minmax(0, 1fr); } .tk-accept-row input[type="text"], .tk-accept-row input[type="date"] { grid-column: 1 / -1; } }

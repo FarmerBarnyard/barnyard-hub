@@ -441,4 +441,60 @@ test("the sidebar highlights Blast radius on map.html, and the palette matches a
   assert.ok(/keywords: "open " \+ p\.id \+ \(p\.keywords \? " " \+ p\.keywords : ""\)/.test(shell), "palette keywords include the entry's own");
 });
 
+
+// ---- weak links: the identity kind and accepted gaps -------------------------------------------------------------------
+
+test("the identity kind is in the kind list, its labels and its place in the order (after accounts)", function () {
+  var kinds = M.KINDS.map(function (k) { return k[0]; });
+  assert.ok(kinds.indexOf("identity") !== -1);
+  assert.ok(kinds.indexOf("identity") > kinds.indexOf("account") && kinds.indexOf("identity") < kinds.indexOf("licence"));
+  assert.strictEqual(M.kindLabel("identity"), "Identity apps and settings");
+  assert.strictEqual(M.kindOne("identity"), "Identity app or setting");
+  assert.strictEqual(M.kindCounts([{ kind: "identity" }, { kind: "identity" }, { kind: "server" }]).filter(function (k) { return k.kind === "identity"; })[0].count, 2);
+  var sorted = M.linkChoices([{ id: "a", kind: "identity", name: "Mail app", dependsOn: [] }, { id: "b", kind: "account", name: "Tenant", dependsOn: [] }, { id: "c", kind: "licence", name: "Lic", dependsOn: [] }, { id: "d", kind: "server", name: "S", dependsOn: [] }], "d").map(function (c) { return c.kind; });
+  assert.deepStrictEqual(sorted, ["account", "identity", "licence"]);
+});
+
+test("gap words: the expiry watch, and an overdue accepted gap says so", function () {
+  assert.strictEqual(M.gapsText(["runbook", "watch"]), "no runbook, no expiry watch");
+  assert.strictEqual(M.gapsText(["monitor", "watch"], ["watch"]), "no monitor, no expiry watch (review overdue)");
+  assert.strictEqual(M.gapsText(["monitor"], []), "no monitor");
+  assert.strictEqual(M.gapsText(["monitor"], null), "no monitor");
+});
+
+test("an accepted gap is always worded the same way: Accepted until a date, then the reason; overdue says so", function () {
+  assert.strictEqual(M.dayWords("2027-02-14"), "14 Feb 2027");
+  assert.strictEqual(M.dayWords("2026-12-01"), "1 Dec 2026");
+  assert.strictEqual(M.dayWords("nonsense"), "nonsense");
+  assert.strictEqual(M.acceptedLine({ gap: "watch", reason: "Renewal is on the Calendar", review: "2027-02-14", overdue: false }).text, "Accepted until 14 Feb 2027: Renewal is on the Calendar");
+  var late = M.acceptedLine({ gap: "monitor", reason: "Cannot be probed from outside", review: "2026-11-01", overdue: true });
+  assert.strictEqual(late.text, "Review overdue (was accepted until 1 Nov 2026): Cannot be probed from outside");
+  assert.strictEqual(late.overdue, true);
+  assert.strictEqual(late.label, "no monitor");
+  assert.strictEqual(M.acceptedLine({ gap: "backup", review: "2027-01-01" }).text, "Accepted until 1 Jan 2027", "no reason, no colon");
+});
+
+test("weakestModel carries the accepted gaps and how many there are, and marks overdue ones in a weak row", function () {
+  var m = M.weakestModel({ assets: 5, links: 3, linked: 3, unlinked: 0, cycles: 0,
+    weakest: [{ id: "a", name: "Tunnel", kind: "network", criticality: "", dependents: 2, gaps: ["monitor", "runbook"], overdue: ["monitor"] }],
+    accepted: [{ id: "b", name: "Mail sender app", kind: "identity", gap: "watch", reason: "On the Calendar", review: "2027-02-14", overdue: false }], acceptedCount: 3 });
+  assert.strictEqual(m.weakest[0].line, "2 things depend on it; no monitor (review overdue), no runbook");
+  assert.strictEqual(m.accepted.length, 1);
+  assert.strictEqual(m.accepted[0].text, "Accepted until 14 Feb 2027: On the Calendar");
+  assert.strictEqual(m.accepted[0].name, "Mail sender app");
+  assert.strictEqual(m.acceptedCount, 3, "the Worker's own total wins when there are more than it sent");
+  var none = M.weakestModel({ assets: 1, weakest: [] });
+  assert.deepStrictEqual([none.accepted, none.acceptedCount], [[], 0]);
+  assert.deepStrictEqual(M.acceptedRows(null), []);
+});
+
+test("the map page and its panel always show accepted gaps, apart from the open ones, through textContent only", function () {
+  var src = fs.readFileSync(path.join(__dirname, "..", "map.js"), "utf8");
+  assert.ok(/M\.acceptedRows\(model\.map\.accepted && model\.map\.accepted\.list\)/.test(src), "the lists under the map read the Worker's accepted list");
+  assert.ok(/"Accepted gaps"/.test(src));
+  assert.ok(/n\.overdueGaps/.test(src), "overdue gaps are marked in the panel");
+  assert.ok(!/[.]innerHTML/.test(src), "text only");
+});
+
+
 console.log("\n" + passed + " passed");
