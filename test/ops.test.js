@@ -338,4 +338,36 @@ test("the drawer's new pieces never write markup, and the edit form is folded aw
   assert.ok(/transport\.decide\(id, approve, note \|\| undefined, run\)/.test(js), "the owner's note travels with the decision");
 });
 
+test("isStanding: renewal targets and the Daily security checks item only", function () {
+  assert.strictEqual(ops.isStanding({ title: "Entra cert renewal", targets: ["renewal", "secret"] }), true);
+  assert.strictEqual(ops.isStanding({ title: "Daily security checks", targets: ["environment"] }), true);
+  assert.strictEqual(ops.isStanding({ title: "  daily security checks ", targets: [] }), true);
+  assert.strictEqual(ops.isStanding({ title: "Fix daily security checks script", targets: [] }), false);
+  assert.strictEqual(ops.isStanding({ title: "Daily security checkstyle", targets: [] }), false);
+  assert.strictEqual(ops.isStanding({ title: "Renewal of something", targets: ["worker"] }), false);
+  assert.strictEqual(ops.isStanding(null), false);
+});
+
+test("splitStanding: hides standing items only when asked, and counts them", function () {
+  var list = [
+    { id: "a", title: "Daily security checks", targets: [] },
+    { id: "b", title: "Real work", targets: ["worker"] },
+    { id: "c", title: "Domain renewal", targets: ["renewal"] }
+  ];
+  var off = ops.splitStanding(list, false);
+  assert.deepStrictEqual(off.shown.map(function (i) { return i.id; }), ["a", "b", "c"]);
+  assert.strictEqual(off.hidden, 0);
+  assert.notStrictEqual(off.shown, list, "a copy, so callers can't change the source list");
+  var on = ops.splitStanding(list, true);
+  assert.deepStrictEqual(on.shown.map(function (i) { return i.id; }), ["b"]);
+  assert.strictEqual(on.hidden, 2);
+});
+
+test("the hide toggle is wired into the Work tab and remembered per browser", function () {
+  var js = require("fs").readFileSync(path.join(__dirname, "..", "ops.js"), "utf8");
+  assert.ok(/splitStanding\(openItems\(all\), state\.hideStanding\)/.test(js), "the Work tab filters through splitStanding");
+  assert.ok(/localStorage\.getItem\(HIDE_KEY\)/.test(js) && /localStorage\.setItem\(HIDE_KEY/.test(js), "remembered in localStorage");
+  assert.ok(!/Theme\.set\(\{\s*hideStanding/.test(js), "not synced to the profile: per browser only");
+});
+
 console.log("\n" + passed + " tests passed");

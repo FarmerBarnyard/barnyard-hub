@@ -165,6 +165,23 @@
     return out;
   }
 
+  // Standing items: renewals (target "renewal") and the "Daily security checks"
+  // item. They can't be closed (the Calendar, reminders and expiry watch read
+  // open items, and the daily check reopens itself), so the board can hide them.
+  function isStanding(item) {
+    if (!item) return false;
+    if (item.targets && item.targets.indexOf("renewal") !== -1) return true;
+    return /^daily security checks\b/i.test(String(item.title || "").trim());
+  }
+
+  // { shown: [..], hidden: n }: when hide is off everything is shown.
+  function splitStanding(items, hide) {
+    if (!hide) return { shown: items.slice(), hidden: 0 };
+    var shown = [];
+    for (var i = 0; i < items.length; i++) if (!isStanding(items[i])) shown.push(items[i]);
+    return { shown: shown, hidden: items.length - shown.length };
+  }
+
   // [{value, count}] for one facet over `items`, most common first.
   function facet(items, key) {
     var counts = {};
@@ -396,7 +413,7 @@
     LANES: LANES, STATUS_TITLE: STATUS_TITLE, CATEGORIES: CATEGORIES,
     dateString: dateString, daysUntil: daysUntil, dueInfo: dueInfo, ageDays: ageDays, ageText: ageText,
     relativeTime: relativeTime, openItems: openItems, computeStats: computeStats, sortForLane: sortForLane,
-    matchesFilters: matchesFilters, filterItems: filterItems, facet: facet, upcoming: upcoming,
+    matchesFilters: matchesFilters, filterItems: filterItems, isStanding: isStanding, splitStanding: splitStanding, facet: facet, upcoming: upcoming,
     longestWaiting: longestWaiting, recentlyDone: recentlyDone,
     describeChanges: describeChanges, describeEvent: describeEvent, reduceMessage: reduceMessage,
     newer: newer, changedFields: changedFields, parseTargets: parseTargets,
@@ -599,6 +616,10 @@
     state.layout = saved.opsLayout === "list" ? "list" : "board";
     state.folded = { backlog: saved.foldBacklog === null ? window.innerWidth < 1500 : !!saved.foldBacklog };
     state.moreFilters = false;
+    // Hiding renewals and standing checks is remembered in this browser only.
+    var HIDE_KEY = "ops.hideStanding";
+    state.hideStanding = false;
+    try { state.hideStanding = window.localStorage.getItem(HIDE_KEY) === "1"; } catch (e) { /* storage blocked: default to showing */ }
     clear(root);
     var connBanner = el("div", "ops-conn");
     connBanner.setAttribute("role", "status");
@@ -841,7 +862,7 @@
 
     // Category is always shown; target and status sit behind "More filters" so
     // the board stays near the top of the page.
-    function renderFilters(items) {
+    function renderFilters(items, hiddenCount) {
       var wrap = el("div", "ops-filters");
       filterRow(items, "category", wrap);
       var extra = state.filters.target.length + state.filters.status.length;
@@ -851,6 +872,18 @@
       more.addEventListener("click", function () { state.moreFilters = !state.moreFilters; render(); });
       var controls = el("div", "ops-filter-controls");
       controls.appendChild(more);
+      var hide = el("button", "ops-btn ops-btn-quiet ops-btn-sm", state.hideStanding
+        ? "Show renewals and checks" + (hiddenCount ? " (" + hiddenCount + " hidden)" : "")
+        : "Hide renewals and checks");
+      hide.type = "button";
+      hide.setAttribute("aria-pressed", state.hideStanding ? "true" : "false");
+      hide.title = "Renewal items and the Daily security checks item stay open on purpose; this only hides them here, in this browser.";
+      hide.addEventListener("click", function () {
+        state.hideStanding = !state.hideStanding;
+        try { window.localStorage.setItem(HIDE_KEY, state.hideStanding ? "1" : "0"); } catch (e) { /* not remembered, still applied */ }
+        render();
+      });
+      controls.appendChild(hide);
       var anyActive = state.filters.category.length + extra > 0;
       if (anyActive) {
         var reset = el("button", "ops-btn ops-btn-quiet ops-btn-sm", "Clear filters");
@@ -1051,10 +1084,11 @@
 
     function renderWork(now, today) {
       var all = itemList();
-      var open = openItems(all);
+      var split = splitStanding(openItems(all), state.hideStanding);
+      var open = split.shown;
       var frag = document.createDocumentFragment();
       frag.appendChild(renderSummary(now, today));
-      frag.appendChild(renderFilters(open));
+      frag.appendChild(renderFilters(open, split.hidden));
       var visible = filterItems(open, state.filters);
       // The board (or list) and the side rail share a grid: one column normally (the rail's
       // "Coming up" sits above, as it always did), two on a very wide screen.
