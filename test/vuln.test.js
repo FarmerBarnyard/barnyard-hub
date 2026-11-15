@@ -640,4 +640,93 @@ test("the page keeps no blurb under its title and the Devices styles exist", fun
   assert.ok(/\.vn-details/.test(css) && /\.vn-unm/.test(css));
 });
 
+// ---- "open" means one thing: new, affects or approved (the Worker's OPEN_STATES) ---------------------------------------------------
+
+// What GET /vuln/me answers for a register like the live one after the fix: a few open findings, lots dealt with.
+var SUMMARY = { ok: true, byPriority: { P1: 1, P2: 1, P3: 2, P4: 2 }, openTotal: 6, total: 68, needsLook: 2, acceptedTotal: 2, acceptedReviewDue: 1, notAffectedTotal: 56, autoClosedTotal: 55, fixedTotal: 4, closedTotal: 60 };
+
+test("which states are open, and which findings the page offers to approve", function () {
+  assert.deepStrictEqual(V.OPEN_STATES, ["new", "affects", "approved"]);
+  ["new", "affects", "approved"].forEach(function (s) { assert.strictEqual(V.isOpenState(s), true, s); });
+  ["not_affected", "accepted", "fixed", "", undefined].forEach(function (s) { assert.strictEqual(V.isOpenState(s), false, String(s)); });
+  var plan = { steps: [{ text: "x", who: "you", done: false }] };
+  ["not_affected", "accepted"].forEach(function (s) { assert.strictEqual(V.canApprove({ state: s, plan: plan, opsItem: null }), false, s + " is dealt with: nothing to approve"); });
+  assert.strictEqual(V.canApprove({ state: "affects", plan: plan, opsItem: null }), true);
+});
+
+test("the Status choices: Current offers only open states, Accepted risks none, History all of them", function () {
+  var keys = function (v) { return V.statusOptions(v).map(function (o) { return o[0]; }); };
+  assert.deepStrictEqual(keys("current"), ["", "new", "affects", "approved"]);
+  assert.strictEqual(V.statusOptions("current")[0][1], "Any open status");
+  assert.deepStrictEqual(keys("accepted"), [""], "a list of accepted risks has nothing to choose");
+  assert.deepStrictEqual(keys("history"), ["", "new", "affects", "not_affected", "accepted", "approved", "fixed"]);
+  assert.strictEqual(V.statusOptions("history")[0][1], "Any status");
+});
+
+test("the headline says how many are open and where the rest went, and never hides them", function () {
+  assert.strictEqual(V.openLine(SUMMARY), "6 open (2 accepted risks, 56 not affected, 4 fixed not counted)");
+  assert.strictEqual(V.openLine({ openTotal: 1, acceptedTotal: 1 }), "1 open (1 accepted risk not counted)");
+  assert.strictEqual(V.openLine({ openTotal: 0 }), "0 open");
+  assert.strictEqual(V.openLine(null), "0 open", "an answer with no extra fields still reads");
+  assert.strictEqual(V.openLine({ byPriority: { P1: 1 }, openTotal: 3961 }), "3961 open", "an unchanged summary shape still works");
+  var links = V.closedLinks(SUMMARY);
+  assert.deepStrictEqual(links.map(function (l) { return l.key; }), ["accepted", "not_affected", "fixed"]);
+  assert.strictEqual(links[0].text, "2 accepted risks (1 due for review)");
+  assert.strictEqual(links[0].view, "accepted");
+  assert.strictEqual(links[1].text, "56 not affected (55 closed automatically)");
+  assert.deepStrictEqual([links[1].view, links[1].state, links[2].view, links[2].state], ["history", "not_affected", "history", "fixed"], "not affected and fixed open History on that status");
+  assert.deepStrictEqual(V.closedLinks({ openTotal: 5 }), [], "nothing closed, nothing to link");
+  assert.deepStrictEqual(V.closedLinks(null), []);
+});
+
+test("an accepted risk shows its review date, and says so when it is due", function () {
+  var NOW2 = Date.UTC(2026, 10, 15);
+  assert.deepStrictEqual(V.reviewInfo("2027-05-01", NOW2), { text: "Review by 1 May 2027", due: false });
+  assert.deepStrictEqual(V.reviewInfo("2026-01-01", NOW2), { text: "Review was due 1 Jan 2026", due: true });
+  assert.deepStrictEqual(V.reviewInfo("2026-11-15", NOW2), { text: "Review was due 15 Nov 2026", due: true }, "on the day itself it is due");
+  assert.deepStrictEqual(V.reviewInfo("", NOW2), { text: "No review date", due: false });
+  assert.strictEqual(V.nothingOpenText({}), "No known issues");
+  assert.strictEqual(V.nothingOpenText({ findings: 3, open: 0, notAffected: 2, fixed: 1 }), "Nothing open (3 closed)", "software whose findings are all closed does not claim it never had any");
+  assert.strictEqual(V.nothingOpenText({ accepted: 1 }), "Nothing open (1 closed)");
+});
+
+test("bulk Approve's preview counts the not affected and accepted findings it leaves alone", function () {
+  var s = V.bulkSummaryText({ findings: 3, groups: [{}], skipped: { approved: 0, fixed: 0, inProgress: 0, noPlan: 0, closed: 5 } });
+  assert.match(s, /5 other findings picked can't be approved .*not affected, accepted.* and are left alone\./);
+  assert.match(V.bulkSummaryText({ findings: 0, groups: [], skipped: { closed: 2 } }), /Nothing here can be approved\. Everything picked is already approved, closed, accepted, or has no plan\./);
+  assert.deepStrictEqual(V.bulkFilter({ state: "new" }), { view: "current", state: "new" }, "Select all matching asks for the open list");
+});
+
+test("the page: an Accepted risks tab with its own list, the strip's links to what was closed, and the review date on each row", function () {
+  assert.ok(/\["accepted", "Accepted risks"/.test(js), "the tab");
+  assert.ok(/S\.view === "accepted"\) drawAccepted\(body\)/.test(js), "drawn");
+  assert.ok(/drawFindings\("accepted", listCard\)/.test(js), "with the same list and filters");
+  assert.ok(/accepted: \{ q: "", priority: "", severity: "", state: "", item: "", page: 1 \}/.test(js), "its own filter state");
+  // the list asks the Worker for the view it is showing, and Show everything is Current's only
+  assert.ok(/var query = \{ view: view,/.test(js));
+  assert.ok(/if \(view === "current" && F\.all\) query\.all = true/.test(js));
+  // Select / Approve only on the open list
+  assert.ok(/if \(view !== "current" \|\| !canApprove\(f\)\) return row/.test(js));
+  // an accepted row shows when to look again, and why
+  assert.ok(/if \(f\.state === "accepted"\) \{\s*var rv = reviewInfo\(f\.reviewDate, Date\.now\(\)\)/.test(js));
+  assert.ok(/"Why: " \+ f\.reason/.test(js));
+  // the headline comes from openLine, and the links from closedLinks, opening History on that status
+  assert.ok(/var line = openLine\(S\.summary\)/.test(js));
+  assert.ok(/closedLinks\(S\.summary\)/.test(js) && /S\.history\.state = l\.state/.test(js));
+  // software with nothing open says what became of its findings
+  assert.strictEqual(js.split("nothingOpenText(s)").length - 1, 2, "both software lists");
+  assert.ok(/\.vn-closed/.test(css) && /\.vn-link/.test(css), "styled");
+  assert.ok(!/innerHTML|insertAdjacentHTML|document\.write/.test(js.slice(js.indexOf("function drawAccepted"), js.indexOf("function drawHistory"))), "text nodes only");
+});
+
+test("the Overview's and Monitoring's Security tiles show open counts: they read the summary's byPriority, which now holds open findings only", function () {
+  var Mon = require(path.join(root, "monitoring.js"));
+  var rows = Mon.securityRows(SUMMARY, null, NOW);
+  assert.strictEqual(rows[0].value, "1", "one open P1");
+  assert.strictEqual(rows[1].value, "1", "one open P2");
+  assert.match(rows[1].note, /2 still need a look/);
+  assert.strictEqual(Mon.securityRows({ ok: true, byPriority: { P1: 14, P2: 54 }, needsLook: 0 }, null, NOW)[0].tone, "alert");
+  assert.strictEqual(Mon.securityRows({ ok: true, byPriority: {}, openTotal: 0 }, null, NOW)[0].tone, "ok", "nothing open: green");
+});
+
 console.log("\n" + passed + " passed");

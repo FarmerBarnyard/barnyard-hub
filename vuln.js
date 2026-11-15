@@ -22,6 +22,50 @@
   var PERSON_STATES = ["new", "affects", "not_affected", "accepted", "fixed"];
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+  // "Open" is one thing everywhere (the Worker's OPEN_STATES): new, affects or approved. Not affected (judged, or closed by a fully
+  // patched server), accepted risk and fixed are dealt with: they are not in the open count or the Current list. Accepted risks have their
+  // own tab, with the review date; History lists everything.
+  var OPEN_STATES = ["new", "affects", "approved"];
+  function isOpenState(s) { return OPEN_STATES.indexOf(s) !== -1; }
+  // The choices of the Status drop-down for each list: Current offers only the open states, Accepted risks has none, History all six.
+  function statusOptions(view) {
+    var states = view === "history" ? ["new", "affects", "not_affected", "accepted", "approved", "fixed"] : view === "current" ? OPEN_STATES : [];
+    return [["", view === "current" ? "Any open status" : "Any status"]].concat(states.map(function (st) { return [st, stateText(st)]; }));
+  }
+  function nz(n) { return Number(n) > 0 ? Number(n) : 0; }
+  // "6 open" then, when there is any, where the rest went: "(2 accepted risks, 56 not affected, 4 fixed are not counted as open)".
+  function openLine(sum) {
+    sum = sum || {};
+    var line = nz(sum.openTotal) + " open";
+    var rest = [];
+    if (nz(sum.acceptedTotal)) rest.push(plural(nz(sum.acceptedTotal), "accepted risk"));
+    if (nz(sum.notAffectedTotal)) rest.push(nz(sum.notAffectedTotal) + " not affected");
+    if (nz(sum.fixedTotal)) rest.push(nz(sum.fixedTotal) + " fixed");
+    return line + (rest.length ? " (" + rest.join(", ") + " not counted)" : "");
+  }
+  // The links under the strip: what has been dealt with, each opening the list that holds it. [{ key, text, view, state }]
+  function closedLinks(sum) {
+    sum = sum || {};
+    var out = [];
+    if (nz(sum.acceptedTotal)) out.push({ key: "accepted", text: plural(nz(sum.acceptedTotal), "accepted risk") + (nz(sum.acceptedReviewDue) ? " (" + nz(sum.acceptedReviewDue) + " due for review)" : ""), view: "accepted", state: "" });
+    if (nz(sum.notAffectedTotal)) out.push({ key: "not_affected", text: nz(sum.notAffectedTotal) + " not affected" + (nz(sum.autoClosedTotal) ? " (" + nz(sum.autoClosedTotal) + " closed automatically)" : ""), view: "history", state: "not_affected" });
+    if (nz(sum.fixedTotal)) out.push({ key: "fixed", text: nz(sum.fixedTotal) + " fixed", view: "history", state: "fixed" });
+    return out;
+  }
+  // The review date of an accepted risk: { text, due }. due is true on or after the date (it is time to look again).
+  function reviewInfo(date, now) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ""));
+    if (!m) return { text: "No review date", due: false };
+    var due = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) <= now;
+    return { text: (due ? "Review was due " : "Review by ") + fmtDate(date), due: due };
+  }
+  // The chip for software with nothing open: "No known issues" only when it never had any; otherwise say what became of them.
+  function nothingOpenText(item) {
+    item = item || {};
+    var closed = nz(item.accepted) + nz(item.notAffected) + nz(item.fixed);
+    return closed ? "Nothing open (" + closed + " closed)" : "No known issues";
+  }
+
   function stateText(s) { return STATE_TEXT[s] || String(s || ""); }
   function stateTone(s) { return STATE_TONE[s] || ""; }
   function priorityTone(p) { return p === "P1" ? "alert" : p === "P2" ? "accent" : p === "P3" ? "info" : ""; }
@@ -198,7 +242,7 @@
   }
   function canEditPlan(f) { return !!f && f.planStatus !== "approved" && f.state !== "approved"; }
   function canApprove(f) {
-    return !!f && !f.opsItem && f.state !== "approved" && f.state !== "fixed" && !!(f.plan && f.plan.steps && f.plan.steps.length);
+    return !!f && !f.opsItem && isOpenState(f.state) && f.state !== "approved" && !!(f.plan && f.plan.steps && f.plan.steps.length);
   }
 
   // ---- approving many at once
@@ -222,11 +266,11 @@
   function bulkSummaryText(p) {
     p = p || {};
     var n = p.findings || 0, g = (p.groups || []).length;
-    if (!n) return "Nothing here can be approved. Everything picked is already approved, fixed, or has no plan.";
+    if (!n) return "Nothing here can be approved. Everything picked is already approved, closed, accepted, or has no plan.";
     var s = plural(n, "finding") + " in " + plural(g, "software item") + ". This creates " + plural(g, "Ops item") + ", already approved, for Claude to carry out.";
     var k = p.skipped || {};
-    var skipped = (k.approved || 0) + (k.fixed || 0) + (k.inProgress || 0) + (k.noPlan || 0);
-    if (skipped) s += " " + plural(skipped, "other finding") + " picked can't be approved (already approved, fixed, or still being approved) and " + (skipped === 1 ? "is" : "are") + " left alone.";
+    var skipped = (k.approved || 0) + (k.fixed || 0) + (k.inProgress || 0) + (k.noPlan || 0) + (k.closed || 0);
+    if (skipped) s += " " + plural(skipped, "other finding") + " picked can't be approved (already approved, fixed, not affected, accepted, or still being approved) and " + (skipped === 1 ? "is" : "are") + " left alone.";
     return s;
   }
   function bulkGroupLine(g) {
@@ -560,6 +604,7 @@
     parseImport: parseImport, planImport: planImport, IMPORT_LIMITS: IMPORT_LIMITS,
     vectorText: vectorText, cvssRows: cvssRows, rangeText: rangeText,
     catalogTiles: catalogTiles, sourceRows: sourceRows, loadBanner: loadBanner,
+    OPEN_STATES: OPEN_STATES, isOpenState: isOpenState, statusOptions: statusOptions, openLine: openLine, closedLinks: closedLinks, reviewInfo: reviewInfo, nothingOpenText: nothingOpenText,
     stateText: stateText, stateTone: stateTone, priorityTone: priorityTone, priorityHint: priorityHint, severityOptions: severityOptions, severityName: severityName, fmtDate: fmtDate, monthLabel: monthLabel,
     agoText: agoText, thousands: thousands, scoreText: scoreText, scoreTone: scoreTone, epssText: epssText, confidenceText: confidenceText,
     safeUrl: safeUrl, itemLabel: itemLabel, softwareLabel: softwareLabel, autoName: autoName, nameBase: nameBase, matchText: matchText, itemTree: itemTree, queryString: queryString,
@@ -674,6 +719,7 @@
       view: "current", summary: null, env: null, catalog: null, detail: null, envForm: null, importOpen: false, busy: false, banner: null,
       owner: false, devices: null, devicesLoading: false, devicesError: null, unmatchedOpen: {},
       current: { q: "", priority: "", severity: "", state: "", all: false, item: "", page: 1 },
+      accepted: { q: "", priority: "", severity: "", state: "", item: "", page: 1 },
       history: { q: "", priority: "", severity: "", state: "", item: "", page: 1 },
       catalogue: { q: "", zone: "", month: "", severity: "", kev: false, page: 1, months: null, open: "" },
       historySummary: null,
@@ -717,6 +763,11 @@
       if (snap.fixedIn && f.state !== "fixed") meta.appendChild(el("span", null, "Fixed in " + snap.fixedIn));
       if (f.state === "fixed" && f.fixedAt) meta.appendChild(el("span", null, "Fixed " + fmtDate(f.fixedAt)));
       else meta.appendChild(el("span", null, "Found " + fmtDate(f.firstSeen)));
+      if (f.state === "accepted") {
+        var rv = reviewInfo(f.reviewDate, Date.now());
+        meta.appendChild(chip(rv.text, rv.due ? "alert" : "info"));
+        if (f.reason) meta.appendChild(el("span", null, "Why: " + f.reason));
+      }
       row.appendChild(meta);
       row.addEventListener("click", function () { openFinding(f.id); });
       return row;
@@ -749,6 +800,19 @@
         strip.appendChild(b);
       });
       host.appendChild(strip);
+      var links = closedLinks(S.summary);
+      if (links.length) {
+        var closedBox = el("div", "vn-closed");
+        closedBox.appendChild(el("span", null, "Not counted as open:"));
+        links.forEach(function (l) {
+          closedBox.appendChild(button(l.text, "vn-link", function () {
+            S.detail = null; S.view = l.view; S.banner = null;
+            if (l.view === "history") { S.history.state = l.state; S.history.page = 1; }
+            S.bulk.all = false; if (!(S.bulk.panel && S.bulk.panel.running)) S.bulk.panel = null; render();
+          }));
+        });
+        host.appendChild(closedBox);
+      }
       host.appendChild(el("div", "vn-catalog", catalogLine()));
       var stale = el("div", "vn-stale");
       host.appendChild(stale);
@@ -766,8 +830,7 @@
     // "4 open. Checked against 394,770 known CVEs, updated 3 min ago." The catalogue part is added when its status arrives, so
     // the page never waits for it.
     function catalogLine() {
-      var s = S.summary || { openTotal: 0 };
-      var line = (s.openTotal || 0) + " open";
+      var line = openLine(S.summary);
       if (S.catalog && S.catalog.total) {
         var when = S.catalog.sources && S.catalog.sources.cve_list && S.catalog.sources.cve_list.lastOk;
         line += ". Checked against " + thousands(S.catalog.total) + " known CVEs" + (when ? ", updated " + agoText(when, Date.now()) : "");
@@ -779,7 +842,7 @@
       var tabs = el("div", "vn-tabs");
       tabs.setAttribute("role", "tablist");
       // Devices (what each server's daily inventory found) belongs to the owner's register: only the owner has servers that report
-      [["current", "Current"], ["history", "History"], ["catalogue", "Catalogue"], ["env", "My environment"]].concat(S.owner ? [["devices", "Devices"]] : []).forEach(function (t) {
+      [["current", "Current"], ["accepted", "Accepted risks" + (S.summary && nz(S.summary.acceptedTotal) ? " (" + nz(S.summary.acceptedTotal) + ")" : "")], ["history", "History"], ["catalogue", "Catalogue"], ["env", "My environment"]].concat(S.owner ? [["devices", "Devices"]] : []).forEach(function (t) {
         var b = el("button", null, t[1]);
         b.type = "button";
         b.setAttribute("role", "tab");
@@ -816,10 +879,13 @@
       var sev = select(severityOptions(S.summary && S.summary.bySeverity), F.severity);
       sev.setAttribute("aria-label", "Severity");
       sev.addEventListener("change", function () { F.severity = sev.value; F.page = 1; S.bulk.all = false; load(); });
-      var st = select([["", "Any status"]].concat(["new", "affects", "not_affected", "accepted", "approved", "fixed"].map(function (s) { return [s, stateText(s)]; })), F.state);
+      var statusChoices = statusOptions(view);
+      if (F.state && !statusChoices.some(function (c) { return c[0] === F.state; })) F.state = "";
+      var st = select(statusChoices, F.state);
       st.setAttribute("aria-label", "Status");
       st.addEventListener("change", function () { F.state = st.value; F.page = 1; S.bulk.all = false; load(); });
-      bar.appendChild(q); bar.appendChild(pri); bar.appendChild(sev); bar.appendChild(st);
+      bar.appendChild(q); bar.appendChild(pri); bar.appendChild(sev);
+      if (statusChoices.length > 1) bar.appendChild(st);
       var itemLabel = null;
       if (F.item && S.env) {
         var it = S.env.items.filter(function (i) { return i.id === F.item; })[0];
@@ -910,7 +976,8 @@
             var none = S.env && !S.env.items.length;
             if (none) listHost.appendChild(emptyBox("Add your first item", "Tell this what you run, such as a server or a piece of software with its version, and it will keep a record of the known vulnerabilities that apply.", "Add what I run", function () { S.view = "env"; S.envForm = { kind: "infra" }; render(); }));
             else if (F.q || F.priority || F.severity || F.state || F.item) listHost.appendChild(emptyBox("Nothing matches", "No findings match those filters.", "Clear filters", function () { F.q = ""; F.priority = ""; F.severity = ""; F.state = ""; F.item = ""; F.page = 1; S.bulk.all = false; render(); }));
-            else listHost.appendChild(emptyBox(view === "current" ? "Nothing needs attention" : "No findings yet", view === "current" ? "No known vulnerability that is worth acting on applies to what you run right now. Lower-risk ones are under “Show everything”." : "Once something you run matches a known CVE it is kept here for good.", null));
+            else if (view === "accepted") listHost.appendChild(emptyBox("No accepted risks", "When you choose to live with a vulnerability, set its status to Accepted risk with a review date. It is listed here, never hidden.", null));
+            else listHost.appendChild(emptyBox(view === "current" ? "Nothing needs attention" : "No findings yet", view === "current" ? "No open vulnerability that is worth acting on applies to what you run right now. Lower-risk open ones are under “Show everything”; ones you have dealt with are in History and Accepted risks." : "Once something you run matches a known CVE it is kept here for good.", null));
             return;
           }
           var list = el("div", "vn-list");
@@ -989,6 +1056,16 @@
           if (bulkShouldContinue(r)) { render(); step(); } else finish(null);
         }, function (err) { finish(err); });
       })();
+    }
+
+    function drawAccepted(host) {
+      var card = el("div", "vn-card");
+      card.appendChild(el("h3", null, "Accepted risks"));
+      card.appendChild(el("p", "vn-note", "Vulnerabilities you chose to live with. They are not counted as open, and each has a date to look at it again; the soonest is first."));
+      host.appendChild(card);
+      var listCard = el("div");
+      host.appendChild(listCard);
+      drawFindings("accepted", listCard);
     }
 
     function drawHistory(host) {
@@ -1384,7 +1461,7 @@
           c.type = "button";
           c.addEventListener("click", function () { S.view = "current"; S.current.item = s.id; S.current.all = true; S.current.page = 1; render(); });
           row.appendChild(c);
-        } else if (s.matchState === "ok") row.appendChild(chip("No known issues", "ok"));
+        } else if (s.matchState === "ok") row.appendChild(chip(nothingOpenText(s), "ok"));
         var stop = button("Stop watching", "btn btn-sm", function () {
           stop.disabled = true;
           api.ignoreInventory(s.key).then(function () { toast("Not watched any more. Its findings stay in History."); return refreshAfterWatch(); },
@@ -1437,7 +1514,7 @@
         c.type = "button";
         c.addEventListener("click", function () { S.view = "current"; S.current.item = s.id; S.current.all = true; S.current.page = 1; render(); });
         r.appendChild(c);
-      } else if (s.matchState === "ok") r.appendChild(chip("No known issues", "ok"));
+      } else if (s.matchState === "ok") r.appendChild(chip(nothingOpenText(s), "ok"));
       r.appendChild(el("span", "vn-item-meta", matchText(s, Date.now())));
       r.appendChild(itemActions(s));
       return r;
@@ -1807,6 +1884,7 @@
       body.style.display = "grid"; body.style.gap = "14px";
       root.appendChild(body);
       if (S.view === "current") { if (S.bulk.panel) drawBulkPanel(body); else drawFindings("current", body); }
+      else if (S.view === "accepted") drawAccepted(body);
       else if (S.view === "history") drawHistory(body);
       else if (S.view === "catalogue") drawCatalogue(body);
       else if (S.view === "devices" && S.owner) drawDevices(body);
