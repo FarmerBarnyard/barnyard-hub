@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.barnyard.site; style-src 'self'; script-src 'self'; img-src 'self'; base-uri 'self'; form-action 'none';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Projects &middot; Barnyard</title>
+<link rel="stylesheet" href="shell.css?v=4d56e456">
+<link rel="stylesheet" href="projects.css?v=cb1a02e8">
+<script src="themes.js?v=e151fb94"></script>
+</head>
+<body data-shell="projects" data-wide>
+
+<main id="page" class="content">
+  <div class="page-head">
+    <div>
+      <h1>Projects</h1>
+    </div>
+    <div class="pj-head-tools">
+      <span class="dim pj-updated" id="pj-updated"></span>
+      <button type="button" class="btn btn-sm" id="pj-refresh">Refresh</button>
+    </div>
+  </div>
+  <div class="pj-switch" id="pj-switch" role="group" aria-label="Project" hidden></div>
+  <div id="pj-root" aria-live="polite">
+    <p class="dim">Loading&hellip;</p>
+  </div>
+</main>
+
+<script src="shell.js?v=264cedaf"></script>
+<script src="auth-gate.js?v=a1b7693a"></script>
+<script src="projects-data.js?v=8d72e9a2"></script>
+<script src="projects-logic.js?v=4b013627"></script>
+<script src="projects.js?v=6e73e3fa"></script>
+</body>
+</html>

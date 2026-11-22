@@ -73,7 +73,7 @@ test("the menu no longer lists the four, but each is still a page entry the sear
   // the menu entries that remain are the same ones, in the same order, as before
   var ids = (shell.match(/^    \{ id: "([a-z0-9]+)"/gm) || []).map(function (l) { return /"([a-z0-9]+)"/.exec(l)[1]; });
   var menu = ids.filter(function (id) { return TABS.indexOf(id) === -1; });
-  assert.deepStrictEqual(menu.slice(0, 5), ["overview", "ops", "vuln", "calendar", "monitor"]);
+  assert.deepStrictEqual(menu.slice(0, 6), ["overview", "ops", "projects", "vuln", "calendar", "monitor"]);
   assert.ok(menu.indexOf("m365") > menu.indexOf("monitor") && menu.indexOf("map") > menu.indexOf("m365"));
 });
 
