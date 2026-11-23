@@ -260,18 +260,18 @@ test("Remote Layout carries the reference plan: tracks A to G, the sittings, the
   assert.strictEqual(RL.name, "Remote Layout");
   assert.strictEqual(RL.prefix, "RL ");
   assert.deepStrictEqual(RL.timeline.tracks.map(function (t) { return t.id; }), ["A", "B", "C", "D", "E", "F", "G"]);
-  assert.deepStrictEqual(RL.timeline.tracks.map(function (t) { return t.rows.length; }), [6, 3, 3, 2, 2, 3, 1]);
+  assert.deepStrictEqual(RL.timeline.tracks.map(function (t) { return t.rows.length; }), [7, 3, 3, 2, 2, 3, 1]);
   assert.strictEqual(RL.timeline.months, 12);
   assert.strictEqual(RL.milestones.length, 6);
   assert.strictEqual(RL.sittings.length, 17);
-  assert.strictEqual(RL.costs.length, 17);
+  assert.strictEqual(RL.costs.length, 18);
   assert.deepStrictEqual(RL.scenarios.map(function (s) { return s.value; }), ["about 350 to 800", "+ 1,200 to 3,500", "+ 13,500 to 41,000", "+ 1,200 to 2,700"]);
-  // Spot-check bars against the reference's grid columns (column 2 is November): Sitting 1 is Nov, the penetration test runs Jun to Later.
+  // Spot-check bars against the reference's grid columns (column 2 is November): Setup slice 0 runs Nov to Jan, the penetration test runs Jun to Later.
   var a = RL.timeline.tracks[0].rows[0].bars[0], g = RL.timeline.tracks[6].rows[0].bars[0];
-  assert.deepStrictEqual([a.from, a.to, a.kind], [0, 0, "owner"]);
+  assert.deepStrictEqual([a.from, a.to, a.kind], [0, 2, "build"]);
   assert.deepStrictEqual([g.from, g.to, g.kind], [7, 12, "owner"]);
   assert.strictEqual(RL.timeline.tracks[5].rows[0].bars[0].kind, "dash");
-  assert.deepStrictEqual(RL.sittings.filter(function (s) { return s.kind === "act"; }).map(function (s) { return s.n; }), ["1a", "3", "4", "5", "15"]);
+  assert.deepStrictEqual(RL.sittings.filter(function (s) { return s.kind === "act"; }).map(function (s) { return s.n; }), ["1b", "3", "4", "5", "15"]);
   assert.strictEqual(L.nextSitting(RL.sittings, TODAY).n, "1");
   assert.ok(/planning estimates/.test(RL.estimateNote));
 });
