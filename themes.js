@@ -123,7 +123,7 @@
     // ----
     { id: "run-sheet", name: "Run Sheet", blurb: "A printed day sheet, with times down the side.", group: "documents", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "6,6,12,88,q;24,12,70,2,d;24,26,70,2,d;24,38,46,8,a;24,40,70,2,d;24,54,70,2,d;24,68,70,2,d;24,82,70,2,d" },
     // ----
-    { id: "sheet", name: "Sheet", blurb: "A spreadsheet workbook with tabs and a formula bar.", group: "apps", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "0,0,100,10,q;0,10,14,90,q;14,34,86,2,l;14,58,86,2,l;14,82,86,2,l;38,10,2,90,l;62,10,2,90,l;40,36,22,22,a" },
+    { id: "sheet", name: "Sheet", blurb: "A spreadsheet workbook with tabs and a formula bar.", group: "apps", installed: true, renderer: false, v: "b7c7e03a", jv: "00000000", sketch: "0,0,100,8,q;0,9,100,5,q;0,14,100,2,l;0,24,100,2,l;0,34,100,2,l;0,44,100,2,l;0,54,100,2,l;0,64,100,2,l;25,9,1,81,l;50,9,1,81,l;75,9,1,81,l;4,17,16,4,s;30,17,16,4,d;55,27,16,4,a;0,92,100,8,q;4,94,12,4,s;20,94,12,4,d" },
     // ----
     { id: "shift-log", name: "Shift Log", blurb: "A text-first hand-over log: one column, no cards.", group: "documents", installed: true, renderer: false, v: "8b0b800e", jv: "00000000", sketch: "20,8,60,5,s;14,24,3,3,a;20,24,60,2,d;20,34,52,2,d;20,44,60,2,d;20,54,44,2,d;20,68,60,2,d;20,78,36,2,d" },
     // ----
