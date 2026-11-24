@@ -60,6 +60,7 @@ if (render) render(model, mount); else drawDefault(model, mount);
 * `BarnyardTheme.look.whenReady(fn)` runs `fn` once the look's layer (css and js) has loaded; the page should start drawing from it, so it never draws twice.
 * Changing to or from a renderer look reloads the page (the gallery does this for you).
 * The hook calls in the page scripts are a small hub-only change in the PR that adds the look; the guard above keeps every other look and Original unchanged.
+* **The Overview hook (done once, in overview.js `drawLook()`):** after the page has drawn its own widgets, if the current look registered an `"overview"` renderer and the board is loaded (`model.state === "ok"`), the renderer is called as `render(model, mount, kit)` with an empty `#look-mount` section placed before the widgets and a `kit`: `{ helpers, h, clear, hrefFor, markDone, todayString }` (the page's own pure helpers from `window.BarnyardOverview`, the element builder, the link maker, the Mark done action). Return `false` to decline. While it has drawn, the page sets `data-look-drawn="overview"` on `<html>`; **your CSS hides the default blocks only under that attribute** (`html[data-look="<id>"][data-look-drawn="overview"] .hero, ... [data-w="need"] ...`), so a renderer that fails leaves the normal page showing. The other widgets (weather, week, to-do, prices, tiles) stay the page's own and are restyled by your CSS. Pages other than the Overview use the same pattern when they get a hook; until then a renderer look restyles them with CSS only.
 
 ## The thumbnail (`sketch`)
 
