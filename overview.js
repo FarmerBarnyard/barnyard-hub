@@ -544,12 +544,31 @@
     }
   }
 
+  // ---- a look that draws the Overview itself (docs/looks.md, "A look that draws its own markup") ----
+  // Only when the chosen look registered an "overview" renderer (BarnyardTheme.look). Everything above has already drawn the page's own
+  // widgets, so Original and every CSS-only look are unchanged; the renderer adds its own markup in #look-mount, and the look's CSS hides the
+  // default blocks only while data-look-drawn="overview" is set (so a renderer that fails leaves the normal page showing).
+  function drawLook() {
+    var Theme = window.BarnyardTheme, root = document.documentElement;
+    var render = Theme && Theme.look && typeof Theme.look.renderer === "function" ? Theme.look.renderer("overview") : null;
+    var mount = $("look-mount"), drawn = false;
+    if (render && model.state === "ok" && $("widgets")) {
+      if (!mount) { mount = h("section"); mount.id = "look-mount"; mount.className = "look-mount"; $("widgets").parentNode.insertBefore(mount, $("widgets")); }
+      clear(mount);
+      try {
+        drawn = render(model, mount, { helpers: helpers, h: h, clear: clear, hrefFor: hrefFor, markDone: markDone, todayString: todayString }) !== false;
+      } catch (e) { drawn = false; }
+      if (!drawn) clear(mount);
+    } else if (mount) clear(mount);
+    if (drawn) root.setAttribute("data-look-drawn", "overview"); else root.removeAttribute("data-look-drawn");
+  }
   function renderAll() {
     renderHero();
     renderStatus();
     renderNeed();
     renderFeed();
     renderFlight();
+    drawLook();
     if (window.BarnyardShell) {
       window.BarnyardShell.setBadge(model.state === "ok" ? waitingItems(model.items).length : 0);
       window.BarnyardShell.setSearchSource(function () {
@@ -859,6 +878,8 @@
     setupCaptureRefresh();
     setupBell();
     renderAll();
+    var lookId = document.documentElement.getAttribute("data-look");
+    if (lookId && lookId !== "original" && window.BarnyardTheme && window.BarnyardTheme.look && window.BarnyardTheme.look.whenReady) window.BarnyardTheme.look.whenReady(renderAll);
     var authCheck = typeof window.barnyardAuthState === "function" ? window.barnyardAuthState() : Promise.resolve({ authenticated: false });
     authCheck.then(function (auth) {
       if (!auth.authenticated) { model.state = "guest"; renderAll(); publishStatus(null); return; }
