@@ -99,7 +99,7 @@
     // ----
     { id: "classic-desktop", name: "Classic Desktop", blurb: "A 2000s desktop application with window frames.", group: "apps", installed: true, renderer: false, v: "df45d759", jv: "00000000", sketch: "2,2,96,96,q;2,2,96,8,a;2,11,96,5,q;4,19,26,70,p;32,19,64,32,l;34,22,60,26,p;32,55,64,34,l;34,58,60,28,p;2,92,96,5,q" },
     // ----
-    { id: "day-line", name: "Day Line", blurb: "Everything placed on a time line.", group: "maps", installed: false, renderer: true, v: "00000000", jv: "00000000", sketch: "18,6,2,88,l;14,18,10,6,a;26,19,60,2,d;14,42,10,6,d;26,43,50,2,d;14,66,10,6,d;26,67,64,2,d;8,56,76,2,n" },
+    { id: "day-line", name: "Day Line", blurb: "Everything placed on a time line.", group: "maps", installed: true, renderer: true, v: "df23f275", jv: "ca2bfea9", sketch: "18,6,2,88,l;14,18,10,6,a;26,19,60,2,d;14,42,10,6,d;26,43,50,2,d;14,66,10,6,d;26,67,64,2,d;8,56,76,2,n" },
     // ----
     { id: "drawing-register", name: "Drawing Register", blurb: "A framed drawing sheet with ruled schedules.", group: "documents", installed: true, renderer: false, v: "84a15fd5", jv: "00000000", sketch: "4,4,92,92,l;6,6,88,88,p;58,74,36,20,q;60,78,32,2,d;60,85,22,2,d;10,12,50,3,s;10,26,44,2,d;10,38,50,2,d" },
     // ----

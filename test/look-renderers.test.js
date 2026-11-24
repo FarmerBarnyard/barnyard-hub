@@ -56,7 +56,7 @@ function load(id) {
   return table[id + ":overview"];
 }
 
-["grid-9"].forEach(function (id) {
+["grid-9", "day-line"].forEach(function (id) {
   test(id + ": registers an overview renderer, draws from the page's own model, never uses innerHTML", function () {
     var src = read("look-layers/" + id + ".js").split(/\r?\n/).filter(function (l) { return !/^\s*\/\//.test(l); }).join("\n");   // code only, not the comments
     assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/.test(src), "DOM calls and textContent only");
