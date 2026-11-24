@@ -111,7 +111,7 @@
     // ----
     { id: "mailroom", name: "Mailroom", blurb: "An email client: folders, a list, a reading pane.", group: "apps", installed: true, renderer: false, v: "33c4cdd9", jv: "00000000", sketch: "0,0,18,100,q;3,10,12,3,s;3,18,12,2,d;3,24,12,2,d;3,30,12,2,d;18,0,1,100,l;21,8,24,3,s;21,16,24,2,d;21,26,24,3,s;21,34,24,2,d;21,44,24,3,s;50,0,1,100,l;55,10,36,5,s;55,22,38,2,d;55,30,34,2,d;55,40,30,2,d" },
     // ----
-    { id: "paper-terminal", name: "Paper Terminal", blurb: "A text-mode screen in paper and ink, no neon.", group: "text", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "3,3,94,94,l;5,5,90,90,p;8,9,60,3,s;8,22,84,6,s;8,34,70,2,d;8,44,60,2,d;8,54,66,2,d;5,88,90,7,s" },
+    { id: "paper-terminal", name: "Paper Terminal", blurb: "A text-mode screen in paper and ink, no neon.", group: "text", installed: true, renderer: false, v: "9c69b8bc", jv: "00000000", sketch: "1,1,98,98,l;3,3,94,94,p;3,3,18,94,l;5,6,14,3,s;5,12,14,3,d;5,18,14,3,d;24,6,40,3,s;24,13,72,34,l;26,15,68,30,p;24,51,72,40,l;26,53,68,36,p" },
     // ----
     { id: "plain-window", name: "Plain Window", blurb: "A native admin tool: a list pane, ruled blocks, system type.", group: "apps", installed: true, renderer: false, v: "b42949f7", jv: "00000000", sketch: "0,0,22,100,q;3,10,16,5,s;3,20,16,2,d;3,26,16,2,d;3,32,16,2,d;26,6,40,6,l;26,18,70,2,d;26,26,70,14,p;26,44,70,14,p;26,62,70,14,p" },
     // ----
