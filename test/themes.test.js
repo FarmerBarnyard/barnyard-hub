@@ -69,7 +69,7 @@ test("normalize: junk becomes the defaults", function () {
   var d = Theme.defaults();
   assert.deepStrictEqual(Theme.normalize(null), d);
   assert.deepStrictEqual(Theme.normalize("dark"), d);
-  assert.deepStrictEqual(Theme.normalize({ theme: "nope", mode: "purple", bg: "../x", bgs: 9, density: [], sidebar: {}, opsLayout: "grid", foldBacklog: "yes" }), d);
+  assert.deepStrictEqual(Theme.normalize({ look: 7, theme: "nope", mode: "purple", bg: "../x", bgs: 9, density: [], sidebar: {}, opsLayout: "grid", foldBacklog: "yes" }), d);
 });
 
 test("normalize: valid choices are kept", function () {
@@ -122,7 +122,7 @@ test("normalize does not share state with the defaults", function () {
 test("cookie: look-and-feel keys round-trip", function () {
   var s = Theme.normalize({ theme: "orchid", mode: "system", bg: "radar", bgs: "subtle", density: "compact", sidebar: "icons" });
   var back = Theme.decodePrefs(Theme.encodePrefs(s));
-  assert.deepStrictEqual(back, { theme: "orchid", mode: "system", bg: "radar", bgs: "subtle", density: "compact", sidebar: "icons" });
+  assert.deepStrictEqual(back, { theme: "orchid", look: "original", mode: "system", bg: "radar", bgs: "subtle", density: "compact", sidebar: "icons" });
 });
 
 test("cookie: anything that does not validate is ignored, and layout keys never travel", function () {
