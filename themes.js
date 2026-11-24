@@ -127,7 +127,7 @@
     // ----
     { id: "shift-log", name: "Shift Log", blurb: "A text-first hand-over log: one column, no cards.", group: "documents", installed: true, renderer: false, v: "8b0b800e", jv: "00000000", sketch: "20,8,60,5,s;14,24,3,3,a;20,24,60,2,d;20,34,52,2,d;20,44,60,2,d;20,54,44,2,d;20,68,60,2,d;20,78,36,2,d" },
     // ----
-    { id: "switchboard", name: "Switchboard", blurb: "Titled panes with a top tab strip.", group: "apps", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "0,0,100,12,s;4,3,14,6,a;4,18,44,36,q;52,18,44,36,q;4,58,44,36,q;52,58,44,36,q" },
+    { id: "switchboard", name: "Switchboard", blurb: "Titled panes with a top tab strip.", group: "apps", installed: true, renderer: false, v: "1ffe6748", jv: "00000000", sketch: "0,0,100,9,s;3,2,10,5,a;16,2,10,5,p;28,2,10,5,p;4,14,44,6,s;4,20,44,30,p;52,14,44,6,s;52,20,44,30,p;4,56,44,6,s;4,62,44,32,p;52,56,44,6,s;52,62,44,32,p" },
     // ----
     { id: "wiki", name: "Wiki", blurb: "A living runbook: page tree, article, contents.", group: "documents", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "0,0,22,100,p;26,8,50,6,s;26,24,50,2,d;26,34,50,2,d;26,44,40,2,d;26,58,50,2,d;80,8,18,2,d;80,18,18,2,d;80,28,18,2,d" }
     // ----
