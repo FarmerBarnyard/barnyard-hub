@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../landing.css?v=92f5d814">
+<link rel="stylesheet" href="../gate-vars.css">
+<script src="../../landing.js?v=c2537ed8"></script>
+<script src="../gate-ready.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barnyard: Lines (look K)</title>
+<style>
+/* Mockup controls only: neutral, small, never part of a look. */
+#mk-panel { position: fixed; z-index: 99; right: 12px; bottom: 12px; font: 12px/1.35 system-ui, "Segoe UI", sans-serif; color: var(--fg); background: var(--panel); border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(0,0,0,.25); max-width: 230px; }
+#mk-panel * { box-sizing: border-box; }
+#mk-toggle { display: block; width: 100%; padding: 6px 10px; font: inherit; font-weight: 600; text-align: left; color: var(--fg-strong); background: var(--panel-2); border: 0; cursor: pointer; }
+#mk-panel .mk-body { display: grid; gap: 7px; padding: 9px 10px 10px; }
+#mk-panel.mk-closed .mk-body { display: none; }
+#mk-panel .mk-f { display: grid; gap: 2px; }
+#mk-panel .mk-f > span { color: var(--fg-dim); }
+#mk-panel select { width: 100%; font: inherit; color: var(--fg-strong); background: var(--bg); border: 1px solid var(--line); padding: 3px 4px; }
+#mk-panel [data-mode] { font: inherit; padding: 3px 9px; color: var(--fg); background: var(--bg); border: 1px solid var(--line); cursor: pointer; margin-right: 4px; }
+#mk-panel [data-mode][aria-pressed="true"] { background: var(--fg-strong); color: var(--bg); }
+#mk-panel .mk-check { display: flex; gap: 6px; align-items: center; }
+#mk-panel .mk-note { color: var(--fg-dim); font-size: 11px; }
+#mk-panel :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* the site's background layer */
+.bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+:root[data-bgs="subtle"] .bg { opacity: .5; } :root[data-bgs="medium"] .bg { opacity: .85; } :root[data-bgs="strong"] .bg { opacity: 1; }
+
+.bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+:root[data-bgs="subtle"] .bg { opacity: .5; } :root[data-bgs="medium"] .bg { opacity: .85; } :root[data-bgs="strong"] .bg { opacity: 1; }
+.bgx-glow { background: radial-gradient(60% 55% at 88% -8%, color-mix(in srgb, var(--accent) 42%, transparent), transparent 72%), radial-gradient(50% 45% at -6% 104%, color-mix(in srgb, var(--attn) 34%, transparent), transparent 70%); }
+.bgx-mesh { background: radial-gradient(40% 40% at 12% 18%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 70%), radial-gradient(38% 40% at 86% 22%, color-mix(in srgb, var(--attn) 32%, transparent), transparent 70%), radial-gradient(44% 44% at 70% 92%, color-mix(in srgb, var(--info) 32%, transparent), transparent 70%), radial-gradient(36% 36% at 6% 86%, color-mix(in srgb, var(--ok) 24%, transparent), transparent 70%); }
+.bgx-aurora { background: linear-gradient(112deg, transparent 12%, color-mix(in srgb, var(--accent) 34%, transparent) 34%, color-mix(in srgb, var(--attn) 32%, transparent) 50%, color-mix(in srgb, var(--info) 30%, transparent) 66%, transparent 88%), radial-gradient(60% 50% at 20% 100%, color-mix(in srgb, var(--attn) 20%, transparent), transparent 70%); background-size: 160% 70%, 100% 100%; background-repeat: no-repeat; background-position: 30% 0, 0 0; -webkit-mask-image: linear-gradient(180deg, #000 20%, transparent 95%); mask-image: linear-gradient(180deg, #000 20%, transparent 95%); }
+.bgx-spotlight { background: radial-gradient(34% 42% at 50% -6%, color-mix(in srgb, var(--fg-strong) 22%, transparent), transparent 72%), radial-gradient(80% 62% at 50% -12%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 74%); }
+.bgx-horizon { background: linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--accent) 26%, transparent) 75%, color-mix(in srgb, var(--attn) 38%, transparent) 100%), repeating-linear-gradient(180deg, transparent 0 22px, color-mix(in srgb, var(--accent) 12%, transparent) 22px 23px); }
+.bgx-dots { background-image: radial-gradient(color-mix(in srgb, var(--fg-dim) 60%, transparent) 1.2px, transparent 1.6px); background-size: 24px 24px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 85%); mask-image: linear-gradient(180deg, #000, transparent 85%); }
+.bgx-grid { background-image: linear-gradient(color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px); background-size: 44px 44px; -webkit-mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); }
+.bgx-blueprint { background-image: linear-gradient(color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px); background-size: 110px 110px, 110px 110px, 22px 22px, 22px 22px; -webkit-mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); }
+.bgx-ledger { background-image: linear-gradient(90deg, transparent calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 25px), transparent calc(var(--side-w) + 25px)), repeating-linear-gradient(180deg, transparent 0 31px, color-mix(in srgb, var(--fg-dim) 28%, transparent) 31px 32px); }
+.bgx-stripes { background: repeating-linear-gradient(135deg, transparent 0 16px, color-mix(in srgb, var(--fg-dim) 30%, transparent) 16px 17px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.bgx-lattice { background: repeating-linear-gradient(45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px), repeating-linear-gradient(-45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.bgx-scales { background-image: radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px), radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px); background-size: 28px 14px, 28px 14px; background-position: 0 0, 14px 7px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 88%); mask-image: linear-gradient(180deg, #000, transparent 88%); }
+.bgx-beams { background: repeating-linear-gradient(90deg, transparent 0 22px, color-mix(in srgb, var(--accent) 34%, transparent) 22px 24px, transparent 24px 41px, color-mix(in srgb, var(--attn) 28%, transparent) 41px 42px, transparent 42px 64px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 82%); mask-image: linear-gradient(180deg, #000, transparent 82%); }
+.bgx-ripples { background: repeating-radial-gradient(circle at 92% -6%, transparent 0 38px, color-mix(in srgb, var(--accent) 40%, transparent) 38px 39px), repeating-radial-gradient(circle at -4% 104%, transparent 0 46px, color-mix(in srgb, var(--attn) 34%, transparent) 46px 47px); -webkit-mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); }
+.bgx-radar { background: repeating-radial-gradient(circle at 80% 20%, transparent 0 64px, color-mix(in srgb, var(--accent) 34%, transparent) 64px 65px), linear-gradient(90deg, transparent calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% + .5px), transparent calc(80% + .5px)), linear-gradient(180deg, transparent calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% + .5px), transparent calc(20% + .5px)), conic-gradient(from 190deg at 80% 20%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 55deg); -webkit-mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); }
+.bgx-contours { background: repeating-radial-gradient(ellipse 70% 45% at 18% 28%, transparent 0 24px, color-mix(in srgb, var(--accent) 34%, transparent) 24px 25px), repeating-radial-gradient(ellipse 50% 75% at 86% 78%, transparent 0 28px, color-mix(in srgb, var(--attn) 32%, transparent) 28px 29px), repeating-radial-gradient(ellipse 40% 30% at 62% 8%, transparent 0 30px, color-mix(in srgb, var(--info) 24%, transparent) 30px 31px); }
+.bgx-rays { background: repeating-conic-gradient(from 180deg at 100% 0%, color-mix(in srgb, var(--accent) 30%, transparent) 0 3deg, transparent 3deg 9deg); -webkit-mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); }
+
+/* ============ LOOK K: LINES. Each system or project is a line; its stops are stations; state is drawn on the station. ============ */
+:root { --font-body: "IBM Plex Sans", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; --font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, ui-monospace, monospace; --fs: 14px; --pad: 12px; --map-fs: 13px; --stroke: 9; }
+:root[data-density="compact"] { --fs: 13px; --pad: 7px; --map-fs: 12px; --stroke: 8; }
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { margin: 0; min-height: 100vh; color: var(--fg); background: transparent; font: var(--fs)/1.45 var(--font-body); }
+#page { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 24px 100px; }
+.sheet { background: color-mix(in srgb, var(--bg) 92%, transparent); padding: 0 0 36px; min-height: 100vh; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid var(--fg-strong); outline-offset: 2px; }
+.top { display: flex; align-items: center; gap: 26px; padding: 14px 0; border-bottom: 3px solid var(--fg-strong); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.15em; color: var(--fg-strong); }
+.brand svg { display: block; }
+.top nav { display: flex; gap: 6px; }
+.top nav button { background: none; border: 0; padding: 5px 12px; color: var(--fg); cursor: pointer; font-weight: 600; }
+.top nav button[aria-current="page"] { background: var(--fg-strong); color: var(--bg); }
+.who { margin-left: auto; color: var(--fg-dim); }
+h1 { margin: 26px 0 4px; font-size: calc(var(--fs) * 1.75); line-height: 1.2; font-weight: 700; color: var(--fg-strong); max-width: 28em; }
+.sub { margin: 0 0 20px; color: var(--fg-dim); max-width: 48em; }
+/* the status board: one row per line */
+.board { display: grid; border-top: 1px solid var(--line); }
+.brow { display: grid; grid-template-columns: 40px 190px minmax(0, 1fr); gap: 14px; align-items: center; padding: var(--pad) 0; border-bottom: 1px solid var(--line); }
+.bullet { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 17px; color: var(--bg); }
+.brow .nm { font-weight: 700; color: var(--fg-strong); font-size: 1.05em; }
+.brow .st { color: var(--fg); }
+.brow .st b { color: var(--fg-strong); }
+/* the map */
+.mapwrap { margin: 26px 0 8px; overflow-x: auto; }
+svg.map { display: block; width: 100%; min-width: 860px; height: auto; font-family: var(--font-body); }
+.map text { fill: var(--fg); font-size: var(--map-fs); }
+.map .stn { font-weight: 600; fill: var(--fg-strong); }
+.map .stat { fill: var(--fg-dim); font-size: calc(var(--map-fs) - 1px); }
+.map .need .stn { font-weight: 700; }
+.map .lname { font-weight: 700; font-size: calc(var(--map-fs) + 2px); fill: var(--fg-strong); }
+.map .halo { paint-order: stroke; stroke: color-mix(in srgb, var(--bg) 92%, transparent); stroke-width: 4px; stroke-linejoin: round; }
+.key { display: flex; flex-wrap: wrap; gap: 8px 22px; padding: 12px 0; border-top: 1px solid var(--line); color: var(--fg); }
+.key span { display: inline-flex; align-items: center; gap: 7px; }
+.key svg { display: block; }
+/* the notice lists */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 48px; margin-top: 20px; }
+h2 { margin: 0 0 6px; font-size: 1.05em; color: var(--fg-strong); padding-bottom: 6px; border-bottom: 3px solid var(--fg-strong); }
+.lst { list-style: none; margin: 0; padding: 0; }
+.lst li { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 12px; padding: calc(var(--pad) - 3px) 0; border-bottom: 1px solid var(--line); }
+.lst time, .lst .d { font: 12.5px var(--font-mono); color: var(--fg-dim); font-variant-numeric: tabular-nums; padding-top: 1px; }
+/* second view: lanes as vertical lines */
+.lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 30px; margin-top: 8px; }
+.lane h2 { display: flex; align-items: center; gap: 10px; border: 0; padding: 0; margin: 0 0 12px; }
+.lane h2 .bullet { width: 28px; height: 28px; font-size: 14px; }
+.vl { list-style: none; margin: 0; padding: 0 0 0 0; position: relative; }
+.vl li { position: relative; padding: 0 0 var(--pad) 40px; min-height: 40px; }
+.vl li::before { content: ""; position: absolute; left: 11px; top: 0; bottom: 0; width: 8px; background: var(--c); }
+.vl li:first-child::before { top: 10px; }
+.vl li:last-child::before { bottom: auto; height: 16px; }
+.vl li.dashed::before { background: repeating-linear-gradient(180deg, var(--c) 0 7px, transparent 7px 12px); }
+.vl .dot { position: absolute; left: 4px; top: 4px; width: 22px; height: 22px; border-radius: 50%; background: var(--bg); border: 5px solid var(--c); }
+.vl .need .dot, .vl li.need .dot { width: 26px; height: 26px; left: 2px; top: 2px; border: 5px solid var(--fg-strong); box-shadow: inset 0 0 0 4px var(--c); }
+.vl li.done .dot { background: var(--c); }
+.vl .t { color: var(--fg-strong); font-weight: 600; }
+.vl .m { color: var(--fg-dim); font-size: .93em; }
+.vl .m b { color: var(--fg-strong); }
+.vl li.more .dot { width: 14px; height: 14px; left: 8px; top: 8px; border-width: 3px; }
+[hidden] { display: none !important; }
+@media (max-width: 800px) { .top { flex-wrap: wrap; gap: 8px 16px; } .who { margin-left: 0; width: 100%; } #page { padding: 0 14px 100px; } .cols { grid-template-columns: 1fr; } .brow { grid-template-columns: 40px minmax(0, 1fr); } .brow .st { grid-column: 2; } }
+</style>
+</head>
+<body>
+<div id="page"><div class="sheet">
+  <header class="top">
+    <span class="brand"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="12.5" fill="none" stroke="currentColor" stroke-width="4"/><rect x="2" y="12.5" width="26" height="5" fill="currentColor"/></svg>Barnyard</span>
+    <nav aria-label="Pages"><button type="button" data-v="map" aria-current="page">Network</button><button type="button" data-v="ops">Ops board</button></nav>
+    <span class="who">Alex &middot; <span data-mk-theme-name></span></span>
+  </header>
+  <main>
+    <section id="v-map" aria-labelledby="h-map">
+      <h1 id="h-map"></h1>
+      <p class="sub">Each system or project is a line. A solid line is done or running, a dashed line is planned. The ringed station is the next stop that needs you.</p>
+      <div class="board" id="status"></div>
+      <div class="mapwrap"><svg class="map" id="map" viewBox="0 0 1000 600" role="img" aria-label="Network map of three lines and their stations"></svg></div>
+      <div class="key" id="key" aria-label="Key"></div>
+      <div class="cols">
+        <div><h2>Changes today</h2><ul class="lst" id="changes"></ul></div>
+        <div><h2>Coming up</h2><ul class="lst" id="coming"></ul></div>
+      </div>
+    </section>
+    <section id="v-ops" hidden aria-labelledby="h-ops">
+      <h1 id="h-ops"></h1>
+      <p class="sub">Each lane of the Ops board is a line. Stops further down are later. A ringed stop needs you.</p>
+      <div class="lanes" id="lanes"></div>
+    </section>
+  </main>
+</div></div>
+<script>
+var MK_VARS=["--bg","--panel","--panel-2","--line","--fg","--fg-strong","--fg-dim","--accent","--accent-ink","--accent-soft","--attn","--attn-soft"];
+var MK_THEMES=[{"id":"cobalt","name":"Cobalt","group":"blue","light":["#f0f2f8","#ffffff","#f5f6fa","#dcdfec","#272e42","#0d1222","#566079","#2849d6","#ffffff","rgba(40,73,214,.09)","#a05a00","rgba(160,90,0,.10)"],"dark":["#0c0f15","#131821","#19202b","#252d3b","#cfd5e2","#f3f5fa","#8b94a8","#6c8cff","#070d24","rgba(108,140,255,.14)","#f0a54a","rgba(240,165,74,.13)"]},{"id":"azure","name":"Azure","group":"blue","light":["#eef4f9","#ffffff","#f3f8fc","#d3e1ee","#233546","#0b1b2b","#526a80","#0a68b0","#ffffff","rgba(10,104,176,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#091119","#0f1a25","#14212e","#1f3244","#c9d9e8","#eef6fd","#83a0b8","#3db4ff","#021a2c","rgba(61,180,255,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"ultra","name":"Ultramarine","group":"blue","light":["#f1f0fa","#ffffff","#f6f5fc","#deddf0","#2a2a4a","#11112b","#5c5c86","#3d3bd1","#ffffff","rgba(61,59,209,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0c0c18","#131324","#1a1a30","#292946","#d0d0ec","#f3f3ff","#9393bd","#8587ff","#0d0d38","rgba(133,135,255,.15)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"steel","name":"Steel","group":"blue","light":["#eff2f5","#ffffff","#f4f6f8","#d9dfe6","#2b3642","#101820","#586878","#35628f","#ffffff","rgba(53,98,143,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0d1217","#141b22","#19222b","#26323d","#cdd6df","#f0f4f8","#8a9bab","#8fb4da","#0b1c2d","rgba(143,180,218,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"navy","name":"Navy","group":"blue","light":["#edf1f9","#ffffff","#f2f5fb","#d4dcee","#22304d","#0a1430","#53628a","#1f5fd1","#ffffff","rgba(31,95,209,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#060e1d","#0c172b","#112038","#1c2f4d","#c7d4ec","#eff4ff","#8799be","#5aa2ff","#031230","rgba(90,162,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"amber","name":"Amber","group":"other","light":["#f0f3f6","#ffffff","#f5f7f9","#dce2e9","#2a3540","#0e1720","#586674","#a85f00","#ffffff","rgba(168,95,0,.10)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0b1016","#121920","#172029","#232e3a","#ced7e0","#f2f5f8","#8c99a7","#e8a33d","#1b1304","rgba(232,163,61,.12)","#a891ff","rgba(168,145,255,.12)"]},{"id":"harbour","name":"Harbour","group":"other","light":["#eef4f4","#ffffff","#f4f8f8","#d5e2e3","#243438","#0b1a1d","#526a70","#0b7c6e","#ffffff","rgba(11,124,110,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0a1215","#101a1e","#152227","#22343b","#cbdadd","#f0f6f7","#86a0a6","#3cc4b0","#04201b","rgba(60,196,176,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"plum","name":"Plum","group":"other","light":["#f4f1f8","#ffffff","#f8f6fb","#e2dcec","#2e2840","#130f20","#615878","#7a3fc8","#ffffff","rgba(122,63,200,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0f0d14","#17141f","#1e1a28","#2d2739","#d6d0e2","#f6f3fb","#9890aa","#b98cf5","#170a2b","rgba(185,140,245,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"graphite","name":"Graphite","group":"other","light":["#f1f2f3","#ffffff","#f6f7f8","#dcdfe2","#2a2e33","#101215","#5a6168","#1b1f24","#ffffff","rgba(27,31,36,.07)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0d0e10","#151719","#1b1d20","#2a2d31","#cfd2d6","#f4f5f6","#8e949b","#e9ebee","#0d0e10","rgba(233,235,238,.10)","#a891ff","rgba(168,145,255,.12)"]},{"id":"rose","name":"Rose","group":"other","light":["#f7f0f3","#ffffff","#faf5f7","#ead9e0","#3a2a33","#1d1017","#6d5662","#b4306b","#ffffff","rgba(180,48,107,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#130c10","#1b1217","#23171d","#34222b","#e0d0d7","#fbf3f6","#a58f99","#f27aa8","#2b0715","rgba(242,122,168,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"ember","name":"Ember","group":"other","light":["#f3f1f0","#ffffff","#f8f6f5","#e2dcd8","#34302d","#181412","#675f5a","#b8470f","#ffffff","rgba(184,71,15,.10)","#5b3fd0","rgba(91,63,208,.09)"],"dark":["#110e0c","#191512","#211c18","#322a24","#dcd3cc","#f8f3ee","#9e9389","#ff8d4d","#2a1103","rgba(255,141,77,.14)","#b79bff","rgba(183,155,255,.13)"]},{"id":"stone","name":"Stone","group":"other","light":["#eeeeeb","#fcfcfb","#f4f4f1","#dcdcd6","#34342f","#171713","#636359","#4a49c9","#ffffff","rgba(74,73,201,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#121210","#1a1a17","#21211d","#31312b","#d9d9d1","#f6f6f0","#98988c","#9a9cff","#12123a","rgba(154,156,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"pine","name":"Pine","group":"other","light":["#eef2ef","#ffffff","#f3f6f4","#d6e0da","#243229","#0c1710","#54675a","#8a6410","#ffffff","rgba(138,100,16,.10)","#6446d6","rgba(100,70,214,.09)"],"dark":["#08110d","#0e1914","#13211b","#1f3329","#cbd9d0","#eff6f1","#85a090","#dcbc66","#261c03","rgba(220,188,102,.13)","#a891ff","rgba(168,145,255,.12)"]},{"id":"arctic","name":"Arctic","group":"other","light":["#eef5f6","#ffffff","#f3f8f9","#d2e2e5","#213a40","#0a1c21","#4f6d74","#0a7790","#ffffff","rgba(10,119,144,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#081217","#0e1c22","#13262d","#1f3841","#c6dde3","#ecf8fb","#80a3ad","#55d3ea","#021e26","rgba(85,211,234,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"copper","name":"Copper","group":"other","light":["#f3f0ee","#ffffff","#f8f5f3","#e3dad4","#3a302a","#1b1410","#6b5d53","#9c5527","#ffffff","rgba(156,85,39,.10)","#5b3fd0","rgba(91,63,208,.09)"],"dark":["#120e0b","#1a1511","#221b16","#34281f","#ddd0c4","#f8f1ea","#a29080","#d9955a","#2a1507","rgba(217,149,90,.14)","#b79bff","rgba(183,155,255,.13)"]},{"id":"olive","name":"Olive","group":"other","light":["#f1f2ec","#ffffff","#f6f7f2","#dfe1d4","#2f3325","#14170c","#5e6350","#66701a","#ffffff","rgba(102,112,26,.11)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0f110a","#171a10","#1e2216","#2d3320","#d6dac6","#f5f7ea","#9aa384","#bccb5a","#1c2204","rgba(188,203,90,.13)","#a891ff","rgba(168,145,255,.12)"]},{"id":"orchid","name":"Orchid","group":"other","light":["#f6f0f7","#ffffff","#faf5fb","#e6d8e8","#36263a","#1b0f1f","#6a5470","#a2299e","#ffffff","rgba(162,41,158,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#130b14","#1b111c","#231724","#35223a","#e2d0e4","#fcf3fd","#a98fae","#e078dc","#2b0829","rgba(224,120,220,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"dusk","name":"Dusk","group":"other","light":["#f0eff3","#ffffff","#f5f4f8","#dedce7","#2e2c3c","#14131e","#5d5a73","#a84a1d","#ffffff","rgba(168,74,29,.10)","#4a56c9","rgba(74,86,201,.09)"],"dark":["#0f0f17","#171722","#1e1e2b","#2c2c3d","#d3d2e0","#f4f3fb","#9291ab","#ffb08a","#2e1203","rgba(255,176,138,.13)","#9fb0ff","rgba(159,176,255,.13)"]}];
+var MK_BACKGROUNDS=[{"id":"plain","name":"Plain","group":"light"},{"id":"glow","name":"Glow","group":"light"},{"id":"mesh","name":"Mesh","group":"light"},{"id":"aurora","name":"Aurora","group":"light"},{"id":"spotlight","name":"Spotlight","group":"light"},{"id":"horizon","name":"Horizon","group":"light"},{"id":"dots","name":"Dots","group":"pattern"},{"id":"grid","name":"Grid","group":"pattern"},{"id":"blueprint","name":"Blueprint","group":"pattern"},{"id":"ledger","name":"Ledger","group":"pattern"},{"id":"stripes","name":"Stripes","group":"pattern"},{"id":"lattice","name":"Lattice","group":"pattern"},{"id":"scales","name":"Scales","group":"pattern"},{"id":"beams","name":"Beams","group":"pattern"},{"id":"ripples","name":"Ripples","group":"ring"},{"id":"radar","name":"Radar","group":"ring"},{"id":"contours","name":"Contours","group":"ring"},{"id":"rays","name":"Rays","group":"ring"}];
+
+var MK_CONTENT = {
+  "_note": "Example data for every look's mockup. Same content in every look so they can be compared. All values are made up.",
+  "owner": "Alex",
+  "now": "Tue 24 Nov, 22:51 AWST",
+  "waiting_on_you": [
+    {"id": "it_a1", "title": "Approve renewal: barnyard.site domain", "age": "2 days", "lane": "needs you", "due": "28 Nov", "kind": "renewal"},
+    {"id": "it_a2", "title": "Sign off the Setup first run (installer 3f9a1c7e)", "age": "today", "lane": "needs you", "due": "", "kind": "approval"},
+    {"id": "it_a3", "title": "Choose the Barnyard look", "age": "today", "lane": "needs you", "due": "", "kind": "decision"},
+    {"id": "it_a4", "title": "Purge Cloudflare cache for old timeline file", "age": "done 01:00", "lane": "done", "due": "", "kind": "task"},
+    {"id": "it_a5", "title": "Backup restore test is overdue", "age": "5 days", "lane": "needs you", "due": "19 Nov", "kind": "overdue"}
+  ],
+  "in_progress": [
+    {"title": "Project Atlas: build step 1", "who": "Claude", "progress": "reads 7 of 9"},
+    {"title": "Landing page for signed-out visitors", "who": "Claude", "progress": "live"},
+    {"title": "Vulnerability clean-up (14 open)", "who": "you", "progress": "3 critical"}
+  ],
+  "services": [
+    {"name": "api.barnyard.site", "state": "up", "note": "212 ms"},
+    {"name": "dashboard.barnyard.site", "state": "up", "note": "98 ms"},
+    {"name": "APP-02", "state": "down", "note": "no reply for 14 min"},
+    {"name": "Backups (hourly copy)", "state": "degraded", "note": "last good 03:10"},
+    {"name": "Cloudflare tunnel", "state": "up", "note": "2 connectors"},
+    {"name": "Entra sign-in", "state": "up", "note": "token ok"}
+  ],
+  "since_last_looked": [
+    {"t": "21:40", "text": "Security cleared the Setup installer build"},
+    {"t": "20:12", "text": "Landing page deployed to the dashboard"},
+    {"t": "18:05", "text": "Two vulnerabilities marked fixed"},
+    {"t": "09:30", "text": "Hourly backup copy failed once, retried ok"}
+  ],
+  "week": [
+    {"day": "Tue", "items": ["Setup dry run (PC)"]},
+    {"day": "Wed", "items": ["Renewals review 10:00", "Domain check"]},
+    {"day": "Thu", "items": ["First real Setup run (laptop)"]},
+    {"day": "Fri", "items": []},
+    {"day": "Sat", "items": []},
+    {"day": "Sun", "items": ["Backup test"]},
+    {"day": "Mon", "items": ["sign-off sentence"]}
+  ],
+  "ops_board": [
+    {"lane": "Needs you", "n": 4},
+    {"lane": "In progress", "n": 3},
+    {"lane": "Soaking", "n": 6},
+    {"lane": "Backlog", "n": 27}
+  ],
+  "second_view_ops_rows": [
+    ["it_a2", "Sign off the Setup first run", "needs you", "today"],
+    ["it_a1", "Approve renewal: barnyard.site domain", "needs you", "28 Nov"],
+    ["it_a5", "Backup restore test is overdue", "needs you", "19 Nov"],
+    ["it_b1", "Project Atlas: build step 1", "in progress", "-"],
+    ["it_b2", "Vulnerability clean-up (14 open)", "in progress", "30 Nov"],
+    ["it_c1", "Cloudflare Access in front of the dashboard", "backlog", "-"],
+    ["it_c2", "VPS host purchase (late)", "backlog", "-"]
+  ]
+};
+/* Shared mockup controls (NOT part of any look): theme, light/dark, background, background strength, density.
+   Applies the REAL tokens of themes.js (12 colour variables per theme and mode) plus the fixed status colours of shell.css. */
+var MK = { theme: "amber", mode: "dark", bg: "plain", bgs: "medium", density: "comfortable", extra: {} };
+var MK_STATUS = {
+  light: { "--ok": "#17794d", "--ok-soft": "rgba(23,121,77,.10)", "--alert": "#bd3326", "--alert-soft": "rgba(189,51,38,.09)", "--info": "#1d63b8", "--info-soft": "rgba(29,99,184,.09)" },
+  dark: { "--ok": "#4cc38a", "--ok-soft": "rgba(76,195,138,.12)", "--alert": "#ff7b6e", "--alert-soft": "rgba(255,123,110,.12)", "--info": "#6aaaf0", "--info-soft": "rgba(106,170,240,.13)" }
+};
+function mkTheme(id) { for (var i = 0; i < MK_THEMES.length; i++) if (MK_THEMES[i].id === id) return MK_THEMES[i]; return MK_THEMES[0]; }
+function mkApply() {
+  var root = document.documentElement, th = mkTheme(MK.theme), set = th[MK.mode], i;
+  for (i = 0; i < MK_VARS.length; i++) root.style.setProperty(MK_VARS[i], set[i]);
+  var st = MK_STATUS[MK.mode]; for (var k in st) root.style.setProperty(k, st[k]);
+  root.style.setProperty("color-scheme", MK.mode);
+  root.setAttribute("data-theme", MK.mode); root.setAttribute("data-density", MK.density); root.setAttribute("data-bgs", MK.bgs);
+  var bg = document.getElementById("mk-bg"); if (bg) bg.className = "bg bgx-" + MK.bg;
+  var names = document.querySelectorAll("[data-mk-theme-name]"); for (i = 0; i < names.length; i++) names[i].textContent = th.name + ", " + MK.mode;
+  if (window.mkOnChange) window.mkOnChange(MK);
+}
+function mkEl(tag, attrs, kids) { var e = document.createElement(tag); for (var a in attrs || {}) { if (a === "text") e.textContent = attrs[a]; else e.setAttribute(a, attrs[a]); } (kids || []).forEach(function (k) { e.appendChild(k); }); return e; }
+function mkSelect(label, id, options, value, onchange) {
+  var s = mkEl("select", { id: id, "aria-label": label });
+  options.forEach(function (o) { if (o.group) { var g = mkEl("optgroup", { label: o.group }); o.items.forEach(function (it) { var op = mkEl("option", { value: it.id, text: it.name }); if (it.id === value) op.selected = true; g.appendChild(op); }); s.appendChild(g); } else { var op2 = mkEl("option", { value: o.id, text: o.name }); if (o.id === value) op2.selected = true; s.appendChild(op2); } });
+  s.addEventListener("change", function () { onchange(s.value); });
+  return mkEl("label", { class: "mk-f" }, [mkEl("span", { text: label }), s]);
+}
+function mkBuildControls(extras) {
+  var bgItems = function (g) { return MK_BACKGROUNDS.filter(function (b) { return b.group === g; }); };
+  var panel = mkEl("div", { id: "mk-panel", role: "group", "aria-label": "Mockup controls (not part of the look)" });
+  var head = mkEl("button", { type: "button", id: "mk-toggle", text: "Controls" }); head.addEventListener("click", function () { panel.classList.toggle("mk-closed"); });
+  var body = mkEl("div", { class: "mk-body" });
+  body.appendChild(mkSelect("Colour theme", "mk-theme", [{ group: "Blues", items: MK_THEMES.filter(function (t) { return t.group === "blue"; }) }, { group: "Others", items: MK_THEMES.filter(function (t) { return t.group !== "blue"; }) }], MK.theme, function (v) { MK.theme = v; mkApply(); }));
+  var modeRow = mkEl("div", { class: "mk-f" }, [mkEl("span", { text: "Mode" })]);
+  ["light", "dark"].forEach(function (m) { var b = mkEl("button", { type: "button", "data-mode": m, text: m === "light" ? "Light" : "Dark" }); b.addEventListener("click", function () { MK.mode = m; mkApply(); mkSync(); }); modeRow.appendChild(b); });
+  body.appendChild(modeRow);
+  body.appendChild(mkSelect("Background", "mk-bg-sel", [{ group: "Soft light", items: bgItems("light") }, { group: "Lines and patterns", items: bgItems("pattern") }, { group: "Rings and rays", items: bgItems("ring") }], MK.bg, function (v) { MK.bg = v; mkApply(); }));
+  body.appendChild(mkSelect("Strength", "mk-bgs", [{ id: "subtle", name: "Subtle" }, { id: "medium", name: "Medium" }, { id: "strong", name: "Strong" }], MK.bgs, function (v) { MK.bgs = v; mkApply(); }));
+  body.appendChild(mkSelect("Density", "mk-density", [{ id: "comfortable", name: "Comfortable" }, { id: "compact", name: "Compact" }], MK.density, function (v) { MK.density = v; mkApply(); }));
+  (extras || []).forEach(function (x) { var cb = mkEl("input", { type: "checkbox", id: "mk-x-" + x.id }); cb.checked = !!x.value; cb.addEventListener("change", function () { MK.extra[x.id] = cb.checked; mkApply(); }); MK.extra[x.id] = !!x.value; body.appendChild(mkEl("label", { class: "mk-f mk-check" }, [cb, mkEl("span", { text: x.label })])); });
+  body.appendChild(mkEl("div", { class: "mk-note", text: "Mockup controls. They stand in for Settings; the look itself is the page." }));
+  panel.appendChild(head); panel.appendChild(body); document.body.appendChild(panel);
+  if (MK.extra.panel === false) panel.classList.add("mk-closed");
+}
+function mkSync() { var bs = document.querySelectorAll("#mk-panel [data-mode]"); for (var i = 0; i < bs.length; i++) bs[i].setAttribute("aria-pressed", bs[i].getAttribute("data-mode") === MK.mode ? "true" : "false"); }
+function mkInit(extras) {
+  // deep link: #theme=cobalt&mode=light&bg=grid&bgs=strong&density=compact&view=ops&grid=1 (used for screenshots and sharing a state)
+  location.hash.replace(/^#/, "").split("&").forEach(function (kv) { var p = kv.split("="); if (p.length !== 2) return; var k = decodeURIComponent(p[0]), v = decodeURIComponent(p[1]); if (["theme", "mode", "bg", "bgs", "density"].indexOf(k) > -1) MK[k] = v; else if (k === "view") MK.view = v; else MK.extra[k] = v === "1"; });
+  (extras || []).forEach(function (x) { if (MK.extra[x.id] !== undefined) x.value = MK.extra[x.id]; });
+  var bg = document.createElement("div"); bg.id = "mk-bg"; bg.className = "bg bgx-plain"; document.body.insertBefore(bg, document.body.firstChild);
+  mkBuildControls(extras); mkApply(); mkSync();
+}
+
+(function () {
+  "use strict";
+  var C = MK_CONTENT, NS = "http://www.w3.org/2000/svg";
+  function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); }
+  function mk(tag, attrs, parent) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+  var COL = { R: "var(--accent)", S: "var(--info)", H: "var(--attn)" }, INK = { R: "var(--accent-ink)", S: "var(--bg)", H: "var(--bg)" };
+  var needs = C.waiting_on_you.filter(function (w) { return w.lane === "needs you"; });
+  var svc = {}; C.services.forEach(function (s) { svc[s.name] = s; });
+  var down = C.services.filter(function (s) { return s.state === "down"; })[0];
+  var downMin = down ? (/(\d+) min/.exec(down.note) || [0, 0])[1] : 0;
+
+  document.getElementById("h-map").textContent = (down ? down.name + " is down. " : "") + needs.length + " stops need you.";
+  document.getElementById("h-ops").textContent = C.ops_board[0].n + " need you, " + C.ops_board[1].n + " in progress, " + C.ops_board[3].n + " in the backlog.";
+
+  // ---- stations. kind: done | plan | prog | need | down | warn | over | ok.  [x, y, label, status, kind, side]
+  var L = {
+    R: { y: 170, name: "Project Atlas", st: [
+      [120, 170, "Installer cleared", "21:40, security", "done", "up"],
+      [270, 170, "Sign off the first run", "needs you, today", "need", "down"],
+      [430, 170, "First real Setup run", "Thu 26 Nov, laptop", "plan", "up"],
+      [590, 170, "sign-off sentence", "Mon 30 Nov", "plan", "down"] ],
+      branch: { pts: [[270, 170], [364, 76], [600, 76]], st: [[480, 76, "build step 1", "in progress, " + C.in_progress[0].progress, "prog", "up"]] },
+      solidTo: 270 },
+    S: { y: 340, name: "Servers", st: [
+      [120, 340, "api.barnyard.site", "up, 212 ms", "ok", "up"],
+      [250, 340, "dashboard.barnyard.site", "up, 98 ms", "ok", "down"],
+      [380, 340, "Cloudflare tunnel", "up, 2 connectors", "ok", "up"],
+      [510, 340, "Entra sign-in", "up, token ok", "ok", "down"],
+      [640, 340, "APP-02", "down, no reply for " + downMin + " min", "down", "up"],
+      [790, 340, "Backups", "degraded, last good 03:10", "warn", "right"] ], solidTo: 99999 },
+    H: { y: 520, name: "Housekeeping", st: [
+      [120, 520, "Landing page live", "20:12", "done", "up"],
+      [250, 520, "Vulnerability clean-up", "in progress, 14 open", "prog", "down"],
+      [380, 520, "Choose the look", "needs you, today", "need", "up"],
+      [510, 520, "Renewals review", "Wed 25 Nov, 10:00", "plan", "down"],
+      [640, 520, "Approve domain renewal", "needs you, due 28 Nov", "need", "up"],
+      [790, 520, "Backup restore test", "overdue since 19 Nov", "over", "right"] ], solidTo: 380 }
+  };
+
+  var svgEl = document.getElementById("map");
+  function wrap(s, n) { var w = s.split(" "), lines = [], cur = ""; w.forEach(function (x) { if ((cur + " " + x).trim().length > n) { lines.push(cur); cur = x; } else cur = (cur + " " + x).trim(); }); if (cur) lines.push(cur); return lines; }
+  function track(id, pts, dashedFrom) {
+    var d = "M" + pts.map(function (p) { return p[0] + " " + p[1]; }).join(" L");
+    var g = mk("g", { "data-line": id }, svgEl);
+    mk("path", { d: d, fill: "none", stroke: COL[id], "stroke-width": "var(--stroke)", "stroke-linecap": "round", "stroke-linejoin": "round" }, g);
+    return g;
+  }
+  function station(id, s, g) {
+    var x = s[0], y = s[1], kind = s[4], side = s[5], c = COL[id];
+    var grp = mk("g", { class: kind === "need" ? "need" : "" }, g);
+    var ring = (kind === "need") ? 13 : (kind === "plan" || kind === "ok") ? 9.5 : 10;
+    if (kind === "need") { mk("circle", { cx: x, cy: y, r: 14, fill: "var(--bg)", stroke: "var(--fg-strong)", "stroke-width": 5 }, grp); mk("circle", { cx: x, cy: y, r: 5, fill: c }, grp); }
+    else if (kind === "done") { mk("circle", { cx: x, cy: y, r: 10, fill: c, stroke: "var(--bg)", "stroke-width": 3 }, grp); }
+    else if (kind === "prog") { mk("circle", { cx: x, cy: y, r: 11, fill: "var(--bg)", stroke: c, "stroke-width": 5 }, grp); mk("path", { d: "M" + x + " " + (y - 6) + " A6 6 0 0 0 " + x + " " + (y + 6) + " Z", fill: c }, grp); }
+    else if (kind === "down") { mk("circle", { cx: x, cy: y, r: 13, fill: "var(--bg)", stroke: "var(--alert)", "stroke-width": 5 }, grp); mk("path", { d: "M" + (x - 5) + " " + (y - 5) + " L" + (x + 5) + " " + (y + 5) + " M" + (x + 5) + " " + (y - 5) + " L" + (x - 5) + " " + (y + 5), stroke: "var(--alert)", "stroke-width": 3.2, "stroke-linecap": "round" }, grp); }
+    else if (kind === "warn") { mk("rect", { x: x - 11, y: y - 11, width: 22, height: 22, transform: "rotate(45 " + x + " " + y + ")", fill: "var(--bg)", stroke: "var(--alert)", "stroke-width": 5 }, grp); }
+    else if (kind === "over") { mk("circle", { cx: x, cy: y, r: 12, fill: "var(--bg)", stroke: "var(--alert)", "stroke-width": 5, "stroke-dasharray": "5 4" }, grp); }
+    else { mk("circle", { cx: x, cy: y, r: 9.5, fill: "var(--bg)", stroke: c, "stroke-width": 5 }, grp); }
+    // label
+    var nl = wrap(s[2], 21), cls = "halo ";
+    var tx = x, anchor = "middle", ty;
+    if (side === "right") { tx = x + 24; anchor = "start"; ty = y - ((nl.length - 1) * 8) + 2; }
+    else if (side === "up") { ty = y - 24 - (nl.length - 1) * 15 - 16; } else { ty = y + 32; }
+    var t = mk("text", { x: tx, y: ty, "text-anchor": anchor }, grp);
+    nl.forEach(function (ln, i) { var sp = mk("tspan", { x: tx, dy: i === 0 ? 0 : 15, class: "stn halo" }, t); sp.textContent = ln; });
+    var t2 = mk("text", { x: tx, y: ty + nl.length * 15 + 1, "text-anchor": anchor, class: "stat halo" }, grp); t2.textContent = s[3];
+  }
+  ["R", "S", "H"].forEach(function (id) {
+    var ln = L[id], first = ln.st[0], last = ln.st[ln.st.length - 1];
+    var g = track(id, [[52, ln.y], [last[0] + 26, ln.y]]);
+    if (ln.solidTo < 99999) {      // planned part drawn dashed over a knock-out
+      var cut = mk("rect", { x: ln.solidTo + 14, y: ln.y - 8, width: last[0] + 34 - ln.solidTo - 14, height: 16, fill: "var(--bg)" }, g);
+      mk("path", { d: "M" + (ln.solidTo + 14) + " " + ln.y + " L" + (last[0] + 26) + " " + ln.y, fill: "none", stroke: COL[id], "stroke-width": "var(--stroke)", "stroke-dasharray": "12 9", "stroke-linecap": "butt" }, g);
+    }
+    if (ln.branch) { mk("path", { d: "M" + ln.branch.pts.map(function (p) { return p.join(" "); }).join(" L"), fill: "none", stroke: COL[id], "stroke-width": "var(--stroke)", "stroke-linejoin": "round", "stroke-linecap": "round" }, g); }
+    // the bullet with the line's letter and its name
+    mk("circle", { cx: 52, cy: ln.y, r: 19, fill: COL[id] }, g);
+    var tl = mk("text", { x: 52, y: ln.y + 6, "text-anchor": "middle", style: "font-weight:700;font-size:18px;fill:" + INK[id] }, g); tl.textContent = ln.name.charAt(0);
+    var nm = mk("text", { x: 30, y: ln.y + 50, class: "lname" }, g); nm.textContent = ln.name;
+    ln.st.forEach(function (s) { station(id, s, g); });
+    if (ln.branch) ln.branch.st.forEach(function (s) { station(id, s, g); });
+  });
+  // the interchange between Backups (Servers) and Backup restore test (Housekeeping)
+  var ix = mk("g", {}, svgEl);
+  svgEl.insertBefore(ix, svgEl.firstChild);
+  mk("line", { x1: 790, y1: 340, x2: 790, y2: 520, stroke: "var(--fg-strong)", "stroke-width": 12, "stroke-linecap": "round" }, ix);
+  mk("line", { x1: 790, y1: 340, x2: 790, y2: 520, stroke: "var(--bg)", "stroke-width": 5, "stroke-linecap": "round" }, ix);
+  var it = mk("text", { x: 806, y: 436, class: "stat halo" }, svgEl); it.textContent = "interchange: same backups";
+
+  // ---- status board
+  var board = document.getElementById("status");
+  var rows = [
+    ["R", "Project Atlas", "<b>1 stop needs you today.</b> Sign off the first run. Next after that: First real Setup run, Thu 26 Nov."],
+    ["S", "Servers", "<b>" + (down ? esc(down.name) + " is down, " + downMin + " minutes.</b> " : "") + "Backups degraded since 03:10. Four stops running normally."],
+    ["H", "Housekeeping", "<b>3 stops need you.</b> Backup restore test is 5 days overdue; domain renewal due 28 Nov; choose the look."]
+  ];
+  board.innerHTML = rows.map(function (r) { return '<div class="brow"><span class="bullet" style="background:' + COL[r[0]] + ';color:' + INK[r[0]] + '">' + r[1].charAt(0) + '</span><span class="nm">' + r[1] + '</span><span class="st">' + r[2] + '</span></div>'; }).join("");
+
+  // ---- key
+  function sym(kind) {
+    var s = '<svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">';
+    var c = "var(--fg)";
+    if (kind === "done") s += '<circle cx="13" cy="13" r="8" fill="' + c + '"/>';
+    if (kind === "plan") s += '<line x1="0" y1="13" x2="26" y2="13" stroke="' + c + '" stroke-width="5" stroke-dasharray="6 5"/>';
+    if (kind === "solid") s += '<line x1="0" y1="13" x2="26" y2="13" stroke="' + c + '" stroke-width="5"/>';
+    if (kind === "prog") s += '<circle cx="13" cy="13" r="8" fill="var(--bg)" stroke="' + c + '" stroke-width="4"/><path d="M13 7 A6 6 0 0 0 13 19 Z" fill="' + c + '"/>';
+    if (kind === "need") s += '<circle cx="13" cy="13" r="10" fill="var(--bg)" stroke="var(--fg-strong)" stroke-width="4"/><circle cx="13" cy="13" r="3.5" fill="' + c + '"/>';
+    if (kind === "down") s += '<circle cx="13" cy="13" r="10" fill="var(--bg)" stroke="var(--alert)" stroke-width="4"/><path d="M9 9 L17 17 M17 9 L9 17" stroke="var(--alert)" stroke-width="2.6" stroke-linecap="round"/>';
+    if (kind === "warn") s += '<rect x="5" y="5" width="16" height="16" transform="rotate(45 13 13)" fill="var(--bg)" stroke="var(--alert)" stroke-width="4"/>';
+    if (kind === "over") s += '<circle cx="13" cy="13" r="9" fill="var(--bg)" stroke="var(--alert)" stroke-width="4" stroke-dasharray="4 3.5"/>';
+    return s + "</svg>";
+  }
+  document.getElementById("key").innerHTML = [["solid", "Running or done"], ["plan", "Planned"], ["done", "Done"], ["prog", "In progress"], ["need", "Needs you"], ["down", "Down"], ["warn", "Degraded"], ["over", "Overdue"]].map(function (k) { return "<span>" + sym(k[0]) + k[1] + "</span>"; }).join("");
+
+  // ---- lists
+  document.getElementById("changes").innerHTML = C.since_last_looked.map(function (e) { return "<li><time>" + e.t + "</time><span>" + esc(e.text) + "</span></li>"; }).join("");
+  var dn = { Tue: "Tue 24", Wed: "Wed 25", Thu: "Thu 26", Fri: "Fri 27", Sat: "Sat 28", Sun: "Sun 29", Mon: "Mon 30" };
+  var comingRows = [];
+  C.week.forEach(function (d) { d.items.forEach(function (x) { comingRows.push([dn[d.day], x]); }); });
+  comingRows.splice(4, 0, ["Sat 28", "Approve renewal: barnyard.site domain, due"]);
+  document.getElementById("coming").innerHTML = comingRows.map(function (r) { return '<li><span class="d">' + r[0] + "</span><span>" + esc(r[1]) + "</span></li>"; }).join("");
+
+  // ---- second view: lanes as vertical lines
+  var lanes = [
+    ["N", "Needs you", "var(--attn)", C.ops_board[0].n, [["it_a2", "Sign off the Setup first run", "today", 1], ["it_a1", "Approve renewal: barnyard.site domain", "due 28 Nov", 1], ["it_a5", "Backup restore test is overdue", "due 19 Nov, overdue", 1]]],
+    ["P", "In progress", "var(--accent)", C.ops_board[1].n, [["it_b1", "Project Atlas: build step 1", "reads 7 of 9", 0], ["it_b2", "Vulnerability clean-up (14 open)", "due 30 Nov", 0]]],
+    ["S", "Soaking", "var(--info)", C.ops_board[2].n, []],
+    ["B", "Backlog", "var(--fg-dim)", C.ops_board[3].n, [["it_c1", "Cloudflare Access in front of the dashboard", "no date", 0], ["it_c2", "VPS host purchase (late)", "no date", 0]]]
+  ];
+  document.getElementById("lanes").innerHTML = lanes.map(function (l) {
+    var items = l[4].map(function (r, i) { return '<li class="' + (r[3] ? "need" : "") + (l[1] === "Backlog" || l[1] === "In progress" && i > 0 ? " dashed" : "") + '" style="--c:' + l[2] + '"><span class="dot"></span><div class="t">' + esc(r[1]) + '</div><div class="m">' + esc(r[0]) + " &middot; " + esc(r[2]) + "</div></li>"; }).join("");
+    var shown = l[4].length, more = l[3] - shown;
+    if (more > 0) items += '<li class="more dashed" style="--c:' + l[2] + '"><span class="dot"></span><div class="m"><b>' + more + (shown ? " more" : " items") + "</b>" + (l[1] === "Soaking" ? ", waiting to see if they hold" : ", not shown") + "</div></li>";
+    return '<section class="lane"><h2><span class="bullet" style="background:' + l[2] + ';color:' + (l[2] === "var(--accent)" ? "var(--accent-ink)" : "var(--bg)") + '">' + l[0] + "</span>" + l[1] + " (" + l[3] + ')</h2><ul class="vl">' + items + "</ul></section>";
+  }).join("");
+
+  var tabs = document.querySelectorAll(".top nav button");
+  tabs.forEach(function (b) { b.addEventListener("click", function () { tabs.forEach(function (o) { o.removeAttribute("aria-current"); }); b.setAttribute("aria-current", "page"); document.getElementById("v-map").hidden = b.dataset.v !== "map"; document.getElementById("v-ops").hidden = b.dataset.v !== "ops"; }); });
+  mkInit([]);
+  if (MK.view === "ops") tabs[1].click();
+})();
+</script>
+</body>
+</html>

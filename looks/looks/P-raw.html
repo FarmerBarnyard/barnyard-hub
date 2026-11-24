@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../landing.css?v=92f5d814">
+<link rel="stylesheet" href="../gate-vars.css">
+<script src="../../landing.js?v=c2537ed8"></script>
+<script src="../gate-ready.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barnyard - look P: Raw (mockup)</title>
+<style>
+/* Look P "Raw". Everything is drawn from the 12 theme tokens (set on :root by the theme code) and the 3 status tokens.
+   The structure is plain HTML: headings, paragraphs, lists, tables, forms. The only inventions are the document edge and the rules. */
+:root { --side-w: 0px; }
+/* ---- page backgrounds (the site's own CSS-only backgrounds, copied unchanged from shell.css) ---- */
+.bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+:root[data-bgs="subtle"] .bg { opacity: .5; } :root[data-bgs="medium"] .bg { opacity: .85; } :root[data-bgs="strong"] .bg { opacity: 1; }
+.bgx-glow { background: radial-gradient(60% 55% at 88% -8%, color-mix(in srgb, var(--accent) 42%, transparent), transparent 72%), radial-gradient(50% 45% at -6% 104%, color-mix(in srgb, var(--attn) 34%, transparent), transparent 70%); }
+.bgx-mesh { background: radial-gradient(40% 40% at 12% 18%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 70%), radial-gradient(38% 40% at 86% 22%, color-mix(in srgb, var(--attn) 32%, transparent), transparent 70%), radial-gradient(44% 44% at 70% 92%, color-mix(in srgb, var(--info) 32%, transparent), transparent 70%), radial-gradient(36% 36% at 6% 86%, color-mix(in srgb, var(--ok) 24%, transparent), transparent 70%); }
+.bgx-aurora { background: linear-gradient(112deg, transparent 12%, color-mix(in srgb, var(--accent) 34%, transparent) 34%, color-mix(in srgb, var(--attn) 32%, transparent) 50%, color-mix(in srgb, var(--info) 30%, transparent) 66%, transparent 88%), radial-gradient(60% 50% at 20% 100%, color-mix(in srgb, var(--attn) 20%, transparent), transparent 70%); background-size: 160% 70%, 100% 100%; background-repeat: no-repeat; background-position: 30% 0, 0 0; -webkit-mask-image: linear-gradient(180deg, #000 20%, transparent 95%); mask-image: linear-gradient(180deg, #000 20%, transparent 95%); }
+.bgx-spotlight { background: radial-gradient(34% 42% at 50% -6%, color-mix(in srgb, var(--fg-strong) 22%, transparent), transparent 72%), radial-gradient(80% 62% at 50% -12%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 74%); }
+.bgx-horizon { background: linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--accent) 26%, transparent) 75%, color-mix(in srgb, var(--attn) 38%, transparent) 100%), repeating-linear-gradient(180deg, transparent 0 22px, color-mix(in srgb, var(--accent) 12%, transparent) 22px 23px); }
+.bgx-dots { background-image: radial-gradient(color-mix(in srgb, var(--fg-dim) 60%, transparent) 1.2px, transparent 1.6px); background-size: 24px 24px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 85%); mask-image: linear-gradient(180deg, #000, transparent 85%); }
+.bgx-grid { background-image: linear-gradient(color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px); background-size: 44px 44px; -webkit-mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); }
+.bgx-blueprint { background-image: linear-gradient(color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px); background-size: 110px 110px, 110px 110px, 22px 22px, 22px 22px; -webkit-mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); }
+.bgx-ledger { background-image: linear-gradient(90deg, transparent calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 25px), transparent calc(var(--side-w) + 25px)), repeating-linear-gradient(180deg, transparent 0 31px, color-mix(in srgb, var(--fg-dim) 28%, transparent) 31px 32px); }
+.bgx-stripes { background: repeating-linear-gradient(135deg, transparent 0 16px, color-mix(in srgb, var(--fg-dim) 30%, transparent) 16px 17px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.bgx-lattice { background: repeating-linear-gradient(45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px), repeating-linear-gradient(-45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.bgx-scales { background-image: radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px), radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px); background-size: 28px 14px, 28px 14px; background-position: 0 0, 14px 7px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 88%); mask-image: linear-gradient(180deg, #000, transparent 88%); }
+.bgx-beams { background: repeating-linear-gradient(90deg, transparent 0 22px, color-mix(in srgb, var(--accent) 34%, transparent) 22px 24px, transparent 24px 41px, color-mix(in srgb, var(--attn) 28%, transparent) 41px 42px, transparent 42px 64px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 82%); mask-image: linear-gradient(180deg, #000, transparent 82%); }
+.bgx-ripples { background: repeating-radial-gradient(circle at 92% -6%, transparent 0 38px, color-mix(in srgb, var(--accent) 40%, transparent) 38px 39px), repeating-radial-gradient(circle at -4% 104%, transparent 0 46px, color-mix(in srgb, var(--attn) 34%, transparent) 46px 47px); -webkit-mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); }
+.bgx-radar { background: repeating-radial-gradient(circle at 80% 20%, transparent 0 64px, color-mix(in srgb, var(--accent) 34%, transparent) 64px 65px), linear-gradient(90deg, transparent calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% + .5px), transparent calc(80% + .5px)), linear-gradient(180deg, transparent calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% + .5px), transparent calc(20% + .5px)), conic-gradient(from 190deg at 80% 20%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 55deg); -webkit-mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); }
+.bgx-contours { background: repeating-radial-gradient(ellipse 70% 45% at 18% 28%, transparent 0 24px, color-mix(in srgb, var(--accent) 34%, transparent) 24px 25px), repeating-radial-gradient(ellipse 50% 75% at 86% 78%, transparent 0 28px, color-mix(in srgb, var(--attn) 32%, transparent) 28px 29px), repeating-radial-gradient(ellipse 40% 30% at 62% 8%, transparent 0 30px, color-mix(in srgb, var(--info) 24%, transparent) 30px 31px); }
+.bgx-rays { background: repeating-conic-gradient(from 180deg at 100% 0%, color-mix(in srgb, var(--accent) 30%, transparent) 0 3deg, transparent 3deg 9deg); -webkit-mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); }
+* { box-sizing: border-box; }
+html { background: var(--bg); color: var(--fg); }
+body { margin: 0; font: 16px/1.5 "Times New Roman", Times, serif; background: transparent; }
+html[data-density="compact"] body { font-size: 15px; line-height: 1.3; }
+#page { position: relative; z-index: 1; max-width: 62rem; margin: 16px auto; padding: 8px 20px 40px; background: var(--panel); border: 3px solid var(--fg-strong); color: var(--fg); }
+@media (max-width: 66rem) { #page { margin: 0 auto; border-width: 0 0 3px 0; } }
+h1, h2, h3 { color: var(--fg-strong); font-weight: bold; line-height: 1.15; }
+h1 { font-size: 2em; margin: .35em 0 .25em; }
+h2 { font-size: 1.35em; margin: 1.3em 0 .4em; padding-top: .45em; border-top: 4px solid var(--fg-strong); }
+h2 .n { font-weight: normal; }
+p { margin: .5em 0; max-width: 72ch; }
+a { color: var(--fg-strong); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 2px; text-decoration-color: var(--accent); }
+a:visited { color: var(--fg-strong); }
+a:hover { background: var(--accent); color: var(--accent-ink); text-decoration-color: var(--accent-ink); }
+a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid var(--fg-strong); outline-offset: 2px; }
+hr.thick { border: 0; border-top: 4px solid var(--fg-strong); margin: .6em 0; }
+nav ul { list-style: none; margin: .2em 0; padding: 0; }
+nav li { display: inline; }
+nav li + li::before { content: " | "; color: var(--fg); }
+nav a[aria-current="page"] { font-weight: bold; text-decoration-style: double; }
+.lead { font-size: 1.15em; max-width: none; }
+table { border-collapse: collapse; width: 100%; margin: .4em 0 .2em; border: 2px solid var(--fg-strong); font-variant-numeric: tabular-nums; }
+caption { text-align: left; font-style: italic; padding-bottom: .15em; caption-side: top; }
+th, td { border: 1px solid var(--fg-dim); padding: 4px 8px; text-align: left; vertical-align: top; }
+html[data-density="compact"] th, html[data-density="compact"] td { padding: 1px 6px; }
+th { background: var(--panel-2); color: var(--fg-strong); border-bottom: 2px solid var(--fg-strong); }
+tbody th { background: transparent; border-bottom: 1px solid var(--fg-dim); font-weight: bold; }
+td.num, th.num { text-align: right; }
+.sym { font-family: "Courier New", Courier, monospace; font-weight: bold; color: var(--fg-strong); }
+td.st { white-space: nowrap; font-weight: bold; color: var(--fg-strong); }
+td.st-down { background: var(--alert-soft); }
+td.st-degraded { background: var(--attn-soft); }
+td.st-up { background: var(--ok-soft); }
+tr.done td { text-decoration: line-through; color: var(--fg); }
+ul.plain { padding-left: 1.4em; margin: .3em 0; }
+ul.plain li { margin: .15em 0; }
+time, .t { font-family: "Courier New", Courier, monospace; font-size: .95em; }
+button { font: inherit; color: var(--fg-strong); background: var(--panel-2); border: 2px solid var(--fg-strong); padding: 0 .6em; cursor: pointer; }
+button:hover { background: var(--accent); color: var(--accent-ink); }
+fieldset { border: 2px solid var(--fg-strong); margin: .5em 0; padding: .4em .7em .6em; }
+legend { font-weight: bold; color: var(--fg-strong); padding: 0 .3em; }
+label { display: inline-block; margin: .15em 1.1em .15em 0; }
+select { font: inherit; color: var(--fg-strong); background: var(--panel-2); border: 2px solid var(--fg-strong); padding: 1px 2px; }
+input[type="radio"] { accent-color: var(--accent); }
+details > summary { cursor: pointer; font-weight: bold; color: var(--fg-strong); }
+.note { font-style: italic; }
+.tw { overflow-x: auto; }
+footer { margin-top: 1.6em; border-top: 4px solid var(--fg-strong); padding-top: .4em; }
+</style>
+<script>window.LOOK_DEFAULTS = { id: "P", theme: "graphite", mode: "light", bg: "plain" };</script>
+</head>
+<body>
+<div class="bg bgx-plain" id="bg" aria-hidden="true"></div>
+<div id="page">
+  <h1>Barnyard</h1>
+  <p>Signed in as Alex. Tuesday 24 November 2026, 22:51 AWST.</p>
+  <nav aria-label="Pages">
+    <ul id="nav">
+      <li><a href="#overview" data-view="overview">Overview</a></li>
+      <li><a href="#ops" data-view="ops">Ops board</a></li>
+      <li><a href="#stub" data-stub="Monitoring">Monitoring</a></li>
+      <li><a href="#stub" data-stub="Calendar">Calendar</a></li>
+      <li><a href="#stub" data-stub="Projects">Projects</a></li>
+      <li><a href="#stub" data-stub="Vulnerabilities">Vulnerabilities</a></li>
+    </ul>
+  </nav>
+  <p id="stubnote" class="note" hidden></p>
+
+  <details open>
+    <summary>Display settings</summary>
+    <form id="settings" onsubmit="return false" aria-label="Display settings">
+      <fieldset>
+        <legend>Look P (Raw): the settings every look keeps</legend>
+        <label>Colour scheme <select data-ctl="theme"></select></label>
+        <label>Background <select data-ctl="bg"></select></label>
+        <label>Background strength
+          <select data-ctl="bgs"><option value="subtle">subtle</option><option value="medium">medium</option><option value="strong">strong</option></select></label>
+        <br>
+        <label><input type="radio" name="pmode" value="light" data-ctl="mode"> Light</label>
+        <label><input type="radio" name="pmode" value="dark" data-ctl="mode"> Dark</label>
+        <label><input type="radio" name="pdens" value="normal" data-ctl="density"> Normal spacing</label>
+        <label><input type="radio" name="pdens" value="compact" data-ctl="density"> Compact spacing</label>
+        <p class="note">This look has no sidebar, so the sidebar setting has nothing to do here.</p>
+      </fieldset>
+    </form>
+  </details>
+
+  <hr class="thick">
+  <main id="view"></main>
+  <footer><p>Barnyard mockup. All figures are examples.</p></footer>
+</div>
+<script>
+(function () {
+  "use strict";
+  var THEMES = [{"id":"cobalt","name":"Cobalt","group":"blue","light":["#f0f2f8","#ffffff","#f5f6fa","#dcdfec","#272e42","#0d1222","#566079","#2849d6","#ffffff","rgba(40,73,214,.09)","#a05a00","rgba(160,90,0,.10)"],"dark":["#0c0f15","#131821","#19202b","#252d3b","#cfd5e2","#f3f5fa","#8b94a8","#6c8cff","#070d24","rgba(108,140,255,.14)","#f0a54a","rgba(240,165,74,.13)"]},{"id":"azure","name":"Azure","group":"blue","light":["#eef4f9","#ffffff","#f3f8fc","#d3e1ee","#233546","#0b1b2b","#526a80","#0a68b0","#ffffff","rgba(10,104,176,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#091119","#0f1a25","#14212e","#1f3244","#c9d9e8","#eef6fd","#83a0b8","#3db4ff","#021a2c","rgba(61,180,255,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"ultra","name":"Ultramarine","group":"blue","light":["#f1f0fa","#ffffff","#f6f5fc","#deddf0","#2a2a4a","#11112b","#5c5c86","#3d3bd1","#ffffff","rgba(61,59,209,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0c0c18","#131324","#1a1a30","#292946","#d0d0ec","#f3f3ff","#9393bd","#8587ff","#0d0d38","rgba(133,135,255,.15)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"steel","name":"Steel","group":"blue","light":["#eff2f5","#ffffff","#f4f6f8","#d9dfe6","#2b3642","#101820","#586878","#35628f","#ffffff","rgba(53,98,143,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0d1217","#141b22","#19222b","#26323d","#cdd6df","#f0f4f8","#8a9bab","#8fb4da","#0b1c2d","rgba(143,180,218,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"navy","name":"Navy","group":"blue","light":["#edf1f9","#ffffff","#f2f5fb","#d4dcee","#22304d","#0a1430","#53628a","#1f5fd1","#ffffff","rgba(31,95,209,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#060e1d","#0c172b","#112038","#1c2f4d","#c7d4ec","#eff4ff","#8799be","#5aa2ff","#031230","rgba(90,162,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"amber","name":"Amber","group":"other","light":["#f0f3f6","#ffffff","#f5f7f9","#dce2e9","#2a3540","#0e1720","#586674","#a85f00","#ffffff","rgba(168,95,0,.10)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0b1016","#121920","#172029","#232e3a","#ced7e0","#f2f5f8","#8c99a7","#e8a33d","#1b1304","rgba(232,163,61,.12)","#a891ff","rgba(168,145,255,.12)"]},{"id":"harbour","name":"Harbour","group":"other","light":["#eef4f4","#ffffff","#f4f8f8","#d5e2e3","#243438","#0b1a1d","#526a70","#0b7c6e","#ffffff","rgba(11,124,110,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0a1215","#101a1e","#152227","#22343b","#cbdadd","#f0f6f7","#86a0a6","#3cc4b0","#04201b","rgba(60,196,176,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"plum","name":"Plum","group":"other","light":["#f4f1f8","#ffffff","#f8f6fb","#e2dcec","#2e2840","#130f20","#615878","#7a3fc8","#ffffff","rgba(122,63,200,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0f0d14","#17141f","#1e1a28","#2d2739","#d6d0e2","#f6f3fb","#9890aa","#b98cf5","#170a2b","rgba(185,140,245,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"graphite","name":"Graphite","group":"other","light":["#f1f2f3","#ffffff","#f6f7f8","#dcdfe2","#2a2e33","#101215","#5a6168","#1b1f24","#ffffff","rgba(27,31,36,.07)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0d0e10","#151719","#1b1d20","#2a2d31","#cfd2d6","#f4f5f6","#8e949b","#e9ebee","#0d0e10","rgba(233,235,238,.10)","#a891ff","rgba(168,145,255,.12)"]},{"id":"rose","name":"Rose","group":"other","light":["#f7f0f3","#ffffff","#faf5f7","#ead9e0","#3a2a33","#1d1017","#6d5662","#b4306b","#ffffff","rgba(180,48,107,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#130c10","#1b1217","#23171d","#34222b","#e0d0d7","#fbf3f6","#a58f99","#f27aa8","#2b0715","rgba(242,122,168,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"ember","name":"Ember","group":"other","light":["#f3f1f0","#ffffff","#f8f6f5","#e2dcd8","#34302d","#181412","#675f5a","#b8470f","#ffffff","rgba(184,71,15,.10)","#5b3fd0","rgba(91,63,208,.09)"],"dark":["#110e0c","#191512","#211c18","#322a24","#dcd3cc","#f8f3ee","#9e9389","#ff8d4d","#2a1103","rgba(255,141,77,.14)","#b79bff","rgba(183,155,255,.13)"]},{"id":"stone","name":"Stone","group":"other","light":["#eeeeeb","#fcfcfb","#f4f4f1","#dcdcd6","#34342f","#171713","#636359","#4a49c9","#ffffff","rgba(74,73,201,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#121210","#1a1a17","#21211d","#31312b","#d9d9d1","#f6f6f0","#98988c","#9a9cff","#12123a","rgba(154,156,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"pine","name":"Pine","group":"other","light":["#eef2ef","#ffffff","#f3f6f4","#d6e0da","#243229","#0c1710","#54675a","#8a6410","#ffffff","rgba(138,100,16,.10)","#6446d6","rgba(100,70,214,.09)"],"dark":["#08110d","#0e1914","#13211b","#1f3329","#cbd9d0","#eff6f1","#85a090","#dcbc66","#261c03","rgba(220,188,102,.13)","#a891ff","rgba(168,145,255,.12)"]},{"id":"arctic","name":"Arctic","group":"other","light":["#eef5f6","#ffffff","#f3f8f9","#d2e2e5","#213a40","#0a1c21","#4f6d74","#0a7790","#ffffff","rgba(10,119,144,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#081217","#0e1c22","#13262d","#1f3841","#c6dde3","#ecf8fb","#80a3ad","#55d3ea","#021e26","rgba(85,211,234,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"copper","name":"Copper","group":"other","light":["#f3f0ee","#ffffff","#f8f5f3","#e3dad4","#3a302a","#1b1410","#6b5d53","#9c5527","#ffffff","rgba(156,85,39,.10)","#5b3fd0","rgba(91,63,208,.09)"],"dark":["#120e0b","#1a1511","#221b16","#34281f","#ddd0c4","#f8f1ea","#a29080","#d9955a","#2a1507","rgba(217,149,90,.14)","#b79bff","rgba(183,155,255,.13)"]},{"id":"olive","name":"Olive","group":"other","light":["#f1f2ec","#ffffff","#f6f7f2","#dfe1d4","#2f3325","#14170c","#5e6350","#66701a","#ffffff","rgba(102,112,26,.11)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0f110a","#171a10","#1e2216","#2d3320","#d6dac6","#f5f7ea","#9aa384","#bccb5a","#1c2204","rgba(188,203,90,.13)","#a891ff","rgba(168,145,255,.12)"]},{"id":"orchid","name":"Orchid","group":"other","light":["#f6f0f7","#ffffff","#faf5fb","#e6d8e8","#36263a","#1b0f1f","#6a5470","#a2299e","#ffffff","rgba(162,41,158,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#130b14","#1b111c","#231724","#35223a","#e2d0e4","#fcf3fd","#a98fae","#e078dc","#2b0829","rgba(224,120,220,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"dusk","name":"Dusk","group":"other","light":["#f0eff3","#ffffff","#f5f4f8","#dedce7","#2e2c3c","#14131e","#5d5a73","#a84a1d","#ffffff","rgba(168,74,29,.10)","#4a56c9","rgba(74,86,201,.09)"],"dark":["#0f0f17","#171722","#1e1e2b","#2c2c3d","#d3d2e0","#f4f3fb","#9291ab","#ffb08a","#2e1203","rgba(255,176,138,.13)","#9fb0ff","rgba(159,176,255,.13)"]}];
+  var DATA = {"owner":"Alex","now":"Tue 24 Nov, 22:51 AWST","waiting_on_you":[{"id":"it_a1","title":"Approve renewal: barnyard.site domain","age":"2 days","lane":"needs you","due":"28 Nov","kind":"renewal"},{"id":"it_a2","title":"Sign off the Setup first run (installer 3f9a1c7e)","age":"today","lane":"needs you","due":"","kind":"approval"},{"id":"it_a3","title":"Choose the Barnyard look","age":"today","lane":"needs you","due":"","kind":"decision"},{"id":"it_a4","title":"Purge Cloudflare cache for old timeline file","age":"done 01:00","lane":"done","due":"","kind":"task"},{"id":"it_a5","title":"Backup restore test is overdue","age":"5 days","lane":"needs you","due":"19 Nov","kind":"overdue"}],"in_progress":[{"title":"Project Atlas: build step 1","who":"Claude","progress":"reads 7 of 9"},{"title":"Landing page for signed-out visitors","who":"Claude","progress":"live"},{"title":"Vulnerability clean-up (14 open)","who":"you","progress":"3 critical"}],"services":[{"name":"api.barnyard.site","state":"up","note":"212 ms"},{"name":"dashboard.barnyard.site","state":"up","note":"98 ms"},{"name":"APP-02","state":"down","note":"no reply for 14 min"},{"name":"Backups (hourly copy)","state":"degraded","note":"last good 03:10"},{"name":"Cloudflare tunnel","state":"up","note":"2 connectors"},{"name":"Entra sign-in","state":"up","note":"token ok"}],"since_last_looked":[{"t":"21:40","text":"Security cleared the Setup installer build"},{"t":"20:12","text":"Landing page deployed to the dashboard"},{"t":"18:05","text":"Two vulnerabilities marked fixed"},{"t":"09:30","text":"Hourly backup copy failed once, retried ok"}],"week":[{"day":"Tue","items":["Setup dry run (PC)"]},{"day":"Wed","items":["Renewals review 10:00","Domain check"]},{"day":"Thu","items":["First real Setup run (laptop)"]},{"day":"Fri","items":[]},{"day":"Sat","items":[]},{"day":"Sun","items":["Backup test"]},{"day":"Mon","items":["sign-off sentence"]}],"ops_board":[{"lane":"Needs you","n":4},{"lane":"In progress","n":3},{"lane":"Soaking","n":6},{"lane":"Backlog","n":27}],"second_view_ops_rows":[["it_a2","Sign off the Setup first run","needs you","today"],["it_a1","Approve renewal: barnyard.site domain","needs you","28 Nov"],["it_a5","Backup restore test is overdue","needs you","19 Nov"],["it_b1","Project Atlas: build step 1","in progress","-"],["it_b2","Vulnerability clean-up (14 open)","in progress","30 Nov"],["it_c1","Cloudflare Access in front of the dashboard","backlog","-"],["it_c2","VPS host purchase (late)","backlog","-"]]};
+  var KEYS = ["--bg", "--panel", "--panel-2", "--line", "--fg", "--fg-strong", "--fg-dim", "--accent", "--accent-ink", "--accent-soft", "--attn", "--attn-soft"];
+  var STATUS = {
+    light: { "--ok": "#17794d", "--ok-soft": "rgba(23,121,77,.10)", "--alert": "#bd3326", "--alert-soft": "rgba(189,51,38,.09)", "--info": "#1d63b8", "--info-soft": "rgba(29,99,184,.09)" },
+    dark: { "--ok": "#4cc38a", "--ok-soft": "rgba(76,195,138,.12)", "--alert": "#ff7b6e", "--alert-soft": "rgba(255,123,110,.12)", "--info": "#6aaaf0", "--info-soft": "rgba(106,170,240,.13)" }
+  };
+  var BGS = [
+    ["plain", "Plain", "Soft light"], ["glow", "Glow", "Soft light"], ["mesh", "Mesh", "Soft light"], ["aurora", "Aurora", "Soft light"], ["spotlight", "Spotlight", "Soft light"], ["horizon", "Horizon", "Soft light"],
+    ["dots", "Dots", "Lines and patterns"], ["grid", "Grid", "Lines and patterns"], ["blueprint", "Blueprint", "Lines and patterns"], ["ledger", "Ledger", "Lines and patterns"], ["stripes", "Stripes", "Lines and patterns"], ["lattice", "Lattice", "Lines and patterns"], ["scales", "Scales", "Lines and patterns"], ["beams", "Beams", "Lines and patterns"],
+    ["ripples", "Ripples", "Rings and rays"], ["radar", "Radar", "Rings and rays"], ["contours", "Contours", "Rings and rays"], ["rays", "Rays", "Rings and rays"]
+  ];
+  var D = window.LOOK_DEFAULTS || {};
+  var state = { theme: D.theme || "graphite", mode: D.mode || "light", bg: D.bg || "plain", bgs: "medium", density: "normal", view: "overview", tree: "full" };
+  var KEY = "looks-" + (D.id || "x");
+  try { var saved = JSON.parse(localStorage.getItem(KEY) || "null"); if (saved) for (var k in saved) if (k in state) state[k] = saved[k]; } catch (e) { /* storage may be blocked */ }
+  try {
+    var h = (location.hash || "").replace(/^#/, "");
+    h.split("&").forEach(function (kv) { var p = kv.split("="); if (p[0] in state && p[1]) state[p[0]] = decodeURIComponent(p[1]); });
+  } catch (e) { /* ignore */ }
+
+  function theme() { for (var i = 0; i < THEMES.length; i++) if (THEMES[i].id === state.theme) return THEMES[i]; return THEMES[0]; }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignore */ } }
+  function el(id) { return document.getElementById(id); }
+
+  function fillSelects() {
+    var ts = document.querySelectorAll('select[data-ctl="theme"]');
+    for (var i = 0; i < ts.length; i++) {
+      var s = ts[i], groups = { blue: "Blues", other: "Others" };
+      ["blue", "other"].forEach(function (g) {
+        var og = document.createElement("optgroup"); og.label = groups[g];
+        THEMES.filter(function (t) { return t.group === g; }).forEach(function (t) { var o = document.createElement("option"); o.value = t.id; o.textContent = t.name; og.appendChild(o); });
+        s.appendChild(og);
+      });
+    }
+    var bs = document.querySelectorAll('select[data-ctl="bg"]');
+    for (var j = 0; j < bs.length; j++) {
+      var cur = null, og2 = null;
+      BGS.forEach(function (b) {
+        if (b[2] !== cur) { cur = b[2]; og2 = document.createElement("optgroup"); og2.label = cur; bs[j].appendChild(og2); }
+        var o = document.createElement("option"); o.value = b[0]; o.textContent = b[1]; og2.appendChild(o);
+      });
+    }
+  }
+  function syncControls() {
+    var c = document.querySelectorAll("[data-ctl]");
+    for (var i = 0; i < c.length; i++) {
+      var k = c[i].getAttribute("data-ctl");
+      if (c[i].type === "radio") c[i].checked = String(state[k]) === c[i].value;
+      else if (c[i].type === "checkbox") c[i].checked = state[k] === (c[i].getAttribute("data-on") || "full");
+      else c[i].value = state[k];
+    }
+  }
+  function apply() {
+    var set = theme()[state.mode], r = document.documentElement;
+    KEYS.forEach(function (k, i) { r.style.setProperty(k, set[i]); });
+    var st = STATUS[state.mode]; for (var k in st) r.style.setProperty(k, st[k]);
+    r.setAttribute("data-theme", state.mode); r.setAttribute("data-bgs", state.bgs); r.setAttribute("data-density", state.density); r.setAttribute("data-tree", state.tree);
+    r.style.colorScheme = state.mode;
+    var bg = el("bg"); if (bg) bg.className = "bg bgx-" + state.bg;
+    save(); syncControls();
+    if (window.LOOK_RENDER) window.LOOK_RENDER(state, DATA);
+  }
+  function onCtl(e) {
+    var t = e.target, k = t.getAttribute && t.getAttribute("data-ctl"); if (!k) return;
+    if (t.type === "checkbox") state[k] = t.checked ? (t.getAttribute("data-on") || "full") : (t.getAttribute("data-off") || "hidden");
+    else state[k] = t.value;
+    apply();
+  }
+  document.addEventListener("change", onCtl);
+  window.LOOK = {
+    state: state, data: DATA, themes: THEMES, set: function (o) { for (var k in o) state[k] = o[k]; apply(); }, apply: apply, fill: fillSelects,
+    init: function () { fillSelects(); apply(); }
+  };
+
+  /* ---- contrast checking (sRGB, WCAG 2) over all 18 themes x light/dark ---- */
+  function parse(c) {
+    c = String(c).trim();
+    if (c.charAt(0) === "#") { if (c.length === 4) c = "#" + c[1] + c[1] + c[2] + c[2] + c[3] + c[3]; return [parseInt(c.substr(1, 2), 16), parseInt(c.substr(3, 2), 16), parseInt(c.substr(5, 2), 16), 1]; }
+    var m = c.match(/rgba?\(([^)]+)\)/); if (m) { var p = m[1].split(",").map(function (x) { return parseFloat(x); }); return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1]; }
+    return [0, 0, 0, 1];
+  }
+  function over(fg, bg) { var a = fg[3]; return [fg[0] * a + bg[0] * (1 - a), fg[1] * a + bg[1] * (1 - a), fg[2] * a + bg[2] * (1 - a), 1]; }
+  function mix(a, pct, b) { var p = pct / 100; return [a[0] * p + b[0] * (1 - p), a[1] * p + b[1] * (1 - p), a[2] * p + b[2] * (1 - p), 1]; }
+  function lum(c) { var f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); }
+  function ratio(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  function tokens(t, m) {
+    var o = {}, set = t[m];
+    KEYS.forEach(function (k, i) { o[k.slice(2)] = parse(set[i]); });
+    var st = STATUS[m]; for (var k in st) o[k.slice(2)] = parse(st[k]);
+    o.white = [255, 255, 255, 1]; o.black = [0, 0, 0, 1];
+    return o;
+  }
+  window.LOOK_CONTRAST = function (pairsFn) {
+    var fails = [], total = 0, worst = {};
+    THEMES.forEach(function (t) {
+      ["light", "dark"].forEach(function (m) {
+        var tok = tokens(t, m);
+        pairsFn(tok, { parse: parse, over: over, mix: mix }, m).forEach(function (p) {
+          total++; var r = ratio(over(p.fg, p.bg), p.bg);
+          if (!worst[p.label] || r < worst[p.label].r) worst[p.label] = { r: Math.round(r * 100) / 100, at: t.id + "/" + m };
+          if (r < p.min) fails.push({ pair: p.label, theme: t.id, mode: m, ratio: Math.round(r * 100) / 100, min: p.min });
+        });
+      });
+    });
+    return { checked: total, failures: fails, worst: worst };
+  };
+})();
+
+(function () {
+  var done = {};
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+  var SYM = { up: ["[+]", "up"], down: ["[x]", "down"], degraded: ["[!]", "degraded"] };
+  function overview(d) {
+    var needs = d.waiting_on_you.filter(function (x) { return x.lane === "needs you"; });
+    var closed = d.waiting_on_you.filter(function (x) { return x.lane === "done"; });
+    var rank = { down: 0, degraded: 1, up: 2 };
+    var svc = d.services.slice().sort(function (a, b) { return rank[a.state] - rank[b.state]; });
+    var nDown = d.services.filter(function (s) { return s.state === "down"; }).length;
+    var nDeg = d.services.filter(function (s) { return s.state === "degraded"; }).length;
+    var h = "";
+    h += '<p class="lead"><strong>' + needs.length + ' items need a decision from you. ' + nDown + ' service is down and ' + nDeg + ' is degraded.</strong></p>';
+    h += '<h2 id="h-decide">Decisions and approvals <span class="n">(' + needs.length + ')</span></h2>';
+    h += '<table aria-labelledby="h-decide"><thead><tr><th scope="col">Item</th><th scope="col">Kind</th><th scope="col">Open for</th><th scope="col">Due</th></tr></thead><tbody>';
+    needs.forEach(function (x) { h += '<tr><th scope="row"><a href="#' + x.id + '">' + esc(x.title) + '</a></th><td>' + esc(x.kind) + '</td><td>' + esc(x.age) + '</td><td>' + (x.due ? esc(x.due) : "none") + '</td></tr>'; });
+    h += '</tbody></table>';
+    h += '<p>Finished today: ' + closed.map(function (x) { return esc(x.title) + " (" + esc(x.age) + ")"; }).join("; ") + '.</p>';
+    h += '<h2 id="h-svc">Services</h2>';
+    h += '<table aria-labelledby="h-svc"><thead><tr><th scope="col">State</th><th scope="col">Service</th><th scope="col">Detail</th></tr></thead><tbody>';
+    svc.forEach(function (s) { var y = SYM[s.state]; h += '<tr><td class="st st-' + s.state + '"><span class="sym" aria-hidden="true">' + y[0] + '</span> ' + y[1] + '</td><th scope="row">' + esc(s.name) + '</th><td>' + esc(s.note) + '</td></tr>'; });
+    h += '</tbody></table>';
+    h += '<h2 id="h-work">In progress</h2>';
+    h += '<table aria-labelledby="h-work"><thead><tr><th scope="col">Work</th><th scope="col">Who</th><th scope="col">Status</th></tr></thead><tbody>';
+    d.in_progress.forEach(function (x) { h += '<tr><th scope="row">' + esc(x.title) + '</th><td>' + esc(x.who) + '</td><td>' + esc(x.progress) + '</td></tr>'; });
+    h += '</tbody></table>';
+    h += '<h2 id="h-log">Changes today</h2><ul class="plain">';
+    d.since_last_looked.forEach(function (x) { h += '<li><time>' + esc(x.t) + '</time> ' + esc(x.text) + '</li>'; });
+    h += '</ul>';
+    h += '<h2 id="h-week">Next 7 days</h2>';
+    h += '<table aria-labelledby="h-week"><thead><tr><th scope="col">Day</th><th scope="col">Entries</th></tr></thead><tbody>';
+    d.week.forEach(function (w) { h += '<tr><th scope="row">' + w.day + '</th><td>' + (w.items.length ? w.items.map(esc).join("; ") : "none") + '</td></tr>'; });
+    h += '</tbody></table>';
+    var ob = d.ops_board.map(function (l) { return l.n + " " + l.lane.toLowerCase(); }).join(", ");
+    h += '<p>Ops board: ' + ob + '. <a href="#ops" data-view="ops">Open the Ops board</a>.</p>';
+    return h;
+  }
+  function ops(d) {
+    var h = '<h2 id="h-ops">Ops board</h2>';
+    h += '<p>' + d.ops_board.map(function (l) { return "<strong>" + l.n + "</strong> " + l.lane.toLowerCase(); }).join(", ") + '.</p>';
+    h += '<table aria-labelledby="h-ops"><thead><tr><th scope="col">ID</th><th scope="col">Item</th><th scope="col">Lane</th><th scope="col">Due</th><th scope="col">Action</th></tr></thead><tbody>';
+    d.second_view_ops_rows.forEach(function (r) {
+      var isDone = !!done[r[0]];
+      h += '<tr' + (isDone ? ' class="done"' : '') + '><td class="t">' + r[0] + '</td><th scope="row">' + esc(r[1]) + '</th><td>' + r[2] + '</td><td>' + r[3] + '</td><td>' + (r[2] === "needs you" ? '<button type="button" data-done="' + r[0] + '">' + (isDone ? "Reopen" : "Mark done") + '</button>' : "") + '</td></tr>';
+    });
+    h += '</tbody></table>';
+    h += '<p class="note">Showing 7 of 40 items. <a href="#more">Show all</a>.</p>';
+    return h;
+  }
+  window.LOOK_RENDER = function (s, d) {
+    document.getElementById("view").innerHTML = (s.view === "ops" ? ops(d) : overview(d)).replace(/<table/g, '<div class="tw"><table').replace(/<\/table>/g, '</table></div>');
+    var a = document.querySelectorAll("#nav a[data-view]");
+    for (var i = 0; i < a.length; i++) { if (a[i].getAttribute("data-view") === s.view) a[i].setAttribute("aria-current", "page"); else a[i].removeAttribute("aria-current"); }
+    document.title = "Barnyard - " + (s.view === "ops" ? "Ops board" : "Overview") + " - look P (Raw)";
+  };
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest ? e.target.closest("a,button") : null; if (!t) return;
+    if (t.getAttribute("data-view")) { e.preventDefault(); document.getElementById("stubnote").hidden = true; LOOK.set({ view: t.getAttribute("data-view") }); }
+    else if (t.getAttribute("data-stub")) { e.preventDefault(); var n = document.getElementById("stubnote"); n.textContent = t.getAttribute("data-stub") + " is not part of this mockup."; n.hidden = false; }
+    else if (t.getAttribute("data-done")) { var id = t.getAttribute("data-done"); done[id] = !done[id]; LOOK.apply(); }
+  });
+  LOOK.init();
+  /* contrast: the pairs this look puts text on, over all 18 themes x light/dark */
+  window.LOOK_PAIRS = function (k, u) {
+    var tint = function (c) { return u.over(c, k.panel); };
+    return [
+      { label: "fg on panel", fg: k.fg, bg: k.panel, min: 4.5 },
+      { label: "fg-strong on panel", fg: k["fg-strong"], bg: k.panel, min: 4.5 },
+      { label: "fg-strong on panel-2 (table head, buttons)", fg: k["fg-strong"], bg: k["panel-2"], min: 4.5 },
+      { label: "fg-strong on alert-soft tint (down)", fg: k["fg-strong"], bg: tint(k["alert-soft"]), min: 4.5 },
+      { label: "fg-strong on attn-soft tint (degraded)", fg: k["fg-strong"], bg: tint(k["attn-soft"]), min: 4.5 },
+      { label: "fg-strong on ok-soft tint (up)", fg: k["fg-strong"], bg: tint(k["ok-soft"]), min: 4.5 },
+      { label: "accent-ink on accent (link hover)", fg: k["accent-ink"], bg: k.accent, min: 4.5 },
+      { label: "fg-dim on panel (table rules only, not text)", fg: k["fg-dim"], bg: k.panel, min: 3 }
+    ];
+  };
+  if (/contrast=1/.test(location.hash)) { var pre = document.createElement("pre"); pre.id = "contrast-report"; pre.textContent = JSON.stringify(window.LOOK_CONTRAST(window.LOOK_PAIRS)); document.body.appendChild(pre); } /* dev check: open with #contrast=1 */
+})();
+</script>
+</body>
+</html>

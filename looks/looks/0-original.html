@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../landing.css?v=92f5d814">
+<link rel="stylesheet" href="../gate-vars.css">
+<script src="../../landing.js?v=c2537ed8"></script>
+<script src="../gate-ready.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>0 Original: the current Barnyard look (mock-up)</title>
+<style>
+:root{color-scheme:light dark}
+*{box-sizing:border-box}
+body{margin:0;background:#e9e9e6;font:14px/1.5 "IBM Plex Sans","Segoe UI",system-ui,sans-serif}
+#gbar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:8px 12px;background:#202124;color:#ececec;font:12.5px/1.2 "Segoe UI",system-ui,sans-serif;position:sticky;top:0;z-index:20}
+#gbar label{display:flex;align-items:center;gap:6px;white-space:nowrap}
+#gbar select{font:inherit;padding:3px 6px;border-radius:4px;border:1px solid #666;background:#303134;color:#fff}
+#gbar .gnote{margin-left:auto;opacity:.75}
+.mk{position:relative;isolation:isolate;overflow:hidden;background:var(--bg);color:var(--fg);min-width:0;--side-w:0px}
+.mk *{box-sizing:border-box}
+.mk .mk-bg{position:absolute;inset:0;z-index:0;pointer-events:none}
+.mk .mk-in{position:relative;z-index:1}
+.mk[data-bgs="subtle"] .mk-bg{opacity:.5}.mk[data-bgs="medium"] .mk-bg{opacity:.85}.mk[data-bgs="strong"] .mk-bg{opacity:1}
+.mk .bgx-glow { background: radial-gradient(60% 55% at 88% -8%, color-mix(in srgb, var(--accent) 42%, transparent), transparent 72%), radial-gradient(50% 45% at -6% 104%, color-mix(in srgb, var(--attn) 34%, transparent), transparent 70%); }
+.mk .bgx-mesh { background: radial-gradient(40% 40% at 12% 18%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 70%), radial-gradient(38% 40% at 86% 22%, color-mix(in srgb, var(--attn) 32%, transparent), transparent 70%), radial-gradient(44% 44% at 70% 92%, color-mix(in srgb, var(--info) 32%, transparent), transparent 70%), radial-gradient(36% 36% at 6% 86%, color-mix(in srgb, var(--ok) 24%, transparent), transparent 70%); }
+.mk .bgx-aurora { background: linear-gradient(112deg, transparent 12%, color-mix(in srgb, var(--accent) 34%, transparent) 34%, color-mix(in srgb, var(--attn) 32%, transparent) 50%, color-mix(in srgb, var(--info) 30%, transparent) 66%, transparent 88%), radial-gradient(60% 50% at 20% 100%, color-mix(in srgb, var(--attn) 20%, transparent), transparent 70%); background-size: 160% 70%, 100% 100%; background-repeat: no-repeat; background-position: 30% 0, 0 0; -webkit-mask-image: linear-gradient(180deg, #000 20%, transparent 95%); mask-image: linear-gradient(180deg, #000 20%, transparent 95%); }
+.mk .bgx-spotlight { background: radial-gradient(34% 42% at 50% -6%, color-mix(in srgb, var(--fg-strong) 22%, transparent), transparent 72%), radial-gradient(80% 62% at 50% -12%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 74%); }
+.mk .bgx-horizon { background: linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--accent) 26%, transparent) 75%, color-mix(in srgb, var(--attn) 38%, transparent) 100%), repeating-linear-gradient(180deg, transparent 0 22px, color-mix(in srgb, var(--accent) 12%, transparent) 22px 23px); }
+.mk .bgx-dots { background-image: radial-gradient(color-mix(in srgb, var(--fg-dim) 60%, transparent) 1.2px, transparent 1.6px); background-size: 24px 24px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 85%); mask-image: linear-gradient(180deg, #000, transparent 85%); }
+.mk .bgx-grid { background-image: linear-gradient(color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px); background-size: 44px 44px; -webkit-mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); }
+.mk .bgx-blueprint { background-image: linear-gradient(color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px); background-size: 110px 110px, 110px 110px, 22px 22px, 22px 22px; -webkit-mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); }
+.mk .bgx-ledger { background-image: linear-gradient(90deg, transparent calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 25px), transparent calc(var(--side-w) + 25px)), repeating-linear-gradient(180deg, transparent 0 31px, color-mix(in srgb, var(--fg-dim) 28%, transparent) 31px 32px); }
+.mk .bgx-stripes { background: repeating-linear-gradient(135deg, transparent 0 16px, color-mix(in srgb, var(--fg-dim) 30%, transparent) 16px 17px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.mk .bgx-lattice { background: repeating-linear-gradient(45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px), repeating-linear-gradient(-45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.mk .bgx-scales { background-image: radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px), radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px); background-size: 28px 14px, 28px 14px; background-position: 0 0, 14px 7px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 88%); mask-image: linear-gradient(180deg, #000, transparent 88%); }
+.mk .bgx-beams { background: repeating-linear-gradient(90deg, transparent 0 22px, color-mix(in srgb, var(--accent) 34%, transparent) 22px 24px, transparent 24px 41px, color-mix(in srgb, var(--attn) 28%, transparent) 41px 42px, transparent 42px 64px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 82%); mask-image: linear-gradient(180deg, #000, transparent 82%); }
+.mk .bgx-ripples { background: repeating-radial-gradient(circle at 92% -6%, transparent 0 38px, color-mix(in srgb, var(--accent) 40%, transparent) 38px 39px), repeating-radial-gradient(circle at -4% 104%, transparent 0 46px, color-mix(in srgb, var(--attn) 34%, transparent) 46px 47px); -webkit-mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); }
+.mk .bgx-radar { background: repeating-radial-gradient(circle at 80% 20%, transparent 0 64px, color-mix(in srgb, var(--accent) 34%, transparent) 64px 65px), linear-gradient(90deg, transparent calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% + .5px), transparent calc(80% + .5px)), linear-gradient(180deg, transparent calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% + .5px), transparent calc(20% + .5px)), conic-gradient(from 190deg at 80% 20%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 55deg); -webkit-mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); }
+.mk .bgx-contours { background: repeating-radial-gradient(ellipse 70% 45% at 18% 28%, transparent 0 24px, color-mix(in srgb, var(--accent) 34%, transparent) 24px 25px), repeating-radial-gradient(ellipse 50% 75% at 86% 78%, transparent 0 28px, color-mix(in srgb, var(--attn) 32%, transparent) 28px 29px), repeating-radial-gradient(ellipse 40% 30% at 62% 8%, transparent 0 30px, color-mix(in srgb, var(--info) 24%, transparent) 30px 31px); }
+.mk .bgx-rays { background: repeating-conic-gradient(from 180deg at 100% 0%, color-mix(in srgb, var(--accent) 30%, transparent) 0 3deg, transparent 3deg 9deg); -webkit-mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); }
+/* ---- the current look, rebuilt from shell.css / tiles.css values ---- */
+.mk{--font-display:"Bricolage Grotesque","Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;--font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;--font-mono:"IBM Plex Mono",Consolas,monospace;--side-w:232px;min-height:calc(100vh - 44px);background:var(--bg);color:var(--fg);font:14px/1.55 var(--font-body);display:grid;grid-template-columns:var(--side-w) minmax(0,1fr)}
+.mk[data-density="compact"]{font-size:13px;--gap:22px;--pad:11px}
+.mk[data-density="comfortable"]{--gap:32px;--pad:16px}
+.side{position:relative;z-index:1;padding:22px 14px 16px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:22px;background:color-mix(in srgb,var(--bg) 92%,transparent)}
+.brand{display:flex;align-items:center;gap:10px;padding:0 8px}
+.brand-mark{width:28px;height:28px;border-radius:8px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font:700 15px var(--font-display)}
+.brand-name{font:700 20px/1 var(--font-display);letter-spacing:-.015em;color:var(--fg-strong)}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav-group{margin:16px 10px 4px;font-size:12px;color:var(--fg-dim)}
+.nav a{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;color:var(--fg);font-weight:500;text-decoration:none;cursor:pointer}
+.nav a:hover{background:var(--panel-2)}
+.nav a[aria-current="page"]{background:var(--panel);color:var(--fg-strong);box-shadow:inset 0 0 0 1px var(--line)}
+.nav a[aria-current="page"] svg{color:var(--accent)}
+.nav svg{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.nav .badge{margin-left:auto;min-width:20px;padding:0 6px;text-align:center;font:500 11px/18px var(--font-mono);border-radius:9px;background:var(--attn);color:var(--bg)}
+.side-foot{margin-top:auto;font-size:13px;color:var(--fg-dim);padding:0 8px}
+main{position:relative;z-index:1;padding:34px 40px 60px;display:flex;flex-direction:column;gap:var(--gap)}
+.hero h1{font:700 clamp(32px,4vw,48px)/1.05 var(--font-display);letter-spacing:-.028em;color:var(--fg-strong);margin:0}
+.hero p{margin:10px 0 0;color:var(--fg-dim);font-size:16px}
+.widgets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--gap)}
+.w{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:calc(var(--pad) + 6px) calc(var(--pad) + 8px);box-shadow:0 1px 0 color-mix(in srgb,var(--fg-strong) 4%,transparent),0 12px 30px -18px color-mix(in srgb,var(--fg-strong) 40%,transparent)}
+.w.lift{box-shadow:0 1px 0 color-mix(in srgb,var(--fg-strong) 6%,transparent),0 22px 40px -22px color-mix(in srgb,var(--accent) 45%,transparent)}
+.w.span2{grid-column:span 2}
+.sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px}
+.sec-head h2{margin:0;font:600 17px/1.3 var(--font-display);letter-spacing:-.005em;color:var(--fg-strong)}
+.sec-head .sub,.sec-head a{font-size:13px;color:var(--fg-dim);text-decoration:none}
+.need{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.need li{display:flex;align-items:center;gap:12px;padding:var(--pad);border-radius:10px;background:var(--panel-2);position:relative}
+.need li::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:4px;border-radius:2px;background:var(--attn)}
+.need li.alert::before{background:var(--alert)}
+.need .t{flex:1;font-weight:500;color:var(--fg-strong)}
+.need .m{font-size:12.5px;color:var(--fg-dim)}
+.btn{display:inline-flex;align-items:center;height:30px;padding:0 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--fg);font:500 13px var(--font-body);cursor:pointer}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.spine{list-style:none;margin:0;padding:0 0 0 18px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:14px}
+.spine li{position:relative;padding-left:8px}
+.spine li::before{content:"";position:absolute;left:-26px;top:7px;width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.spine .tm{font:12px var(--font-mono);color:var(--fg-dim);margin-right:8px}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:500;line-height:20px;background:var(--panel-2);border:1px solid var(--line)}
+.chip.ok{color:var(--ok);background:var(--ok-soft);border-color:transparent}
+.chip.attn{color:var(--attn);background:var(--attn-soft);border-color:transparent}
+.chip.alert{color:var(--alert);background:var(--alert-soft);border-color:transparent}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
+.svc{display:flex;flex-direction:column;gap:9px}
+.svc div{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.svc .n{color:var(--fg-strong);font-weight:500}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.week div{border-radius:10px;background:var(--panel-2);padding:9px 8px;min-height:84px;font-size:12.5px}
+.week b{display:block;color:var(--fg-strong);font:600 13px var(--font-display);margin-bottom:5px}
+.flight{display:flex;flex-direction:column;gap:12px}
+.flight .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.bar{height:6px;border-radius:3px;background:var(--panel-2);overflow:hidden;margin-top:6px}.bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.lanes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--gap)}
+.lane{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:var(--pad)}
+.lane .n{font:700 34px/1 var(--font-display);color:var(--fg-strong);letter-spacing:-.02em}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font:500 12px var(--font-body);text-transform:uppercase;letter-spacing:.06em;color:var(--fg-dim);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+.tbl td{padding:9px 8px;border-bottom:1px solid var(--line)}
+[hidden]{display:none!important}
+@media (max-width:900px){.mk{grid-template-columns:1fr}.side{border-right:0;border-bottom:1px solid var(--line)}.widgets,.lanes{grid-template-columns:1fr}.w.span2{grid-column:auto}main{padding:20px}}
+</style>
+</head>
+<body data-look="o">
+<div id="gbar"><span class="gnote">0 Original: the current look rebuilt from the site's own values. Example data.</span></div>
+<div class="mk" id="mk-o">
+  <div class="side">
+    <div class="brand"><span class="brand-mark">B</span><span class="brand-name">Barnyard</span></div>
+    <nav class="nav" aria-label="Main">
+      <a data-view="overview" aria-current="page"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Overview</a>
+      <div class="nav-group">Work</div>
+      <a data-view="ops"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Ops board<span class="badge">4</span></a>
+      <a><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 15l4-5 3 3 5-7"/></svg>Projects</a>
+      <a><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar</a>
+      <div class="nav-group">Systems</div>
+      <a><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Monitoring<span class="badge">1</span></a>
+      <a><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>Vulnerabilities</a>
+      <a><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM9 8h6M9 12h6"/></svg>Knowledgebase</a>
+    </nav>
+    <div class="side-foot">Logged in as Alex<br>Settings</div>
+  </div>
+  <main id="page"></main>
+</div>
+<script id="gdata" type="application/json">{"sig":[{"id":"aubergine","name":"Aubergine (new, for D)","group":"new","light":["#f1f0ef","#ffffff","#e6e4e8","#d3d0d6","#2a272e","#1d1b20","#5e5a63","#6a2f82","#ffffff","rgba(106,47,130,.10)","#7a5200","rgba(122,82,0,.10)"],"dark":["#1b1a1e","#232126","#2c2a31","#3b3841","#d8d4dc","#ebe8ee","#aaa5b0","#d3a9e8","#2b1236","rgba(211,169,232,.14)","#e8b84a","rgba(232,184,74,.13)"]},{"id":"wine","name":"Wine (new, for E)","group":"new","light":["#f8f5f6","#ffffff","#f1ecef","#ddd2d8","#2a1c24","#1b1217","#675a62","#b0125a","#ffffff","rgba(176,18,90,.09)","#b0125a","rgba(176,18,90,.09)"],"dark":["#231320","#2b1a28","#33202f","#4a3345","#ead9e2","#f7e9f0","#bda7b4","#ff86b0","#2b0715","rgba(255,134,176,.14)","#ff86b0","rgba(255,134,176,.14)"]},{"id":"blueprint","name":"Blueprint (new, for F)","group":"new","light":["#e3ebf1","#eef3f7","#dde7ef","#b7c9d8","#1c3550","#11273d","#3f5b75","#1d4f7a","#ffffff","rgba(29,79,122,.10)","#b3261e","rgba(179,38,30,.09)"],"dark":["#0a2140","#0e2a49","#123556","#2a4d73","#d4e3f2","#e9f2fb","#a9c3dc","#8fc2f0","#07213d","rgba(143,194,240,.14)","#ff9d8f","rgba(255,157,143,.13)"]}],"all":[{"id":"cobalt","name":"Cobalt","group":"blue","light":["#f0f2f8","#ffffff","#f5f6fa","#dcdfec","#272e42","#0d1222","#566079","#2849d6","#ffffff","rgba(40,73,214,.09)","#a05a00","rgba(160,90,0,.10)"],"dark":["#0c0f15","#131821","#19202b","#252d3b","#cfd5e2","#f3f5fa","#8b94a8","#6c8cff","#070d24","rgba(108,140,255,.14)","#f0a54a","rgba(240,165,74,.13)"]},{"id":"azure","name":"Azure","group":"blue","light":["#eef4f9","#ffffff","#f3f8fc","#d3e1ee","#233546","#0b1b2b","#526a80","#0a68b0","#ffffff","rgba(10,104,176,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#091119","#0f1a25","#14212e","#1f3244","#c9d9e8","#eef6fd","#83a0b8","#3db4ff","#021a2c","rgba(61,180,255,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"ultra","name":"Ultramarine","group":"blue","light":["#f1f0fa","#ffffff","#f6f5fc","#deddf0","#2a2a4a","#11112b","#5c5c86","#3d3bd1","#ffffff","rgba(61,59,209,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0c0c18","#131324","#1a1a30","#292946","#d0d0ec","#f3f3ff","#9393bd","#8587ff","#0d0d38","rgba(133,135,255,.15)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"steel","name":"Steel","group":"blue","light":["#eff2f5","#ffffff","#f4f6f8","#d9dfe6","#2b3642","#101820","#586878","#35628f","#ffffff","rgba(53,98,143,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0d1217","#141b22","#19222b","#26323d","#cdd6df","#f0f4f8","#8a9bab","#8fb4da","#0b1c2d","rgba(143,180,218,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"navy","name":"Navy","group":"blue","light":["#edf1f9","#ffffff","#f2f5fb","#d4dcee","#22304d","#0a1430","#53628a","#1f5fd1","#ffffff","rgba(31,95,209,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#060e1d","#0c172b","#112038","#1c2f4d","#c7d4ec","#eff4ff","#8799be","#5aa2ff","#031230","rgba(90,162,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"amber","name":"Amber","group":"other","light":["#f0f3f6","#ffffff","#f5f7f9","#dce2e9","#2a3540","#0e1720","#586674","#a85f00","#ffffff","rgba(168,95,0,.10)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0b1016","#121920","#172029","#232e3a","#ced7e0","#f2f5f8","#8c99a7","#e8a33d","#1b1304","rgba(232,163,61,.12)","#a891ff","rgba(168,145,255,.12)"]},{"id":"harbour","name":"Harbour","group":"other","light":["#eef4f4","#ffffff","#f4f8f8","#d5e2e3","#243438","#0b1a1d","#526a70","#0b7c6e","#ffffff","rgba(11,124,110,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0a1215","#101a1e","#152227","#22343b","#cbdadd","#f0f6f7","#86a0a6","#3cc4b0","#04201b","rgba(60,196,176,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"plum","name":"Plum","group":"other","light":["#f4f1f8","#ffffff","#f8f6fb","#e2dcec","#2e2840","#130f20","#615878","#7a3fc8","#ffffff","rgba(122,63,200,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0f0d14","#17141f","#1e1a28","#2d2739","#d6d0e2","#f6f3fb","#9890aa","#b98cf5","#170a2b","rgba(185,140,245,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"graphite","name":"Graphite","group":"other","light":["#f1f2f3","#ffffff","#f6f7f8","#dcdfe2","#2a2e33","#101215","#5a6168","#1b1f24","#ffffff","rgba(27,31,36,.07)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0d0e10","#151719","#1b1d20","#2a2d31","#cfd2d6","#f4f5f6","#8e949b","#e9ebee","#0d0e10","rgba(233,235,238,.10)","#a891ff","rgba(168,145,255,.12)"]},{"id":"rose","name":"Rose","group":"other","light":["#f7f0f3","#ffffff","#faf5f7","#ead9e0","#3a2a33","#1d1017","#6d5662","#b4306b","#ffffff","rgba(180,48,107,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#130c10","#1b1217","#23171d","#34222b","#e0d0d7","#fbf3f6","#a58f99","#f27aa8","#2b0715","rgba(242,122,168,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"ember","name":"Ember","group":"other","light":["#f3f1f0","#ffffff","#f8f6f5","#e2dcd8","#34302d","#181412","#675f5a","#b8470f","#ffffff","rgba(184,71,15,.10)","#5b3fd0","rgba(91,63,208,.09)"],"dark":["#110e0c","#191512","#211c18","#322a24","#dcd3cc","#f8f3ee","#9e9389","#ff8d4d","#2a1103","rgba(255,141,77,.14)","#b79bff","rgba(183,155,255,.13)"]},{"id":"stone","name":"Stone","group":"other","light":["#eeeeeb","#fcfcfb","#f4f4f1","#dcdcd6","#34342f","#171713","#636359","#4a49c9","#ffffff","rgba(74,73,201,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#121210","#1a1a17","#21211d","#31312b","#d9d9d1","#f6f6f0","#98988c","#9a9cff","#12123a","rgba(154,156,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"pine","name":"Pine","group":"other","light":["#eef2ef","#ffffff","#f3f6f4","#d6e0da","#243229","#0c1710","#54675a","#8a6410","#ffffff","rgba(138,100,16,.10)","#6446d6","rgba(100,70,214,.09)"],"dark":["#08110d","#0e1914","#13211b","#1f3329","#cbd9d0","#eff6f1","#85a090","#dcbc66","#261c03","rgba(220,188,102,.13)","#a891ff","rgba(168,145,255,.12)"]},{"id":"arctic","name":"Arctic","group":"other","light":["#eef5f6","#ffffff","#f3f8f9","#d2e2e5","#213a40","#0a1c21","#4f6d74","#0a7790","#ffffff","rgba(10,119,144,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#081217","#0e1c22","#13262d","#1f3841","#c6dde3","#ecf8fb","#80a3ad","#55d3ea","#021e26","rgba(85,211,234,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"copper","name":"Copper","group":"other","light":["#f3f0ee","#ffffff","#f8f5f3","#e3dad4","#3a302a","#1b1410","#6b5d53","#9c5527","#ffffff","rgba(156,85,39,.10)","#5b3fd0","rgba(91,63,208,.09)"],"dark":["#120e0b","#1a1511","#221b16","#34281f","#ddd0c4","#f8f1ea","#a29080","#d9955a","#2a1507","rgba(217,149,90,.14)","#b79bff","rgba(183,155,255,.13)"]},{"id":"olive","name":"Olive","group":"other","light":["#f1f2ec","#ffffff","#f6f7f2","#dfe1d4","#2f3325","#14170c","#5e6350","#66701a","#ffffff","rgba(102,112,26,.11)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0f110a","#171a10","#1e2216","#2d3320","#d6dac6","#f5f7ea","#9aa384","#bccb5a","#1c2204","rgba(188,203,90,.13)","#a891ff","rgba(168,145,255,.12)"]},{"id":"orchid","name":"Orchid","group":"other","light":["#f6f0f7","#ffffff","#faf5fb","#e6d8e8","#36263a","#1b0f1f","#6a5470","#a2299e","#ffffff","rgba(162,41,158,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#130b14","#1b111c","#231724","#35223a","#e2d0e4","#fcf3fd","#a98fae","#e078dc","#2b0829","rgba(224,120,220,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"dusk","name":"Dusk","group":"other","light":["#f0eff3","#ffffff","#f5f4f8","#dedce7","#2e2c3c","#14131e","#5d5a73","#a84a1d","#ffffff","rgba(168,74,29,.10)","#4a56c9","rgba(74,86,201,.09)"],"dark":["#0f0f17","#171722","#1e1e2b","#2c2c3d","#d3d2e0","#f4f3fb","#9291ab","#ffb08a","#2e1203","rgba(255,176,138,.13)","#9fb0ff","rgba(159,176,255,.13)"]}],"bgs":[{"id":"plain","name":"Plain","group":"light"},{"id":"glow","name":"Glow","group":"light"},{"id":"mesh","name":"Mesh","group":"light"},{"id":"aurora","name":"Aurora","group":"light"},{"id":"spotlight","name":"Spotlight","group":"light"},{"id":"horizon","name":"Horizon","group":"light"},{"id":"dots","name":"Dots","group":"pattern"},{"id":"grid","name":"Grid","group":"pattern"},{"id":"blueprint","name":"Blueprint","group":"pattern"},{"id":"ledger","name":"Ledger","group":"pattern"},{"id":"stripes","name":"Stripes","group":"pattern"},{"id":"lattice","name":"Lattice","group":"pattern"},{"id":"scales","name":"Scales","group":"pattern"},{"id":"beams","name":"Beams","group":"pattern"},{"id":"ripples","name":"Ripples","group":"ring"},{"id":"radar","name":"Radar","group":"ring"},{"id":"contours","name":"Contours","group":"ring"},{"id":"rays","name":"Rays","group":"ring"}]}</script>
+<script id="content" type="application/json">{
+  "_note": "Example data for every look's mockup. Same content in every look so they can be compared. All values are made up.",
+  "owner": "Alex",
+  "now": "Tue 24 Nov, 22:51 AWST",
+  "waiting_on_you": [
+    {"id": "it_a1", "title": "Approve renewal: barnyard.site domain", "age": "2 days", "lane": "needs you", "due": "28 Nov", "kind": "renewal"},
+    {"id": "it_a2", "title": "Sign off the Setup first run (installer 3f9a1c7e)", "age": "today", "lane": "needs you", "due": "", "kind": "approval"},
+    {"id": "it_a3", "title": "Choose the Barnyard look", "age": "today", "lane": "needs you", "due": "", "kind": "decision"},
+    {"id": "it_a4", "title": "Purge Cloudflare cache for old timeline file", "age": "done 01:00", "lane": "done", "due": "", "kind": "task"},
+    {"id": "it_a5", "title": "Backup restore test is overdue", "age": "5 days", "lane": "needs you", "due": "19 Nov", "kind": "overdue"}
+  ],
+  "in_progress": [
+    {"title": "Project Atlas: build step 1", "who": "Claude", "progress": "reads 7 of 9"},
+    {"title": "Landing page for signed-out visitors", "who": "Claude", "progress": "live"},
+    {"title": "Vulnerability clean-up (14 open)", "who": "you", "progress": "3 critical"}
+  ],
+  "services": [
+    {"name": "api.barnyard.site", "state": "up", "note": "212 ms"},
+    {"name": "dashboard.barnyard.site", "state": "up", "note": "98 ms"},
+    {"name": "APP-02", "state": "down", "note": "no reply for 14 min"},
+    {"name": "Backups (hourly copy)", "state": "degraded", "note": "last good 03:10"},
+    {"name": "Cloudflare tunnel", "state": "up", "note": "2 connectors"},
+    {"name": "Entra sign-in", "state": "up", "note": "token ok"}
+  ],
+  "since_last_looked": [
+    {"t": "21:40", "text": "Security cleared the Setup installer build"},
+    {"t": "20:12", "text": "Landing page deployed to the dashboard"},
+    {"t": "18:05", "text": "Two vulnerabilities marked fixed"},
+    {"t": "09:30", "text": "Hourly backup copy failed once, retried ok"}
+  ],
+  "week": [
+    {"day": "Tue", "items": ["Setup dry run (PC)"]},
+    {"day": "Wed", "items": ["Renewals review 10:00", "Domain check"]},
+    {"day": "Thu", "items": ["First real Setup run (laptop)"]},
+    {"day": "Fri", "items": []},
+    {"day": "Sat", "items": []},
+    {"day": "Sun", "items": ["Backup test"]},
+    {"day": "Mon", "items": ["sign-off sentence"]}
+  ],
+  "ops_board": [
+    {"lane": "Needs you", "n": 4},
+    {"lane": "In progress", "n": 3},
+    {"lane": "Soaking", "n": 6},
+    {"lane": "Backlog", "n": 27}
+  ],
+  "second_view_ops_rows": [
+    ["it_a2", "Sign off the Setup first run", "needs you", "today"],
+    ["it_a1", "Approve renewal: barnyard.site domain", "needs you", "28 Nov"],
+    ["it_a5", "Backup restore test is overdue", "needs you", "19 Nov"],
+    ["it_b1", "Project Atlas: build step 1", "in progress", "-"],
+    ["it_b2", "Vulnerability clean-up (14 open)", "in progress", "30 Nov"],
+    ["it_c1", "Cloudflare Access in front of the dashboard", "backlog", "-"],
+    ["it_c2", "VPS host purchase (late)", "backlog", "-"]
+  ]
+}</script>
+<script>
+(function(){
+  var C=JSON.parse(document.getElementById('content').textContent);
+  var page=document.getElementById('page');
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+  function overview(){
+    var need=C.waiting_on_you.filter(function(x){return x.lane==='needs you';});
+    var n=need.length, down=C.services.filter(function(s){return s.state==='down';}).length;
+    var h='<header class="hero"><h1>'+['Zero','One','Two','Three','Four','Five'][n]+' things need you.</h1><p>'+(down?down+' server is down. ':'')+'Updated '+esc(C.now)+'.</p></header>';
+    h+='<div class="widgets">';
+    h+='<section class="w lift span2"><div class="sec-head"><h2>Waiting on you</h2><a>Open the board</a></div><ul class="need">'+need.map(function(x){return '<li class="'+(x.kind==='overdue'?'alert':'')+'"><span class="t">'+esc(x.title)+'</span><span class="m">'+esc(x.due||x.age)+'</span><button class="btn btn-sm '+(x.kind==='approval'||x.kind==='decision'?'btn-primary':'')+'">Open</button></li>';}).join('')+'</ul></section>';
+    h+='<section class="w"><div class="sec-head"><h2>Since you last looked</h2></div><ol class="spine">'+C.since_last_looked.map(function(x){return '<li><span class="tm">'+esc(x.t)+'</span>'+esc(x.text)+'</li>';}).join('')+'</ol></section>';
+    h+='<section class="w"><div class="sec-head"><h2>In progress and soaking</h2><span class="sub">'+C.in_progress.length+' items</span></div><div class="flight">'+C.in_progress.map(function(x){return '<div><div class="row"><span>'+esc(x.title)+'</span><span class="chip">'+esc(x.who)+'</span></div><div class="bar"><i style="width:'+(20+Math.abs(x.title.length*7)%70)+'%"></i></div></div>';}).join('')+'</div></section>';
+    h+='<section class="w"><div class="sec-head"><h2>Services</h2><a>Monitoring</a></div><div class="svc">'+C.services.map(function(s){var k=s.state==='up'?'ok':s.state==='down'?'alert':'attn';return '<div><span class="n">'+esc(s.name)+'</span><span class="chip '+k+'"><span class="dot"></span>'+esc(s.state)+'</span></div>';}).join('')+'</div></section>';
+    h+='<section class="w"><div class="sec-head"><h2>This week</h2><span class="sub">Nov 24 to 30</span></div><div class="week">'+C.week.map(function(d){return '<div><b>'+esc(d.day)+'</b>'+d.items.map(esc).join('<br>')+'</div>';}).join('')+'</div></section>';
+    h+='</div>';
+    page.innerHTML=h;
+  }
+  function ops(){
+    var h='<header class="hero"><h1>Ops board</h1><p>'+C.ops_board.reduce(function(a,b){return a+b.n;},0)+' open items across four lanes.</p></header>';
+    h+='<div class="lanes">'+C.ops_board.map(function(l){return '<div class="lane"><div class="sec-head"><h2>'+esc(l.lane)+'</h2></div><div class="n">'+l.n+'</div></div>';}).join('')+'</div>';
+    h+='<section class="w"><table class="tbl"><thead><tr><th>Id</th><th>Item</th><th>Lane</th><th>Due</th></tr></thead><tbody>'+C.second_view_ops_rows.map(function(r){return '<tr><td><code>'+esc(r[0])+'</code></td><td>'+esc(r[1])+'</td><td><span class="chip '+(r[2]==='needs you'?'attn':'')+'">'+esc(r[2])+'</span></td><td>'+esc(r[3])+'</td></tr>';}).join('')+'</tbody></table></section>';
+    page.innerHTML=h;
+  }
+  var links=[].slice.call(document.querySelectorAll('.nav a[data-view]'));
+  function show(v){links.forEach(function(a){if(a.getAttribute('data-view')===v)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});(v==='ops'?ops:overview)();}
+  links.forEach(function(a){a.addEventListener('click',function(){show(a.getAttribute('data-view'));});});
+  show('overview');
+})();
+</script>
+<script>/* Gallery controls for the looks built in round one (A, B, C) and for 0 Original.
+   Theme, light or dark, background, strength and density, wired to the SAME real tokens the site's themes.js uses.
+   The theme data (all 18 current themes, light and dark, plus the background list) is in <script id="gdata">.
+   Each look gives a map from the 12 tokens (and the status colours) to its own CSS variables. */
+(function () {
+  "use strict";
+  var DATA = JSON.parse(document.getElementById("gdata").textContent);
+  var KEYS = ["--bg", "--panel", "--panel-2", "--line", "--fg", "--fg-strong", "--fg-dim", "--accent", "--accent-ink", "--accent-soft", "--attn", "--attn-soft"];
+  var STATUS = {
+    light: { "--ok": "#17794d", "--ok-soft": "rgba(23,121,77,.10)", "--alert": "#bd3326", "--alert-soft": "rgba(189,51,38,.09)", "--info": "#1d63b8", "--info-soft": "rgba(29,99,184,.09)" },
+    dark: { "--ok": "#4cc38a", "--ok-soft": "rgba(76,195,138,.12)", "--alert": "#ff7b6e", "--alert-soft": "rgba(255,123,110,.12)", "--info": "#6aaaf0", "--info-soft": "rgba(106,170,240,.13)" }
+  };
+  var MAPS = {
+    a: function (t, s) { return { "--g": t["--bg"], "--ink": t["--fg-strong"], "--dim": t["--fg-dim"], "--rule": t["--line"], "--acc": t["--accent"], "--bad": s["--alert"], "--warn": t["--attn"], "--good": s["--ok"], "--btn": t["--panel-2"] }; },
+    b: function (t, s, m) { return { "--ground": t["--bg"], "--pane": t["--panel"], "--bar": (m === "dark" ? "color-mix(in srgb, " + t["--bg"] + " 55%, #000)" : t["--fg-strong"]), "--bar-ink": "#eef2f4", "--ink": t["--fg-strong"], "--dim": t["--fg-dim"], "--line": t["--line"], "--acc": t["--accent"], "--bad": s["--alert"], "--warn": t["--attn"], "--good": s["--ok"], "--rowhov": t["--panel-2"] }; },
+    c: function (t, s) { return { "--paper": t["--bg"], "--ink": t["--fg-strong"], "--dim": t["--fg-dim"], "--rule": t["--line"], "--hl": t["--attn-soft"], "--link": t["--accent"], "--bad": s["--alert"], "--good": s["--ok"], "--btn": t["--panel-2"] }; },
+    o: function () { return {}; }
+  };
+  var all = {}; DATA.all.forEach(function (t) { all[t.id] = t; });
+  var root = document.documentElement;
+  var modePref = "system";
+  function resolved() {
+    if (modePref === "light" || modePref === "dark") return modePref;
+    return (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+  }
+  var kind = (document.body.getAttribute("data-look") || "o");
+  var mk = document.getElementById("mk-" + kind) || document.querySelector(".mk");
+  var bgEl = document.createElement("div"); bgEl.className = "mk-bg bgx-plain"; mk.insertBefore(bgEl, mk.firstChild);
+  mk.setAttribute("data-bg", "plain"); mk.setAttribute("data-bgs", "medium"); mk.setAttribute("data-density", "comfortable");
+  var themeSel;
+  function apply() {
+    var th = all[themeSel.value] || DATA.all[0], m = resolved(), v = th[m], s = STATUS[m], tok = {};
+    KEYS.forEach(function (k, i) { tok[k] = v[i]; mk.style.setProperty(k, v[i]); });
+    Object.keys(s).forEach(function (k) { mk.style.setProperty(k, s[k]); });
+    var own = (MAPS[kind] || MAPS.o)(tok, s, m);
+    Object.keys(own).forEach(function (k) { mk.style.setProperty(k, own[k]); });
+    mk.setAttribute("data-mode", m); mk.style.colorScheme = m;
+    document.body.setAttribute("data-gmode", m);
+  }
+  function opt(value, label, sel) { var o = document.createElement("option"); o.value = value; o.textContent = label; if (sel) o.selected = true; return o; }
+  function lab(text, id, el) { var l = document.createElement("label"); l.setAttribute("for", id); l.appendChild(document.createTextNode(text)); el.id = id; l.appendChild(el); return l; }
+  var bar = document.getElementById("gbar");
+  themeSel = document.createElement("select");
+  var gb = document.createElement("optgroup"); gb.label = "Blues"; var go = document.createElement("optgroup"); go.label = "Others";
+  DATA.all.forEach(function (t) { (t.group === "blue" ? gb : go).appendChild(opt(t.id, t.name, t.id === "amber")); });
+  themeSel.appendChild(gb); themeSel.appendChild(go);
+  if (!all.amber) themeSel.selectedIndex = 0;
+  var bg = document.createElement("select");
+  [["light", "Soft light"], ["pattern", "Lines and patterns"], ["ring", "Rings and rays"]].forEach(function (g) {
+    var og = document.createElement("optgroup"); og.label = g[1];
+    DATA.bgs.forEach(function (b) { if (b.group === g[0]) og.appendChild(opt(b.id, b.name, b.id === "plain")); });
+    bg.appendChild(og);
+  });
+  var st = document.createElement("select"); ["subtle", "medium", "strong"].forEach(function (x) { st.appendChild(opt(x, x.charAt(0).toUpperCase() + x.slice(1), x === "medium")); });
+  var dn = document.createElement("select"); [["comfortable", "Comfortable"], ["compact", "Compact"]].forEach(function (x) { dn.appendChild(opt(x[0], x[1], x[0] === "comfortable")); });
+  var md = document.createElement("select"); [["system", "System"], ["light", "Light"], ["dark", "Dark"]].forEach(function (x) { md.appendChild(opt(x[0], x[1], x[0] === "system")); });
+  bar.appendChild(lab("Theme ", "g-theme", themeSel)); bar.appendChild(lab("Light or dark ", "g-mode", md)); bar.appendChild(lab("Background ", "g-bg", bg));
+  bar.appendChild(lab("Strength ", "g-bgs", st)); bar.appendChild(lab("Density ", "g-dens", dn));
+  themeSel.addEventListener("change", apply);
+  md.addEventListener("change", function () { modePref = md.value; apply(); });
+  bg.addEventListener("change", function () { mk.setAttribute("data-bg", bg.value); bgEl.className = "mk-bg bgx-" + bg.value; });
+  st.addEventListener("change", function () { mk.setAttribute("data-bgs", st.value); });
+  dn.addEventListener("change", function () { mk.setAttribute("data-density", dn.value); });
+  if (window.matchMedia) { try { window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", apply); } catch (e) { } }
+  // the gallery page can set the mode through the URL: #mode=dark&theme=cobalt
+  var h = (location.hash || "").replace("#", "").split("&").reduce(function (o, p) { var q = p.split("="); if (q[0]) o[q[0]] = q[1]; return o; }, {});
+  if (h.theme && all[h.theme]) themeSel.value = h.theme;
+  if (h.mode === "light" || h.mode === "dark") { modePref = h.mode; md.value = h.mode; }
+  if (h.bg) { bg.value = h.bg; bgEl.className = "mk-bg bgx-" + bg.value; mk.setAttribute("data-bg", bg.value); }
+  if (h.dens === "compact") { dn.value = "compact"; mk.setAttribute("data-density", "compact"); }
+  apply();
+  window.addEventListener("message", function (e) {
+    var d = e.data; if (!d || d.type !== "look") return;
+    if (d.mode) { modePref = d.mode; md.value = d.mode; }
+    apply();
+  });
+})();
+</script>
+</body>
+</html>

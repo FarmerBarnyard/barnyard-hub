@@ -1,0 +1,10 @@
+/* The sign-in card on these example pages (landing.js draws it; the dashboard's own stylesheet is not loaded here, so the card's
+   colours and its button are given here). Same card as every other page: the word Barnyard, one line, a Sign in button. */
+html:not([data-landing="ok"]) { background: #f4f4f1; }
+html #bh-landing { background: #f4f4f1; color: #1b1c1e; --fg: #1b1c1e; --fg-strong: #1b1c1e; --fg-dim: #5b5e63; --accent: #1f4e9c; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+html #bh-landing .btn { display: inline-flex; align-items: center; text-decoration: none; border-radius: 4px; background: #1f4e9c; color: #fff; font-weight: 600; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-landing="ok"]) { background: #17181a; }
+  html #bh-landing { background: #17181a; color: #e6e7e8; --fg: #e6e7e8; --fg-strong: #fff; --fg-dim: #a2a5aa; --accent: #8db3ef; }
+  html #bh-landing .btn { background: #8db3ef; color: #0b1730; }
+}
