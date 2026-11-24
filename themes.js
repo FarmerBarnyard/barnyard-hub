@@ -117,7 +117,7 @@
     // ----
     { id: "poster", name: "Poster", blurb: "One big sentence over a plain ruled list.", group: "documents", installed: true, renderer: false, v: "9a3fc0cd", jv: "00000000", sketch: "6,4,60,3,s;72,4,22,3,d;4,10,92,1,s;8,20,76,12,s;8,36,50,4,d;4,50,92,2,s;8,58,60,5,s;4,68,92,1,l;8,74,50,5,s;4,84,92,1,l" },
     // ----
-    { id: "prompt", name: "Prompt", blurb: "Command first: type what you want.", group: "text", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "10,10,80,16,q;14,15,40,4,s;10,38,80,2,l;10,50,60,3,d;10,62,70,3,d;10,74,50,3,d;10,86,40,3,d" },
+    { id: "prompt", name: "Prompt", blurb: "Command first: type what you want.", group: "text", installed: true, renderer: false, v: "88c12ea0", jv: "00000000", sketch: "8,4,60,3,d;8,12,84,10,q;12,15,40,4,s;8,26,84,1,l;8,34,60,3,s;8,42,84,1,l;8,48,70,3,d;8,56,84,1,l;8,62,50,3,d;8,70,84,1,l;8,76,60,3,d;8,84,84,1,l" },
     // ----
     { id: "raw", name: "Raw", blurb: "Deliberately plain: browser-default HTML.", group: "documents", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "6,6,88,5,s;6,22,60,2,s;6,32,70,2,s;6,42,40,2,s;6,56,88,3,l;6,70,88,3,l" },
     // ----
