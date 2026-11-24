@@ -97,7 +97,7 @@
     // ----
     { id: "original", name: "Original", blurb: "The look the dashboard has today.", group: "original", installed: true, renderer: false, v: "00000000", jv: "00000000", sketch: "0,0,22,100,p;28,10,30,34,q;62,10,30,34,q;28,52,64,38,q;31,15,14,3,s;65,15,14,3,s" },
     // ----
-    { id: "classic-desktop", name: "Classic Desktop", blurb: "A 2000s desktop application with window frames.", group: "apps", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "2,2,96,96,q;2,2,96,12,a;2,16,96,8,p;4,28,28,60,p;34,28,62,60,p;4,92,92,5,p" },
+    { id: "classic-desktop", name: "Classic Desktop", blurb: "A 2000s desktop application with window frames.", group: "apps", installed: true, renderer: false, v: "df45d759", jv: "00000000", sketch: "2,2,96,96,q;2,2,96,8,a;2,11,96,5,q;4,19,26,70,p;32,19,64,32,l;34,22,60,26,p;32,55,64,34,l;34,58,60,28,p;2,92,96,5,q" },
     // ----
     { id: "day-line", name: "Day Line", blurb: "Everything placed on a time line.", group: "maps", installed: false, renderer: true, v: "00000000", jv: "00000000", sketch: "18,6,2,88,l;14,18,10,6,a;26,19,60,2,d;14,42,10,6,d;26,43,50,2,d;14,66,10,6,d;26,67,64,2,d;8,56,76,2,n" },
     // ----
