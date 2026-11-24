@@ -173,7 +173,8 @@ test("a look with a renderer also fetches its script, and renderers are found by
 
 test("a saved look that is not built yet reads as Original in a page and loads nothing", function () {
   var page = fakePage();
-  page.store["barnyard-settings"] = JSON.stringify({ theme: "navy", look: "poster" });
+  var unbuilt = Theme.LOOKS.filter(function (l) { return !l.installed; })[0] || { id: "no-such-look" };   // any look not built yet (the set shrinks as looks are built)
+  page.store["barnyard-settings"] = JSON.stringify({ theme: "navy", look: unbuilt.id });
   var T = loadThemesIn(page);
   assert.strictEqual(T.get().look, "original");
   assert.strictEqual(page.attrs["data-look"], "original");
