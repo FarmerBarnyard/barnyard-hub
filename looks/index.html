@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../landing.css?v=92f5d814">
+<link rel="stylesheet" href="gate-vars.css">
+<script src="../landing.js?v=c2537ed8"></script>
+<script src="gate-ready.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barnyard looks: choose one of 18</title>
+<style>
+:root{--bg:#f4f4f1;--panel:#ffffff;--ink:#1b1c1e;--dim:#5b5e63;--line:#d4d5d0;--acc:#1f4e9c;--acc-ink:#ffffff;--star:#9a5b00;--ok:#1a6b3c;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181a;--panel:#202225;--ink:#e6e7e8;--dim:#a2a5aa;--line:#34373b;--acc:#8db3ef;--acc-ink:#0b1730;--star:#f0b25a;--ok:#6fcf97;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181a;--panel:#202225;--ink:#e6e7e8;--dim:#a2a5aa;--line:#34373b;--acc:#8db3ef;--acc-ink:#0b1730;--star:#f0b25a;--ok:#6fcf97;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
+a{color:var(--acc)}
+button,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+header.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;padding:12px 22px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:30}
+header.top h1{margin:0;font-size:17px;font-weight:650}
+nav.tabs{display:flex;gap:2px;flex-wrap:wrap}
+nav.tabs button{white-space:nowrap;border:0;background:none;padding:8px 12px;border-bottom:2px solid transparent;color:var(--dim)}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
+.sp{flex:1}
+.mini{border:1px solid var(--line);background:var(--bg);padding:6px 10px;border-radius:4px}
+.mini b{color:var(--star)}
+main{padding:22px;max-width:1500px;margin:0 auto}
+section[hidden]{display:none}
+.lede{max-width:78ch;color:var(--dim);margin:0 0 18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.card{border:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-width:0}
+.card .shot{display:block;border:0;padding:0;background:var(--bg);border-bottom:1px solid var(--line);aspect-ratio:1280/860;overflow:hidden;width:100%}
+.card .shot img{display:block;width:100%;height:100%;object-fit:cover;object-position:top left}
+.card .body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px;flex:1}
+.card .name{display:flex;align-items:baseline;gap:8px;font-weight:650}
+.card .id{font:600 12px Consolas,monospace;background:var(--ink);color:var(--bg);padding:1px 6px;border-radius:3px}
+.card p{margin:0;color:var(--dim);font-size:13.5px}
+.card .meta{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12.5px;color:var(--dim);margin-top:auto}
+.card .row{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.star{border:1px solid var(--line);background:var(--bg);padding:3px 9px;border-radius:4px;font-size:13px}
+.star[aria-pressed="true"]{border-color:var(--star);color:var(--star);font-weight:600}
+.tag{border:1px solid var(--line);padding:0 6px;border-radius:3px;font-size:12px}
+.viewer{position:fixed;inset:0;background:var(--bg);z-index:40;display:flex;flex-direction:column}
+.viewer[hidden]{display:none}
+.vbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+.vbar h2{margin:0;font-size:16px}
+.vbar .sp{flex:1}
+.vbar button{border:1px solid var(--line);background:var(--bg);padding:5px 11px;border-radius:4px}
+.vframe{flex:1;width:100%;border:0;background:#fff}
+dialog{max-width:min(900px,92vw);width:100%;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:0}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+dialog header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+dialog pre{margin:0;padding:14px;white-space:pre-wrap;font:13px/1.55 Consolas,monospace;max-height:70vh;overflow:auto}
+.tblwrap{overflow:auto;border:1px solid var(--line);background:var(--panel);max-height:78vh}
+table{border-collapse:separate;border-spacing:0;font-size:13px;min-width:1700px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
+th{position:sticky;top:0;background:var(--panel);z-index:2;font-weight:650;border-bottom:2px solid var(--ink)}
+td:first-child,th:first-child{position:sticky;left:0;background:var(--panel);z-index:1;min-width:150px;border-right:1px solid var(--line)}
+th:first-child{z-index:3}
+tr.fav td{background:color-mix(in srgb,var(--star) 9%,var(--panel))}
+.prose{max-width:84ch}
+.prose h2{font-size:19px;margin:26px 0 8px}
+.prose h3{font-size:15.5px;margin:18px 0 4px}
+.prose p,.prose li{color:var(--ink)}
+.prose table{min-width:0;width:100%}
+.prose td:first-child,.prose th:first-child{position:static;min-width:0}
+.filter{display:flex;gap:14px;align-items:center;margin:0 0 12px;flex-wrap:wrap}
+textarea{width:100%;min-height:90px;border:1px solid var(--line);background:var(--bg);padding:8px;border-radius:4px}
+.warn{border:1px solid var(--star);padding:10px 12px;background:color-mix(in srgb,var(--star) 8%,var(--panel));margin:0 0 18px;max-width:84ch}
+.kbd{font:12px Consolas,monospace;border:1px solid var(--line);padding:0 5px;border-radius:3px}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Barnyard looks</h1>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button type="button" role="tab" id="t-looks" aria-selected="true" aria-controls="s-looks">Looks</button>
+    <button type="button" role="tab" id="t-compare" aria-selected="false" aria-controls="s-compare">Compare all 18</button>
+    <button type="button" role="tab" id="t-site" aria-selected="false" aria-controls="s-site">What changes in the real site</button>
+    <button type="button" role="tab" id="t-rec" aria-selected="false" aria-controls="s-rec">Recommendation</button>
+    <button type="button" role="tab" id="t-short" aria-selected="false" aria-controls="s-short">My shortlist</button>
+  </nav>
+  <span class="sp"></span>
+  <span class="mini" id="mini">Shortlist: <b id="count">0</b></span>
+  <button type="button" class="mini" id="theme">Page: system</button>
+</header>
+<main>
+<section id="s-looks" role="tabpanel" aria-labelledby="t-looks">
+  <p class="lede">Eighteen complete looks for the dashboard: the one you have now, six from the first rounds (A to F) and eleven new ones (G to Q). Every look keeps your interchangeable colour themes (the 18 themes in light and dark), the 18 backgrounds and the density option. Click a look to open it live; inside it you can switch theme, light or dark, background, strength and density. Use the star to build a shortlist. Everything shown is example data, and nothing has been applied to the real site.</p>
+  <div class="grid" id="grid"></div>
+</section>
+
+<section id="s-compare" role="tabpanel" aria-labelledby="t-compare" hidden>
+  <div class="filter"><label><input type="checkbox" id="onlyfav"> Shortlist only</label><span style="color:var(--dim)">Scroll sideways for every column. Effort figures are the designers' own for G to Q, and mine for A to F (marked).</span></div>
+  <div class="tblwrap"><table id="cmp"></table></div>
+</section>
+
+<section id="s-site" role="tabpanel" aria-labelledby="t-site" hidden>
+  <div class="prose">
+    <h2>What changes in the real site</h2>
+    <p>A look is a switchable layer. The colour themes, backgrounds, density and sidebar choices you have today stay exactly where they are and keep working.</p>
+    <h3>The Look choice</h3>
+    <ul>
+      <li>Settings gets a new <b>Look</b> choice (a list of looks). It is saved in your profile and in the shared <code>bh_prefs</code> cookie, like the theme, so it follows you across the Dashboard, Study, Campaign and Stocks.</li>
+      <li><code>themes.js</code> sets <code>data-look="..."</code> on the page, the same way it sets the theme. The default stays the current look until you change it.</li>
+    </ul>
+    <h3>Two kinds of look</h3>
+    <ul>
+      <li><b>CSS look layer only.</b> A new stylesheet (for example <code>look-plain.css</code>) loads when the look is chosen and restyles the existing page structure. This is the cheap kind. P and D are closest to it, and A probably (that one is my reading, not a designer's). Every other look needs at least a second page chrome from <code>shell.js</code> in place of the sidebar.</li>
+      <li><b>Needs its own renderer.</b> The look changes the markup of the Overview, so a CSS layer is not enough. A renderer script reads the same data and draws it. The designers say this is the case for J (Day Line), K (Lines) and L (Grid 9), and their specs describe renderers or per-page layouts for G, H, I, M, N and O too (I is a character-grid renderer, the heaviest). My reading for B, C, E and F: they rearrange the Overview, so they need renderers as well.</li>
+    </ul>
+    <h3>Themes, backgrounds, density, sidebar, per look</h3>
+    <ul>
+      <li>Every look is built on the same 12 colour values the themes already define (plus the three status colours), so all 18 themes work in light and dark.</li>
+      <li>Backgrounds work everywhere, but where a look draws an opaque sheet the background only shows in the margins. Each look lists which backgrounds suit it and which clash (see the table).</li>
+      <li>Density maps to row padding and type size in every look.</li>
+      <li>The sidebar setting (full or icons) has no meaning in looks without a sidebar (B, C, E, F, H, I, J, K, L, M, N, P). The setting stays saved and is greyed out in Settings while such a look is on, so switching back restores it.</li>
+    </ul>
+    <h3>Shared across the four sites</h3>
+    <p>The shell files (<code>themes.js</code>, <code>shell.js</code>, <code>shell.css</code>, fonts) are hand-copied identically into Study, Campaign and Stocks (<code>node tools/sync-shell.js</code>). A look is one more pair of files (CSS and, for some looks, a renderer script) copied the same way, with cache tags bumped. Pages whose own scripts build tile grids (Overview, Monitoring, Calendar, Vulnerabilities) each need a small variant per look that is not CSS-only.</p>
+    <h3>Contrast test</h3>
+    <p><code>test/themes.test.js</code> checks six pairs per theme today. Each look adds the pairs it draws (for example muted text on the selected row, status colours as text, the accent as a fill) across all 36 theme and mode combinations. Two weak spots exist in the current themes: <b>Amber light</b> (accent as text on the page: 4.38 to 1) and <b>Dusk dark</b> (muted text on a selected row: 4.46 to 1). The looks avoid using them that way, except A and C where links use the accent: they need an ink-and-underline fix on Amber light.</p>
+    <h3>Effort</h3>
+    <div id="effort"></div>
+    <h3>Not tested yet</h3>
+    <p>The mockups show the Overview and the Ops board only (Monitoring, Projects, Calendar, Vulnerabilities, Study, Campaign and Stocks pages are not mocked). Phone widths, screen readers, hover and keyboard-focus states are not fully tested. The effort figures for G to Q come from the designers; mine for A to F have no designer behind them.</p>
+  </div>
+</section>
+
+<section id="s-rec" role="tabpanel" aria-labelledby="t-rec" hidden>
+  <div class="prose">
+    <h2>Recommendation</h2>
+    <div id="rec"></div>
+  </div>
+</section>
+
+<section id="s-short" role="tabpanel" aria-labelledby="t-short" hidden>
+  <div class="prose">
+    <h2>My shortlist</h2>
+    <p>Starred looks appear here. Copy the text below and paste it into the chat, or just tell me the letters. The shortlist is stored in this browser only.</p>
+    <p id="shortlist-text" style="font-weight:600"></p>
+    <textarea id="shortlist-box" readonly aria-label="Shortlist text"></textarea>
+    <p><button type="button" class="mini" id="copy">Copy</button> <button type="button" class="mini" id="clear">Clear shortlist</button> <span id="copied" style="color:var(--ok)"></span></p>
+  </div>
+</section>
+</main>
+
+<div class="viewer" id="viewer" hidden>
+  <div class="vbar">
+    <button type="button" id="vprev" aria-label="Previous look">&larr; Previous</button>
+    <button type="button" id="vnext" aria-label="Next look">Next &rarr;</button>
+    <h2 id="vtitle"></h2>
+    <span class="sp"></span>
+    <button type="button" class="star" id="vstar" aria-pressed="false">Star</button>
+    <button type="button" id="vspec">Spec</button>
+    <button type="button" id="vclose">Close (Esc)</button>
+  </div>
+  <iframe class="vframe" id="vframe" title="Look"></iframe>
+</div>
+<dialog id="specdlg"><header><b id="spectitle"></b><button type="button" id="specclose" class="mini">Close</button></header><pre id="specbody"></pre></dialog>
+
+<script id="looks" type="application/json">[{"id":"0","name":"Original","file":"looks/0-original.html","thumb":"thumbs/0.png","spec":"specs/0.md","idea":"The look you have now: sidebar, rounded tile cards, amber default, optional gradient backgrounds.","structure":"Left sidebar + tile grid","cards":"Yes: rounded cards with soft shadows and accent rails","icons":"A line icon per menu item","density":"Comfortable or compact","effort":"None (it exists)","effortShort":"exists","kind":"Current look","kindShort":"current","contrast":"Amber light: accent as text on the page is 4.38 to 1 (known); Dusk dark: muted text on a selected row 4.46 to 1 (known)","cliches":"None: this is the baseline the other 17 are measured against","best":"All 18, as today","worst":"None"},{"id":"A","name":"Shift Log","file":"looks/A-shift-log.html","thumb":"thumbs/A.png","spec":"specs/A.md","idea":"A hand-over log: text first, one column, no cards, no icons, teal and grey.","structure":"Left text list + one column","cards":"No","icons":"None","density":"Comfortable or compact (maps directly)","effort":"4 to 6 (my estimate: the first-round designers gave no figure)","effortShort":"4-6 d (est.)","kind":"Mostly a CSS layer, light change to the Overview rows (my reading)","kindShort":"CSS layer (est.)","contrast":"Amber light: accent used as link text 4.38 to 1: needs ink-and-underline links in that theme (my 36-combination check of the mockup's token mapping; all other pairs pass)","cliches":"Hero headline, rounded cards with rails, an icon per menu item, the amber default","best":"Plain, Dots, Ledger; other patterns only at Subtle","worst":"Busy patterns at Strong"},{"id":"B","name":"Switchboard","file":"looks/B-switchboard.html","thumb":"thumbs/B.png","spec":"specs/B.md","idea":"A grid of titled panes that share borders: square corners, dark title bars, a top tab strip.","structure":"Top tab strip + pane grid (sidebar retired)","cards":"Panes, square, no shadow","icons":"None","density":"Compact by default","effort":"7 to 9 (my estimate: the first-round designers gave no figure)","effortShort":"7-9 d (est.)","kind":"Needs its own page chrome and pane layout","kindShort":"own chrome (est.)","contrast":"No pair failed in my 36-combination check of the mockup's token mapping","cliches":"Rounded cards with accent rail and soft shadow, hero headline, tile gradients","best":"Any (panes are opaque, so a background shows only in the gutters)","worst":"None really"},{"id":"C","name":"Run Sheet","file":"looks/C-run-sheet.html","thumb":"thumbs/C.png","spec":"specs/C.md","idea":"A printed day sheet: the date at the top, times down the left, a highlighter on what needs you.","structure":"Top navigation + one sheet, no sidebar","cards":"No","icons":"None","density":"Comfortable or compact (maps directly)","effort":"5 to 7 (my estimate: the first-round designers gave no figure)","effortShort":"5-7 d (est.)","kind":"Needs its own Overview renderer (rows ordered by time)","kindShort":"own renderer (est.)","contrast":"Amber light: accent used as link text 4.38 to 1 (same fix as A); the highlighter pair was not independently checked","cliches":"Tile grid, hero headline, gradients","best":"Any (the sheet is opaque, like paper on a desk)","worst":"None really"},{"id":"D","name":"Plain Window","file":"looks/D-plain-window.html","thumb":"thumbs/D.png","spec":"specs/D.md","idea":"A native admin tool: a list on the left, ruled tables, a status bar. State is a word plus a shape.","structure":"Left list (narrow option) + tables + status bar","cards":"No","icons":"None; state is a word plus a shape","density":"Comfortable or compact","effort":"5 to 7 (my estimate: the first-round designers gave no figure)","effortShort":"5-7 d (est.)","kind":"Mostly a CSS layer (tables and lists)","kindShort":"CSS layer (est.)","contrast":"Amber light accent-as-text (4.38) and Dusk dark selected-row muted text (4.46) avoided by design; the rest passed the designer's 36-combination check","cliches":"The identical rounded card with an accent rail and soft shadow","best":"Plain, Dots, Grid, Ledger, Stripes at Subtle or Medium","worst":"Mesh, Aurora, Beams, Rays, Radar at Strong"},{"id":"E","name":"Poster","file":"looks/E-poster.html","thumb":"thumbs/E.png","spec":"specs/E.md","idea":"One big sentence (\"Four things need you. One server is down.\") over a plain ruled list, in Bricolage Grotesque.","structure":"No sidebar; top navigation","cards":"No","icons":"None","density":"Comfortable or compact","effort":"6 to 8 (my estimate: the first-round designers gave no figure)","effortShort":"6-8 d (est.)","kind":"Needs its own Overview renderer; the sidebar setting is retired","kindShort":"own renderer (est.)","contrast":"Same two known edge cases avoided; the rest passed the designer's check","cliches":"The big number in a gradient tile; cream-and-serif","best":"Plain, Glow, Spotlight, Horizon, Contours, Ripples at Subtle or Medium","worst":"Stripes, Lattice, Scales, Beams, Grid at Strong"},{"id":"F","name":"Drawing Register","file":"looks/F-drawing-register.html","thumb":"thumbs/F.png","spec":"specs/F.md","idea":"A framed drawing sheet with a title block and ruled schedules; Plex Mono figures; a blueprint-blue dark theme.","structure":"No sidebar; frame + schedules","cards":"No (ruled schedules)","icons":"None","density":"Comfortable or compact","effort":"8 to 11 (my estimate: the first-round designers gave no figure)","effortShort":"8-11 d (est.)","kind":"Needs its own renderer; the sidebar setting is retired","kindShort":"own renderer (est.)","contrast":"Same two known edge cases avoided; the rest passed the designer's check","cliches":"Neon on near-black, and a caps label above every heading","best":"Blueprint, Grid, Ledger, Dots, Contours","worst":"Mesh, Aurora, Glow, Rays"},{"id":"G","name":"Mailroom","file":"looks/G-mailroom.html","thumb":"thumbs/G.png","spec":"specs/G.md","idea":"An email client: folders, a message list and a reading pane. Items are messages; state is bold weight and flags.","structure":"Three panes (folders, list, reading pane)","cards":"No","icons":"None; bold weight and CSS flag shapes","density":"Comfortable or compact","effort":"7 to 10 (designer)","effortShort":"7-10 d","kind":"A second chrome plus list-and-detail layouts for the pages (per its designer)","kindShort":"own layouts","contrast":"Dusk dark: muted text on the selected row 4.46 to 1: fixed by using the main text colour on that row; all other pairs pass","cliches":"Rounded identical cards, rails, gradient number tiles, caps labels, icons per item, chatty microcopy, centred hero, numbered markers","best":"Plain, Dots, Grid, Ledger, Blueprint at Subtle or Medium","worst":"Strong colour washes (Glow, Mesh, Aurora, Spotlight)"},{"id":"H","name":"Sheet","file":"looks/H-sheet.html","thumb":"thumbs/H.png","spec":"specs/H.md","idea":"A spreadsheet: cell borders, column headers, a formula-bar status line, sheet tabs as pages, a frozen header row.","structure":"Workbook window; sheet tabs along the bottom (sidebar retired)","cards":"No (cells)","icons":"None; sort arrows only","density":"Comfortable or compact","effort":"6 to 9 (designer)","effortShort":"6-9 d","kind":"A reusable workbook component, then each page moved onto it","kindShort":"own renderer","contrast":"All pairs pass in 36 combinations (designer)","cliches":"Cards, rails, stat tiles, gradient accents, caps eyebrow over every heading, icons beside items, centred hero","best":"Plain, Dots, Grid, Ledger, Stripes","worst":"Aurora, Mesh, Glow, Spotlight at Strong (the sheet hides most of the harm)"},{"id":"I","name":"Paper Terminal","file":"looks/I-paper-terminal.html","thumb":"thumbs/I.png","spec":"specs/I.md","idea":"A text-mode screen: box-drawing frames, monospace, inverse-video selection, function-key hints. Warm paper, not neon.","structure":"One 132-column character grid; function-key bar (sidebar retired)","cards":"No (frames)","icons":"None; frame characters only","density":"Comfortable or compact","effort":"8 to 12 (designer)","effortShort":"8-12 d","kind":"A character-grid renderer with a text layout per page type (the heaviest)","kindShort":"own renderer (heaviest)","contrast":"All pairs pass in 36 combinations (designer)","cliches":"Cards, rails, tiles, caps labels, rounded anything, icons, big hero number, chatty copy, neon-on-black","best":"Plain, Dots, Grid, Ledger, Contours at Subtle or Medium","worst":"Glow, Mesh, Aurora, Spotlight"},{"id":"J","name":"Day Line","file":"looks/J-day-line.html","thumb":"thumbs/J.png","spec":"specs/J.md","idea":"A timeline: a vertical time axis with a \"now\" line; everything sits at its time.","structure":"Vertical time axis; top bar (sidebar retired)","cards":"No","icons":"None; drawn markers","density":"Comfortable or compact","effort":"6 to 8 (designer)","effortShort":"6-8 d","kind":"Needs its own renderer (rows instead of tiles)","kindShort":"own renderer","contrast":"All pairs pass in 36 combinations (designer)","cliches":"Rounded cards with rails, gradient number tiles, caps eyebrows, 01/02/03 markers, chatty headings, centred layout, emoji","best":"Plain, Dots, Grid, Ledger, Stripes, Lattice","worst":"Glow, Aurora, Mesh, Spotlight, Horizon, Rays at Strong"},{"id":"K","name":"Lines","file":"looks/K-lines.html","thumb":"thumbs/K.png","spec":"specs/K.md","idea":"A transit map: each system or project is a line with stations; the next stop that needs you is ringed.","structure":"Status board + schematic map; top bar (sidebar retired)","cards":"No","icons":"None; station shapes","density":"Comfortable or compact","effort":"10 to 14 (designer)","effortShort":"10-14 d","kind":"Needs its own renderer and a new config saying which item sits on which line","kindShort":"own renderer + data","contrast":"One failure (Amber light letter on an accent bullet, 4.38 to 1) found and fixed","cliches":"Rounded cards with rails, gradient number tiles, caps eyebrows, 01/02/03 markers, neon on near-black, chatty microcopy","best":"Plain, Dots, Grid, Blueprint, Ledger, Contours","worst":"Aurora, Mesh, Glow, Spotlight, Horizon, Rays at Strong"},{"id":"L","name":"Grid 9","file":"looks/L-grid-9.html","thumb":"thumbs/L.png","spec":"specs/L.md","idea":"A strict Swiss grid: nine columns, one typeface, hairline rules, no boxes; counts as plain numerals.","structure":"Nine-column grid; top bar (sidebar retired)","cards":"No","icons":"None","density":"Comfortable or compact","effort":"5 to 7 (designer)","effortShort":"5-7 d","kind":"Needs its own renderer","kindShort":"own renderer","contrast":"No failures for this look (designer)","cliches":"Rounded cards with rails, gradient number tiles, caps eyebrows, cream-and-serif, near-black with one acid colour, centred layouts, emoji","best":"Plain, Dots, Grid, Ledger, Stripes, Lattice, Blueprint","worst":"Glow, Mesh, Aurora, Spotlight, Horizon; Rays and Ripples at Strong"},{"id":"M","name":"Lab Book","file":"looks/M-lab-book.html","thumb":"thumbs/M.png","spec":"specs/M.md","idea":"A bound lab notebook: ruled page, a margin column for dates and ages, entries as dated notes, taped-in tables.","structure":"Notebook page with index tabs on the edge (sidebar retired)","cards":"Strips taped in; no cards","icons":"None; CSS marks","density":"Comfortable or compact","effort":"6 to 8 (designer)","effortShort":"6-8 d","kind":"Edge tabs plus notes renderers for the Overview and list pages","kindShort":"own renderer","contrast":"No pair fails (lowest 4.91 to 1 in the checked pairs) (designer)","cliches":"Cream-and-terracotta serif, acid accent, gradient wash, rounded cards with rails, big number tile, caps labels, numbered markers, emoji, centred layout","best":"Plain, Dots, Grid, Blueprint, Contours, Horizon, Glow, Aurora, Mesh","worst":"Ledger (a second ruled paper); Stripes, Lattice, Scales, Beams at Strong"},{"id":"N","name":"Prompt","file":"looks/N-prompt.html","thumb":"thumbs/N.png","spec":"specs/N.md","idea":"Command first: one big input (\"go to\", \"find\", \"do\"); the overview is a ruled list of what needs you plus a short history.","structure":"A top line, one input and a go-to row; no sidebar","cards":"No","icons":"None; the verb is the icon","density":"Comfortable or compact","effort":"8 to 10 (designer)","effortShort":"8-10 d","kind":"A command registry and list renderers; the most behaviour change","kindShort":"own renderer","contrast":"One real failure found and fixed (due-date hints on the selected row 4.42 to 4.45 in Azure, Steel and Arctic light); no pair fails now","cliches":"Card grid, gradient number tiles, rails, caps eyebrows, emoji, icon beside every item, centred hero, near-black with one acid accent","best":"All; best Grid, Dots, Blueprint, Contours, Radar, Rays, Horizon","worst":"None read as unreadable (text never sits on a pattern)"},{"id":"O","name":"Wiki","file":"looks/O-wiki.html","thumb":"thumbs/O.png","spec":"specs/O.md","idea":"A living runbook: a page tree on the left, an article in the middle, an \"on this page\" list on the right; status as inline badges.","structure":"Page tree + article + contents list","cards":"No (one bordered article)","icons":"None; \"#\" links only","density":"Comfortable or compact","effort":"6 to 7 (designer)","effortShort":"6-7 d","kind":"A second chrome (tree from the existing menu) and a document variant of the Overview; the least invasive of its three","kindShort":"second chrome + document variant","contrast":"No pair fails (lowest 4.91 to 1 in the checked pairs) (designer)","cliches":"Card grids, gradient tiles, rails on notes, caps eyebrows, icons beside items, emoji, centred hero, serif-and-cream, purple gradient, hover-lift","best":"Plain, Dots, Grid, Blueprint, Contours, Ledger, Stripes at Subtle","worst":"Aurora, Mesh, Glow, Spotlight, Beams, Rays at Strong"},{"id":"P","name":"Raw","file":"looks/P-raw.html","thumb":"thumbs/P.png","spec":"specs/P.md","idea":"Deliberately plain: browser-default serif, underlined links, bordered tables, thick ink rules. Honest and fast.","structure":"One sheet; a line of links across the top; no sidebar","cards":"No","icons":"None; bracketed text symbols","density":"Comfortable or compact","effort":"5 to 8 (designer)","effortShort":"5-8 d","kind":"Mostly CSS over the existing page structure, plus an optional table-mode renderer for card-grid pages","kindShort":"mostly CSS","contrast":"288 pair-checks, 0 failures (designer)","cliches":"Cream and terracotta, acid accent, gradient washes, the identical rounded card, big number tile, caps labels, middle-dot strings, emoji or icons, centred layouts, fade-in motion, Inter and Space Grotesk","best":"Plain, Dots, Grid, Blueprint, Ledger, Stripes, Lattice","worst":"Backgrounds show only in the margins; none are unreadable"},{"id":"Q","name":"Classic Desktop","file":"looks/Q-classic-desktop.html","thumb":"thumbs/Q.png","spec":"specs/Q.md","idea":"A 2000-era desktop application done with taste: title bar, menu bar, toolbar, tabs, a tree pane, sunken lists, a status bar.","structure":"Tree pane + tabs + status bar (the tree pane replaces the sidebar)","cards":"No (group boxes and list views)","icons":"None; text symbols","density":"Comfortable or compact","effort":"7 to 10 (designer)","effortShort":"7-10 d","kind":"A second chrome builder in shell.js, the Settings window and a CSS layer for bevels and lists","kindShort":"second chrome + CSS","contrast":"216 pair-checks, 0 failures (designer)","cliches":"Identical rounded card with an accent rail, gradient washes, big number tile, caps eyebrows, Inter and Space Grotesk, emoji and line icons, fade-and-rise motion","best":"Plain, Dots, Grid, Ledger, Scales (the bevels sit on the page)","worst":"Strong colour washes behind the window"}]</script>
+<script>
+var TOTAL = { all: [109, 151], sub: [17, 24] };
+var REC = '<p>These are my three, in order, and the reasons. They are a recommendation, not a decision.</p>'
+ + '<h3>1. D, Plain Window</h3><p>It is the cheapest route to a dashboard built for what you do every day: read short tables fast and find the one failing row. No cards, no icons, no hero, state as a word and a shape, and it keeps the sidebar and every theme, background and density option working as they do now. It is mostly a CSS layer (5 to 7 days). Its weakness is that it is deliberately unexciting.</p>'
+ + '<h3>2. L, Grid 9</h3><p>The most distinctly un-generated look that is still cheap (5 to 7 days). One typeface, a visible grid, hairline rules, plain numerals. It needs its own renderer and retires the sidebar setting, but it asks for little else and reads very cleanly. Pick it if you want something that looks designed by a person with a point of view.</p>'
+ + '<h3>3. G, Mailroom</h3><p>The best match between a screen shape people already know and your real workflow: things arrive, you read them, you deal with them, you file them. It is the strongest idea of the eleven new ones and the one that makes "Waiting on you" feel like a real inbox. It costs more (7 to 10 days) because pages become list-and-detail.</p>'
+ + '<p><b>First subset: D, L and G</b>, about 17 to 24 Engineer days plus 2 to 3 shared days, and the Look setting lets you switch between them.</p>'
+ + '<h3>What I would cut if you want fewer</h3><ul>'
+ + '<li><b>K (Lines), I (Paper Terminal), F (Drawing Register):</b> the most expensive (8 to 14 days each), and each retires the sidebar setting. K also needs a new configuration saying which item sits on which line.</li>'
+ + '<li><b>N (Prompt) and M (Lab Book):</b> the hardest to keep usable on every page. N changes behaviour the most; M has hand-drawn marks that can wrap across lines.</li>'
+ + '<li><b>A and C:</b> pleasant but close to D in spirit, and each has an Amber light link fix to make.</li>'
+ + '<li><b>B, E, H, J, O, P, Q:</b> keep as options if any of them appeals; each is a defensible choice. O (Wiki) is the least invasive of its group, and P (Raw) is the cheapest if you want honest plainness.</li></ul>'
+ + '<p>Nothing is applied to the real site until you choose. Things I have not checked: Monitoring, Projects, Calendar, Vulnerabilities, Study, Campaign and Stocks pages in any look; phone widths; screen readers; hover and keyboard-focus states. The effort figures are the designers\' for G to Q and my own for A to F.</p>';
+(function(){
+  "use strict";
+  var LOOKS=JSON.parse(document.getElementById('looks').textContent);
+  var KEY='barnyard-looks-shortlist', fav={};
+  try{fav=JSON.parse(localStorage.getItem(KEY)||'{}')||{};}catch(e){fav={};}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(fav));}catch(e){}}
+  function $(id){return document.getElementById(id);}
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  var byId={}; LOOKS.forEach(function(l){byId[l.id]=l;});
+
+  // ---- tabs ----
+  var tabs=['looks','compare','site','rec','short'];
+  function showTab(k){tabs.forEach(function(t){var on=t===k;$('t-'+t).setAttribute('aria-selected',on?'true':'false');$('s-'+t).hidden=!on;});try{history.replaceState(null,'','#'+k);}catch(e){}}
+  tabs.forEach(function(t){$('t-'+t).addEventListener('click',function(){showTab(t);});});
+
+  // ---- page theme (system / light / dark) ----
+  var tm=['system','light','dark'], ti=0;
+  $('theme').addEventListener('click',function(){ti=(ti+1)%3;var v=tm[ti];if(v==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',v);$('theme').textContent='Page: '+v;});
+
+  // ---- grid ----
+  function card(l){
+    var d=document.createElement('article');d.className='card';d.id='card-'+l.id;
+    d.innerHTML='<button type="button" class="shot" aria-label="Open '+esc(l.name)+'"><img loading="lazy" src="'+esc(l.thumb)+'" alt="Screenshot of '+esc(l.name)+'"></button>'
+      +'<div class="body"><div class="name"><span class="id">'+esc(l.id)+'</span>'+esc(l.name)+'</div><p>'+esc(l.idea)+'</p>'
+      +'<div class="meta"><span class="tag">'+esc(l.kindShort)+'</span><span>'+esc(l.effortShort)+'</span></div>'
+      +'<div class="row"><button type="button" class="open mini">Open live</button><button type="button" class="star" aria-pressed="false">Star</button></div></div>';
+    d.querySelector('.shot').addEventListener('click',function(){openLook(l.id);});
+    d.querySelector('.open').addEventListener('click',function(){openLook(l.id);});
+    d.querySelector('.star').addEventListener('click',function(){toggle(l.id);});
+    return d;
+  }
+  LOOKS.forEach(function(l){$('grid').appendChild(card(l));});
+
+  // ---- compare table ----
+  var COLS=[['name','Look'],['idea','One-line idea'],['structure','Structure'],['cards','Cards?'],['icons','Icons?'],['density','Density'],['effort','Effort (Engineer days)'],['kind','Implementation'],['contrast','Contrast failures and how avoided'],['cliches','AI clichés it avoids'],['best','Backgrounds that suit'],['worst','Backgrounds that clash']];
+  function buildTable(){
+    var only=$('onlyfav').checked, h='<thead><tr>'+COLS.map(function(c){return '<th>'+c[1]+'</th>';}).join('')+'</tr></thead><tbody>';
+    LOOKS.forEach(function(l){ if(only&&!fav[l.id])return; h+='<tr class="'+(fav[l.id]?'fav':'')+'">'+COLS.map(function(c){var v=c[0]==='name'?('<b>'+esc(l.id)+'</b> '+esc(l.name)):esc(l[c[0]]);return '<td>'+v+'</td>';}).join('')+'</tr>'; });
+    $('cmp').innerHTML=h+'</tbody>';
+  }
+  $('onlyfav').addEventListener('change',buildTable);
+
+  // ---- favourites ----
+  function refreshFav(){
+    var ids=LOOKS.filter(function(l){return fav[l.id];}).map(function(l){return l.id;});
+    $('count').textContent=ids.length;
+    LOOKS.forEach(function(l){var s=document.querySelector('#card-'+l.id+' .star');if(s){s.setAttribute('aria-pressed',fav[l.id]?'true':'false');s.textContent=fav[l.id]?'Starred':'Star';}});
+    var txt=ids.length?('My shortlist: '+ids.map(function(i){return i+' '+byId[i].name;}).join(', ')+'.'):'My shortlist: (nothing starred yet).';
+    $('shortlist-text').textContent=txt;$('shortlist-box').value=txt;
+    if(!$('viewer').hidden&&cur){$('vstar').setAttribute('aria-pressed',fav[cur]?'true':'false');$('vstar').textContent=fav[cur]?'Starred':'Star';}
+    buildTable();
+  }
+  function toggle(id){if(fav[id])delete fav[id];else fav[id]=1;save();refreshFav();}
+  $('copy').addEventListener('click',function(){var b=$('shortlist-box');b.select();try{document.execCommand('copy');$('copied').textContent='Copied';}catch(e){$('copied').textContent='Select the text and copy it.';}});
+  $('clear').addEventListener('click',function(){fav={};save();refreshFav();$('copied').textContent='';});
+
+  // ---- viewer ----
+  var cur=null;
+  function openLook(id){
+    cur=id;var l=byId[id];
+    $('vtitle').textContent=l.id+'. '+l.name+'  (effort '+l.effortShort+')';
+    $('vframe').src=l.file;
+    $('viewer').hidden=false;document.body.style.overflow='hidden';
+    try{history.replaceState(null,'','#look-'+id);}catch(e){}
+    refreshFav();$('vframe').focus();
+  }
+  function step(d){var i=LOOKS.findIndex(function(l){return l.id===cur;});i=(i+d+LOOKS.length)%LOOKS.length;openLook(LOOKS[i].id);}
+  function closeViewer(){$('viewer').hidden=true;document.body.style.overflow='';$('vframe').src='about:blank';try{history.replaceState(null,'','#looks');}catch(e){}}
+  $('vprev').addEventListener('click',function(){step(-1);});
+  $('vnext').addEventListener('click',function(){step(1);});
+  $('vclose').addEventListener('click',closeViewer);
+  $('vstar').addEventListener('click',function(){toggle(cur);});
+  $('vspec').addEventListener('click',function(){
+    var l=byId[cur];$('spectitle').textContent=l.id+'. '+l.name+': spec';$('specbody').textContent='Loading...';$('specdlg').showModal();
+    fetch(l.spec).then(function(r){if(!r.ok)throw new Error(r.status);return r.text();}).then(function(t){$('specbody').textContent=t;}).catch(function(){$('specbody').textContent='The spec file could not be loaded here. It is the file "'+l.spec+'" in this artifact.';});
+  });
+  $('specclose').addEventListener('click',function(){$('specdlg').close();});
+  document.addEventListener('keydown',function(e){
+    if($('viewer').hidden)return;
+    var t=e.target&&e.target.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
+    if(e.key==='ArrowLeft'){e.preventDefault();step(-1);}else if(e.key==='ArrowRight'){e.preventDefault();step(1);}else if(e.key==='Escape'&&!$('specdlg').open){closeViewer();}else if(e.key==='s'||e.key==='S'){toggle(cur);}
+  });
+
+  // ---- effort + recommendation text ----
+  $('effort').innerHTML='<table><thead><tr><th>Scope</th><th>Engineer days</th></tr></thead><tbody>'
+    +'<tr><td>All 17 new looks (A to Q)</td><td>about '+TOTAL.all[0]+' to '+TOTAL.all[1]+', plus 2 to 3 for the Look setting, the loader and the contrast tests</td></tr>'
+    +'<tr><td>Recommended first subset: D, A and G</td><td>about '+TOTAL.sub[0]+' to '+TOTAL.sub[1]+', plus the same 2 to 3 shared work</td></tr>'
+    +'<tr><td>One look on its own</td><td>see the table (4 to 14 each)</td></tr></tbody></table>'
+    +'<p>Sums of the per-look estimates. They overlap (the Look setting, the loader and the contrast tests are shared), so the real total is lower than the straight sum. They do not include the other pages (Monitoring graphs, Projects, Study, Campaign, Stocks), which each look must also handle.</p>';
+  $('rec').innerHTML=REC;
+  function fromHash(){
+    var h=(location.hash||'').replace('#','');
+    if(h.indexOf('look-')===0&&byId[h.slice(5)]){openLook(h.slice(5));}else if(tabs.indexOf(h)>=0){showTab(h);}
+  }
+  refreshFav();fromHash();
+})();
+</script>
+</body>
+</html>

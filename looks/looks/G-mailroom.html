@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../landing.css?v=92f5d814">
+<link rel="stylesheet" href="../gate-vars.css">
+<script src="../../landing.js?v=c2537ed8"></script>
+<script src="../gate-ready.js"></script><meta name="viewport" content="width=device-width, initial-scale=1"><title>G Mailroom (mockup)</title><style>
+/* Shared by every look mockup: colour tokens (driven by the real themes.js table), the real CSS-only backgrounds, and the mockup control strip.
+   The control strip is NOT part of any look: it only lets the owner swap theme, mode, background, strength and density. */
+:root {
+  --bg: #0b1016; --panel: #121920; --panel-2: #172029; --line: #232e3a;
+  --fg: #ced7e0; --fg-strong: #f2f5f8; --fg-dim: #8c99a7;
+  --accent: #e8a33d; --accent-ink: #1b1304; --accent-soft: rgba(232,163,61,.12);
+  --attn: #a891ff; --attn-soft: rgba(168,145,255,.12);
+  --ok: #4cc38a; --ok-soft: rgba(76,195,138,.12);
+  --alert: #ff7b6e; --alert-soft: rgba(255,123,110,.12);
+  --info: #6aaaf0; --info-soft: rgba(106,170,240,.13);
+  --side-w: 232px; --base: 14px; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--fg); overflow: hidden; }
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+/* ---- the real page backgrounds (copied from shell.css) ---- */
+.bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+:root[data-bgs="subtle"] .bg { opacity: .5; } :root[data-bgs="medium"] .bg { opacity: .85; } :root[data-bgs="strong"] .bg { opacity: 1; }
+.bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+:root[data-bgs="subtle"] .bg { opacity: .5; } :root[data-bgs="medium"] .bg { opacity: .85; } :root[data-bgs="strong"] .bg { opacity: 1; }
+.bgx-glow { background: radial-gradient(60% 55% at 88% -8%, color-mix(in srgb, var(--accent) 42%, transparent), transparent 72%), radial-gradient(50% 45% at -6% 104%, color-mix(in srgb, var(--attn) 34%, transparent), transparent 70%); }
+.bgx-mesh { background: radial-gradient(40% 40% at 12% 18%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 70%), radial-gradient(38% 40% at 86% 22%, color-mix(in srgb, var(--attn) 32%, transparent), transparent 70%), radial-gradient(44% 44% at 70% 92%, color-mix(in srgb, var(--info) 32%, transparent), transparent 70%), radial-gradient(36% 36% at 6% 86%, color-mix(in srgb, var(--ok) 24%, transparent), transparent 70%); }
+.bgx-aurora { background: linear-gradient(112deg, transparent 12%, color-mix(in srgb, var(--accent) 34%, transparent) 34%, color-mix(in srgb, var(--attn) 32%, transparent) 50%, color-mix(in srgb, var(--info) 30%, transparent) 66%, transparent 88%), radial-gradient(60% 50% at 20% 100%, color-mix(in srgb, var(--attn) 20%, transparent), transparent 70%); background-size: 160% 70%, 100% 100%; background-repeat: no-repeat; background-position: 30% 0, 0 0; -webkit-mask-image: linear-gradient(180deg, #000 20%, transparent 95%); mask-image: linear-gradient(180deg, #000 20%, transparent 95%); }
+.bgx-spotlight { background: radial-gradient(34% 42% at 50% -6%, color-mix(in srgb, var(--fg-strong) 22%, transparent), transparent 72%), radial-gradient(80% 62% at 50% -12%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 74%); }
+.bgx-horizon { background: linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--accent) 26%, transparent) 75%, color-mix(in srgb, var(--attn) 38%, transparent) 100%), repeating-linear-gradient(180deg, transparent 0 22px, color-mix(in srgb, var(--accent) 12%, transparent) 22px 23px); }
+.bgx-dots { background-image: radial-gradient(color-mix(in srgb, var(--fg-dim) 60%, transparent) 1.2px, transparent 1.6px); background-size: 24px 24px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 85%); mask-image: linear-gradient(180deg, #000, transparent 85%); }
+.bgx-grid { background-image: linear-gradient(color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px); background-size: 44px 44px; -webkit-mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); }
+.bgx-blueprint { background-image: linear-gradient(color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px); background-size: 110px 110px, 110px 110px, 22px 22px, 22px 22px; -webkit-mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); }
+.bgx-ledger { background-image: linear-gradient(90deg, transparent calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 25px), transparent calc(var(--side-w) + 25px)), repeating-linear-gradient(180deg, transparent 0 31px, color-mix(in srgb, var(--fg-dim) 28%, transparent) 31px 32px); }
+.bgx-stripes { background: repeating-linear-gradient(135deg, transparent 0 16px, color-mix(in srgb, var(--fg-dim) 30%, transparent) 16px 17px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.bgx-lattice { background: repeating-linear-gradient(45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px), repeating-linear-gradient(-45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.bgx-scales { background-image: radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px), radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px); background-size: 28px 14px, 28px 14px; background-position: 0 0, 14px 7px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 88%); mask-image: linear-gradient(180deg, #000, transparent 88%); }
+.bgx-beams { background: repeating-linear-gradient(90deg, transparent 0 22px, color-mix(in srgb, var(--accent) 34%, transparent) 22px 24px, transparent 24px 41px, color-mix(in srgb, var(--attn) 28%, transparent) 41px 42px, transparent 42px 64px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 82%); mask-image: linear-gradient(180deg, #000, transparent 82%); }
+.bgx-ripples { background: repeating-radial-gradient(circle at 92% -6%, transparent 0 38px, color-mix(in srgb, var(--accent) 40%, transparent) 38px 39px), repeating-radial-gradient(circle at -4% 104%, transparent 0 46px, color-mix(in srgb, var(--attn) 34%, transparent) 46px 47px); -webkit-mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); }
+.bgx-radar { background: repeating-radial-gradient(circle at 80% 20%, transparent 0 64px, color-mix(in srgb, var(--accent) 34%, transparent) 64px 65px), linear-gradient(90deg, transparent calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% + .5px), transparent calc(80% + .5px)), linear-gradient(180deg, transparent calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% + .5px), transparent calc(20% + .5px)), conic-gradient(from 190deg at 80% 20%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 55deg); -webkit-mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); }
+.bgx-contours { background: repeating-radial-gradient(ellipse 70% 45% at 18% 28%, transparent 0 24px, color-mix(in srgb, var(--accent) 34%, transparent) 24px 25px), repeating-radial-gradient(ellipse 50% 75% at 86% 78%, transparent 0 28px, color-mix(in srgb, var(--attn) 32%, transparent) 28px 29px), repeating-radial-gradient(ellipse 40% 30% at 62% 8%, transparent 0 30px, color-mix(in srgb, var(--info) 24%, transparent) 30px 31px); }
+.bgx-rays { background: repeating-conic-gradient(from 180deg at 100% 0%, color-mix(in srgb, var(--accent) 30%, transparent) 0 3deg, transparent 3deg 9deg); -webkit-mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); }
+
+/* ---- mockup control strip ---- */
+.mx { position: fixed; top: 0; left: 0; right: 0; z-index: 100; height: 38px; display: flex; align-items: center; gap: 14px; padding: 0 12px; background: var(--panel-2); border-bottom: 1px solid var(--line); font: 12px/1 system-ui, "Segoe UI", sans-serif; color: var(--fg); white-space: nowrap; overflow-x: auto; }
+.mx b { color: var(--fg-strong); font-weight: 600; }
+.mx label { display: inline-flex; align-items: center; gap: 5px; color: var(--fg-dim); }
+.mx select { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 2px 4px; height: 24px; color: var(--fg); }
+.mx .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.mx .seg button { background: var(--panel); border: 0; padding: 0 9px; height: 24px; cursor: pointer; color: var(--fg-dim); }
+.mx .seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.mx .sp { flex: 1; }
+.mx .hint { color: var(--fg-dim); }
+#stage { position: fixed; top: 38px; left: 0; right: 0; bottom: 0; z-index: 1; }
+
+/* G Mailroom: an e-mail client. Folders left, message list middle, reading pane right. Flat panes split by 1px lines, 2px radius at most, no cards, no accent rails.
+   State is a flag and weight (unread = bold), never a coloured tile. */
+.g { position: absolute; inset: 0; display: flex; flex-direction: column; font: 13px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; color: var(--fg); }
+:root[data-density="compact"] .g { font-size: 12px; }
+.g-top { display: flex; align-items: center; gap: 16px; height: 40px; padding: 0 14px; background: color-mix(in srgb, var(--panel-2) 82%, transparent); border-bottom: 1px solid var(--line); }
+.g-brand { font-weight: 650; font-size: 15px; color: var(--fg-strong); letter-spacing: .1px; }
+.g-search { flex: 0 1 380px; }
+.g-search input { width: 100%; height: 26px; border: 1px solid var(--line); border-radius: 2px; background: var(--panel); padding: 0 8px; }
+.g-search input::placeholder { color: var(--fg-dim); }
+.g-top .sp { flex: 1; }
+.g-who { color: var(--fg-dim); }
+.g-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 208px minmax(320px, 400px) 1fr; }
+.g-body.wide { grid-template-columns: 208px minmax(520px, 1fr) 360px; }
+.g-folders { background: color-mix(in srgb, var(--panel-2) 78%, transparent); border-right: 1px solid var(--line); padding: 8px 0; overflow: auto; }
+.g-f { display: flex; justify-content: space-between; align-items: baseline; width: 100%; text-align: left; background: none; border: 0; padding: 4px 14px; cursor: pointer; color: var(--fg); }
+.g-f:hover { background: color-mix(in srgb, var(--fg) 6%, transparent); }
+.g-f[aria-current="true"] { background: color-mix(in srgb, var(--fg) 11%, transparent); color: var(--fg-strong); font-weight: 600; }
+.g-f .n { color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+.g-f.has .n { color: var(--fg-strong); font-weight: 650; }
+.g-f.flag .n { color: var(--alert); }
+.g-fh { margin: 12px 14px 4px; color: var(--fg-dim); font-size: .92em; }
+.g-list { background: var(--panel); border-right: 1px solid var(--line); overflow: auto; position: relative; }
+.g-gh { position: sticky; top: 0; z-index: 2; padding: 5px 12px 5px 34px; background: var(--panel-2); border-bottom: 1px solid var(--line); color: var(--fg-dim); font-weight: 600; }
+.g-gh span { font-weight: 400; margin-left: 6px; }
+.g-row { display: grid; grid-template-columns: 22px 1fr auto; column-gap: 6px; padding: 7px 12px 7px 8px; border-bottom: 1px solid var(--line); cursor: default; }
+:root[data-density="compact"] .g-row { padding-top: 4px; padding-bottom: 4px; }
+.g-row:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); }
+.g-row[aria-selected="true"] { background: var(--accent-soft); }
+.g-row[aria-selected="true"] .when, .g-row[aria-selected="true"] .l2 { color: var(--fg); }  /* keeps muted text above 4.5:1 on the selected row in every theme (Dusk dark fails with --fg-dim) */
+.g-row .mk { grid-row: 1 / span 2; display: flex; justify-content: center; padding-top: 5px; }
+.g-row .l1 { display: flex; justify-content: space-between; gap: 8px; min-width: 0; grid-column: 2 / span 2; }
+.g-row .from { color: var(--fg-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-row .when { color: var(--fg-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.g-row .l2 { grid-column: 2 / span 2; color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-row.unread .from, .g-row.unread .l2 .sub { font-weight: 650; color: var(--fg-strong); }
+.g-row .l2 .sub { color: var(--fg); }
+.g-row.done { opacity: .6; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-top: 2px; }
+.pen { width: 10px; height: 13px; background: currentColor; clip-path: polygon(0 0, 100% 30%, 18% 62%, 18% 100%, 0 100%); }
+.pen.alert { color: var(--alert); } .pen.attn { color: var(--attn); } .pen.ok { color: var(--ok); }
+.g-row.flagged .l2 .sub { color: var(--fg-strong); }
+.tick { color: var(--ok); font-weight: 700; line-height: 1; }
+/* Ops board table view */
+.g-tbl { width: 100%; border-collapse: collapse; }
+.g-tbl th { position: sticky; top: 0; z-index: 2; background: var(--panel-2); text-align: left; font-weight: 600; color: var(--fg-dim); padding: 5px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.g-tbl td { padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; }
+:root[data-density="compact"] .g-tbl td { padding-top: 4px; padding-bottom: 4px; }
+.g-tbl tr[aria-selected="true"] td { background: var(--accent-soft); }
+.g-tbl td.id { color: var(--fg-dim); font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; font-size: .92em; }
+.g-tbl td.mk { width: 24px; padding-right: 0; }
+.g-tbl tr.unread td.t { font-weight: 650; color: var(--fg-strong); }
+.g-tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
+.g-read { background: var(--panel); overflow: auto; padding: 22px 28px 40px; }
+.g-read h1 { font-size: 20px; line-height: 1.25; margin: 0 0 12px; color: var(--fg-strong); font-weight: 600; max-width: 34ch; }
+.g-meta { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0 0 16px; color: var(--fg); }
+.g-meta dt { color: var(--fg-dim); } .g-meta dd { margin: 0; }
+.g-read hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.g-read p { max-width: 62ch; line-height: 1.6; font-size: 14px; margin: 0 0 12px; }
+.g-act { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+.g-act button { height: 28px; padding: 0 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 2px; cursor: pointer; }
+.g-act button:hover { background: var(--panel-2); }
+.g-act button.pri { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.g-act kbd, .g-status kbd { font: .86em "Cascadia Mono", Consolas, ui-monospace, monospace; border: 1px solid var(--line); border-radius: 2px; padding: 0 4px; margin-left: 5px; color: var(--fg-dim); background: transparent; }
+.g-act button.pri kbd { color: inherit; border-color: color-mix(in srgb, var(--bg) 45%, transparent); }
+.g-empty { padding: 36px 20px; color: var(--fg-dim); }
+.g-status { height: 26px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; background: color-mix(in srgb, var(--panel-2) 82%, transparent); border-top: 1px solid var(--line); color: var(--fg-dim); font-size: .95em; overflow: hidden; white-space: nowrap; }
+.g-status b { color: var(--fg-strong); font-weight: 600; }
+.g-status .down { color: var(--alert); font-weight: 600; }
+@media (max-width: 980px) { .g-body, .g-body.wide { grid-template-columns: 170px 1fr; } .g-read { display: none; } }
+
+</style></head><body><div class="bg bgx-plain" id="bg"></div><div class="mx" id="mx"></div><div id="stage"></div><script>
+var THEMES=[
+  {id:"cobalt",name:"Cobalt",group:"blue",light:["#f0f2f8","#ffffff","#f5f6fa","#dcdfec","#272e42","#0d1222","#566079","#2849d6","#ffffff","rgba(40,73,214,.09)","#a05a00","rgba(160,90,0,.10)"],dark:["#0c0f15","#131821","#19202b","#252d3b","#cfd5e2","#f3f5fa","#8b94a8","#6c8cff","#070d24","rgba(108,140,255,.14)","#f0a54a","rgba(240,165,74,.13)"]},
+  {id:"azure",name:"Azure",group:"blue",light:["#eef4f9","#ffffff","#f3f8fc","#d3e1ee","#233546","#0b1b2b","#526a80","#0a68b0","#ffffff","rgba(10,104,176,.10)","#9a5b00","rgba(154,91,0,.10)"],dark:["#091119","#0f1a25","#14212e","#1f3244","#c9d9e8","#eef6fd","#83a0b8","#3db4ff","#021a2c","rgba(61,180,255,.13)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"ultra",name:"Ultramarine",group:"blue",light:["#f1f0fa","#ffffff","#f6f5fc","#deddf0","#2a2a4a","#11112b","#5c5c86","#3d3bd1","#ffffff","rgba(61,59,209,.09)","#9a5b00","rgba(154,91,0,.10)"],dark:["#0c0c18","#131324","#1a1a30","#292946","#d0d0ec","#f3f3ff","#9393bd","#8587ff","#0d0d38","rgba(133,135,255,.15)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"steel",name:"Steel",group:"blue",light:["#eff2f5","#ffffff","#f4f6f8","#d9dfe6","#2b3642","#101820","#586878","#35628f","#ffffff","rgba(53,98,143,.10)","#9a5b00","rgba(154,91,0,.10)"],dark:["#0d1217","#141b22","#19222b","#26323d","#cdd6df","#f0f4f8","#8a9bab","#8fb4da","#0b1c2d","rgba(143,180,218,.13)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"navy",name:"Navy",group:"blue",light:["#edf1f9","#ffffff","#f2f5fb","#d4dcee","#22304d","#0a1430","#53628a","#1f5fd1","#ffffff","rgba(31,95,209,.09)","#9a5b00","rgba(154,91,0,.10)"],dark:["#060e1d","#0c172b","#112038","#1c2f4d","#c7d4ec","#eff4ff","#8799be","#5aa2ff","#031230","rgba(90,162,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"amber",name:"Amber",group:"other",light:["#f0f3f6","#ffffff","#f5f7f9","#dce2e9","#2a3540","#0e1720","#586674","#a85f00","#ffffff","rgba(168,95,0,.10)","#6446d6","rgba(100,70,214,.09)"],dark:["#0b1016","#121920","#172029","#232e3a","#ced7e0","#f2f5f8","#8c99a7","#e8a33d","#1b1304","rgba(232,163,61,.12)","#a891ff","rgba(168,145,255,.12)"]},
+  {id:"harbour",name:"Harbour",group:"other",light:["#eef4f4","#ffffff","#f4f8f8","#d5e2e3","#243438","#0b1a1d","#526a70","#0b7c6e","#ffffff","rgba(11,124,110,.10)","#9a5b00","rgba(154,91,0,.10)"],dark:["#0a1215","#101a1e","#152227","#22343b","#cbdadd","#f0f6f7","#86a0a6","#3cc4b0","#04201b","rgba(60,196,176,.13)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"plum",name:"Plum",group:"other",light:["#f4f1f8","#ffffff","#f8f6fb","#e2dcec","#2e2840","#130f20","#615878","#7a3fc8","#ffffff","rgba(122,63,200,.09)","#9a5b00","rgba(154,91,0,.10)"],dark:["#0f0d14","#17141f","#1e1a28","#2d2739","#d6d0e2","#f6f3fb","#9890aa","#b98cf5","#170a2b","rgba(185,140,245,.14)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"graphite",name:"Graphite",group:"other",light:["#f1f2f3","#ffffff","#f6f7f8","#dcdfe2","#2a2e33","#101215","#5a6168","#1b1f24","#ffffff","rgba(27,31,36,.07)","#6446d6","rgba(100,70,214,.09)"],dark:["#0d0e10","#151719","#1b1d20","#2a2d31","#cfd2d6","#f4f5f6","#8e949b","#e9ebee","#0d0e10","rgba(233,235,238,.10)","#a891ff","rgba(168,145,255,.12)"]},
+  {id:"rose",name:"Rose",group:"other",light:["#f7f0f3","#ffffff","#faf5f7","#ead9e0","#3a2a33","#1d1017","#6d5662","#b4306b","#ffffff","rgba(180,48,107,.09)","#9a5b00","rgba(154,91,0,.10)"],dark:["#130c10","#1b1217","#23171d","#34222b","#e0d0d7","#fbf3f6","#a58f99","#f27aa8","#2b0715","rgba(242,122,168,.14)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"ember",name:"Ember",group:"other",light:["#f3f1f0","#ffffff","#f8f6f5","#e2dcd8","#34302d","#181412","#675f5a","#b8470f","#ffffff","rgba(184,71,15,.10)","#5b3fd0","rgba(91,63,208,.09)"],dark:["#110e0c","#191512","#211c18","#322a24","#dcd3cc","#f8f3ee","#9e9389","#ff8d4d","#2a1103","rgba(255,141,77,.14)","#b79bff","rgba(183,155,255,.13)"]},
+  {id:"stone",name:"Stone",group:"other",light:["#eeeeeb","#fcfcfb","#f4f4f1","#dcdcd6","#34342f","#171713","#636359","#4a49c9","#ffffff","rgba(74,73,201,.09)","#9a5b00","rgba(154,91,0,.10)"],dark:["#121210","#1a1a17","#21211d","#31312b","#d9d9d1","#f6f6f0","#98988c","#9a9cff","#12123a","rgba(154,156,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"pine",name:"Pine",group:"other",light:["#eef2ef","#ffffff","#f3f6f4","#d6e0da","#243229","#0c1710","#54675a","#8a6410","#ffffff","rgba(138,100,16,.10)","#6446d6","rgba(100,70,214,.09)"],dark:["#08110d","#0e1914","#13211b","#1f3329","#cbd9d0","#eff6f1","#85a090","#dcbc66","#261c03","rgba(220,188,102,.13)","#a891ff","rgba(168,145,255,.12)"]},
+  {id:"arctic",name:"Arctic",group:"other",light:["#eef5f6","#ffffff","#f3f8f9","#d2e2e5","#213a40","#0a1c21","#4f6d74","#0a7790","#ffffff","rgba(10,119,144,.10)","#9a5b00","rgba(154,91,0,.10)"],dark:["#081217","#0e1c22","#13262d","#1f3841","#c6dde3","#ecf8fb","#80a3ad","#55d3ea","#021e26","rgba(85,211,234,.13)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"copper",name:"Copper",group:"other",light:["#f3f0ee","#ffffff","#f8f5f3","#e3dad4","#3a302a","#1b1410","#6b5d53","#9c5527","#ffffff","rgba(156,85,39,.10)","#5b3fd0","rgba(91,63,208,.09)"],dark:["#120e0b","#1a1511","#221b16","#34281f","#ddd0c4","#f8f1ea","#a29080","#d9955a","#2a1507","rgba(217,149,90,.14)","#b79bff","rgba(183,155,255,.13)"]},
+  {id:"olive",name:"Olive",group:"other",light:["#f1f2ec","#ffffff","#f6f7f2","#dfe1d4","#2f3325","#14170c","#5e6350","#66701a","#ffffff","rgba(102,112,26,.11)","#6446d6","rgba(100,70,214,.09)"],dark:["#0f110a","#171a10","#1e2216","#2d3320","#d6dac6","#f5f7ea","#9aa384","#bccb5a","#1c2204","rgba(188,203,90,.13)","#a891ff","rgba(168,145,255,.12)"]},
+  {id:"orchid",name:"Orchid",group:"other",light:["#f6f0f7","#ffffff","#faf5fb","#e6d8e8","#36263a","#1b0f1f","#6a5470","#a2299e","#ffffff","rgba(162,41,158,.09)","#9a5b00","rgba(154,91,0,.10)"],dark:["#130b14","#1b111c","#231724","#35223a","#e2d0e4","#fcf3fd","#a98fae","#e078dc","#2b0829","rgba(224,120,220,.14)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"dusk",name:"Dusk",group:"other",light:["#f0eff3","#ffffff","#f5f4f8","#dedce7","#2e2c3c","#14131e","#5d5a73","#a84a1d","#ffffff","rgba(168,74,29,.10)","#4a56c9","rgba(74,86,201,.09)"],dark:["#0f0f17","#171722","#1e1e2b","#2c2c3d","#d3d2e0","#f4f3fb","#9291ab","#ffb08a","#2e1203","rgba(255,176,138,.13)","#9fb0ff","rgba(159,176,255,.13)"]}
+];
+var DATA = {
+  "_note": "Example data for every look's mockup. Same content in every look so they can be compared. All values are made up.",
+  "owner": "Alex",
+  "now": "Tue 24 Nov, 22:51 AWST",
+  "waiting_on_you": [
+    {"id": "it_a1", "title": "Approve renewal: barnyard.site domain", "age": "2 days", "lane": "needs you", "due": "28 Nov", "kind": "renewal"},
+    {"id": "it_a2", "title": "Sign off the Setup first run (installer 3f9a1c7e)", "age": "today", "lane": "needs you", "due": "", "kind": "approval"},
+    {"id": "it_a3", "title": "Choose the Barnyard look", "age": "today", "lane": "needs you", "due": "", "kind": "decision"},
+    {"id": "it_a4", "title": "Purge Cloudflare cache for old timeline file", "age": "done 01:00", "lane": "done", "due": "", "kind": "task"},
+    {"id": "it_a5", "title": "Backup restore test is overdue", "age": "5 days", "lane": "needs you", "due": "19 Nov", "kind": "overdue"}
+  ],
+  "in_progress": [
+    {"title": "Project Atlas: build step 1", "who": "Claude", "progress": "reads 7 of 9"},
+    {"title": "Landing page for signed-out visitors", "who": "Claude", "progress": "live"},
+    {"title": "Vulnerability clean-up (14 open)", "who": "you", "progress": "3 critical"}
+  ],
+  "services": [
+    {"name": "api.barnyard.site", "state": "up", "note": "212 ms"},
+    {"name": "dashboard.barnyard.site", "state": "up", "note": "98 ms"},
+    {"name": "APP-02", "state": "down", "note": "no reply for 14 min"},
+    {"name": "Backups (hourly copy)", "state": "degraded", "note": "last good 03:10"},
+    {"name": "Cloudflare tunnel", "state": "up", "note": "2 connectors"},
+    {"name": "Entra sign-in", "state": "up", "note": "token ok"}
+  ],
+  "since_last_looked": [
+    {"t": "21:40", "text": "Security cleared the Setup installer build"},
+    {"t": "20:12", "text": "Landing page deployed to the dashboard"},
+    {"t": "18:05", "text": "Two vulnerabilities marked fixed"},
+    {"t": "09:30", "text": "Hourly backup copy failed once, retried ok"}
+  ],
+  "week": [
+    {"day": "Tue", "items": ["Setup dry run (PC)"]},
+    {"day": "Wed", "items": ["Renewals review 10:00", "Domain check"]},
+    {"day": "Thu", "items": ["First real Setup run (laptop)"]},
+    {"day": "Fri", "items": []},
+    {"day": "Sat", "items": []},
+    {"day": "Sun", "items": ["Backup test"]},
+    {"day": "Mon", "items": ["sign-off sentence"]}
+  ],
+  "ops_board": [
+    {"lane": "Needs you", "n": 4},
+    {"lane": "In progress", "n": 3},
+    {"lane": "Soaking", "n": 6},
+    {"lane": "Backlog", "n": 27}
+  ],
+  "second_view_ops_rows": [
+    ["it_a2", "Sign off the Setup first run", "needs you", "today"],
+    ["it_a1", "Approve renewal: barnyard.site domain", "needs you", "28 Nov"],
+    ["it_a5", "Backup restore test is overdue", "needs you", "19 Nov"],
+    ["it_b1", "Project Atlas: build step 1", "in progress", "-"],
+    ["it_b2", "Vulnerability clean-up (14 open)", "in progress", "30 Nov"],
+    ["it_c1", "Cloudflare Access in front of the dashboard", "backlog", "-"],
+    ["it_c2", "VPS host purchase (late)", "backlog", "-"]
+  ]
+}
+;
+/* Shared runtime: applies a REAL theme from the themes.js table (12 colour tokens, light and dark), the status colours, the background class,
+   strength and density, and wires the mockup control strip. Each look calls Look.init({ id, name, theme, mode, bg, density, onChange }). */
+var COLOUR_VARS = ["--bg","--panel","--panel-2","--line","--fg","--fg-strong","--fg-dim","--accent","--accent-ink","--accent-soft","--attn","--attn-soft"];
+var STATUS = {
+  light: { "--ok":"#17794d","--ok-soft":"rgba(23,121,77,.10)","--alert":"#bd3326","--alert-soft":"rgba(189,51,38,.09)","--info":"#1d63b8","--info-soft":"rgba(29,99,184,.09)" },
+  dark:  { "--ok":"#4cc38a","--ok-soft":"rgba(76,195,138,.12)","--alert":"#ff7b6e","--alert-soft":"rgba(255,123,110,.12)","--info":"#6aaaf0","--info-soft":"rgba(106,170,240,.13)" }
+};
+var BACKGROUNDS = ["plain","glow","mesh","aurora","spotlight","horizon","dots","grid","blueprint","ledger","stripes","lattice","scales","beams","ripples","radar","contours","rays"];
+var Look = (function () {
+  var S = { theme: "stone", mode: "light", bg: "plain", bgs: "medium", density: "comfortable" }, cfg = {}, root = document.documentElement;
+  function theme(id) { for (var i = 0; i < THEMES.length; i++) if (THEMES[i].id === id) return THEMES[i]; return THEMES[0]; }
+  function apply() {
+    var t = theme(S.theme), set = S.mode === "dark" ? t.dark : t.light, st = STATUS[S.mode];
+    for (var i = 0; i < COLOUR_VARS.length; i++) root.style.setProperty(COLOUR_VARS[i], set[i]);
+    for (var k in st) root.style.setProperty(k, st[k]);
+    root.style.colorScheme = S.mode;
+    root.setAttribute("data-theme", S.mode); root.setAttribute("data-density", S.density); root.setAttribute("data-bgs", S.bgs); root.setAttribute("data-bg", S.bg);
+    var bg = document.getElementById("bg"); bg.className = "bg bgx-" + S.bg;
+    var sel = document.getElementById("mx-theme"); if (sel) sel.value = S.theme;
+    var b = document.getElementById("mx-bg"); if (b) b.value = S.bg;
+    var bs = document.getElementById("mx-bgs"); if (bs) bs.value = S.bgs;
+    document.querySelectorAll("[data-mode]").forEach(function (x) { x.setAttribute("aria-pressed", String(x.getAttribute("data-mode") === S.mode)); });
+    document.querySelectorAll("[data-density-btn]").forEach(function (x) { x.setAttribute("aria-pressed", String(x.getAttribute("data-density-btn") === S.density)); });
+    try { localStorage.setItem("look-" + cfg.id, JSON.stringify(S)); } catch (e) {}
+    if (cfg.onChange) cfg.onChange(S);
+  }
+  function option(v, t) { var o = document.createElement("option"); o.value = v; o.textContent = t; return o; }
+  function init(c) {
+    cfg = c; for (var k in c) if (k in S) S[k] = c[k];
+    try { var saved = JSON.parse(localStorage.getItem("look-" + c.id) || "null"); if (saved) for (var k2 in saved) if (k2 in S) S[k2] = saved[k2]; } catch (e) {}
+    // #theme=cobalt&mode=dark&bg=grid&bgs=strong&density=compact lets a link open a look in a given state (used for screenshots)
+    location.hash.replace(/^#/, "").split("&").forEach(function (p) { var kv = p.split("="); if (kv[0] in S && kv[1]) S[kv[0]] = decodeURIComponent(kv[1]); });
+    window.HASH = {}; location.hash.replace(/^#/, "").split("&").forEach(function (p) { var kv = p.split("="); if (kv[0]) window.HASH[kv[0]] = kv[1]; });
+    var mx = document.getElementById("mx");
+    mx.innerHTML = '<span><b>' + c.id + ' ' + c.name + '</b> (mockup)</span>' +
+      '<label>Theme <select id="mx-theme"></select></label>' +
+      '<span class="seg"><button type="button" data-mode="light">Light</button><button type="button" data-mode="dark">Dark</button></span>' +
+      '<label>Background <select id="mx-bg"></select></label>' +
+      '<label>Strength <select id="mx-bgs"><option>subtle</option><option>medium</option><option>strong</option></select></label>' +
+      '<span class="seg"><button type="button" data-density-btn="comfortable">Normal</button><button type="button" data-density-btn="compact">Compact</button></span>' +
+      '<span class="sp"></span><span class="hint">All 18 themes and 18 backgrounds are the real ones from themes.js and shell.css</span>';
+    var ts = document.getElementById("mx-theme"); THEMES.forEach(function (t) { ts.appendChild(option(t.id, t.name)); });
+    var bsel = document.getElementById("mx-bg"); BACKGROUNDS.forEach(function (b) { bsel.appendChild(option(b, b.charAt(0).toUpperCase() + b.slice(1))); });
+    ts.addEventListener("change", function () { S.theme = ts.value; apply(); });
+    bsel.addEventListener("change", function () { S.bg = bsel.value; apply(); });
+    document.getElementById("mx-bgs").addEventListener("change", function (e) { S.bgs = e.target.value; apply(); });
+    mx.addEventListener("click", function (e) {
+      var m = e.target.getAttribute && e.target.getAttribute("data-mode"); if (m) { S.mode = m; apply(); }
+      var d = e.target.getAttribute && e.target.getAttribute("data-density-btn"); if (d) { S.density = d; apply(); }
+    });
+    apply();
+  }
+  return { init: init, state: function () { return S; }, apply: apply, set: function (o) { for (var k in o) if (k in S) S[k] = o[k]; apply(); }, themes: function () { return THEMES; } };
+})();
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+(function () {
+  var D = DATA, view = "today", sel = 0, q = "", done = {}, snooze = {}, items = [], shown = [];
+  var FROM = { renewal: "Renewals", approval: "Security", decision: "You", task: "Ops", overdue: "Backups" };
+  var TXT = {
+    renewal: "The registrar renews this on the due date unless you decline. Open it to see the price and the payment method on file.",
+    approval: "The build is cleared and every file has been hashed. Your approval is by name and hash, in your own words, in this chat. Nothing runs before then.",
+    decision: "Six looks are ready for the dashboard, with every colour theme and background kept. Pick one, or ask for more.",
+    task: "Finished. Left here so the record is complete.",
+    overdue: "The last restore test was on 14 Nov. Run one this week so the hourly copy is proven."
+  };
+  function flagOf(w) { return w.kind === "overdue" ? "alert" : (w.lane === "done" ? "" : "attn"); }
+  function buildToday() {
+    var a = [];
+    D.waiting_on_you.forEach(function (w) { if (w.lane === "done") return; a.push({ id: w.id, g: "Needs you", from: FROM[w.kind], sub: w.title, when: w.age, flag: flagOf(w), unread: true, kind: w.kind, due: w.due, lane: w.lane, raised: w.age }); });
+    var sv = D.services.slice().sort(function (x, y) { var o = { down: 0, degraded: 1, up: 2 }; return o[x.state] - o[y.state]; });
+    sv.forEach(function (s, i) { a.push({ id: "sv" + i, g: "Services", from: s.name, sub: s.state === "up" ? "Up, " + s.note : s.state === "down" ? "Stopped answering: " + s.note : "Degraded: " + s.note, when: s.state === "up" ? "ok" : s.state, flag: s.state === "down" ? "alert" : s.state === "degraded" ? "attn" : "", unread: s.state !== "up", kind: "service", state: s.state, note: s.note }); });
+    D.in_progress.forEach(function (p, i) { a.push({ id: "ip" + i, g: "Running", from: p.who, sub: p.title, when: p.progress, flag: "", unread: false, kind: "run" }); });
+    D.since_last_looked.forEach(function (e, i) { a.push({ id: "ev" + i, g: "Tonight", from: "Log", sub: e.text, when: e.t, flag: "", unread: false, kind: "log" }); });
+    D.week.forEach(function (d, i) { if (d.items.length) a.push({ id: "wk" + i, g: "This week", from: d.day, sub: d.items.join("; "), when: d.day, flag: "", unread: false, kind: "cal" }); });
+    return a;
+  }
+  var FOLDERS = [["today", "Today", null], ["needs", "Needs you", "Needs you"], ["running", "Running", "Running"], ["soaking", "Soaking", null], ["backlog", "Backlog", null], ["services", "Services", "Services"], ["log", "Activity", "Tonight"], ["cal", "Calendar", "This week"], ["board", "Ops board", null]];
+  function folderCount(k) {
+    var n = items.filter(function (x) { return x.unread && !done[x.id]; });
+    if (k === "today") return n.length; if (k === "needs") return n.filter(function (x) { return x.g === "Needs you"; }).length;
+    if (k === "services") return n.filter(function (x) { return x.g === "Services"; }).length;
+    if (k === "running") return D.in_progress.length; if (k === "soaking") return D.ops_board[2].n; if (k === "backlog") return D.ops_board[3].n; if (k === "board") return D.second_view_ops_rows.length; return 0;
+  }
+  function render() {
+    items = buildToday();
+    var f = FOLDERS.filter(function (x) { return x[0] === view; })[0];
+    var board = view === "board" || view === "backlog" || view === "soaking";
+    if (board) {
+      var lane = view === "backlog" ? "backlog" : view === "soaking" ? "soaking" : null;
+      shown = D.second_view_ops_rows.filter(function (r) { return !lane || r[2] === lane; }).filter(match).map(function (r) { return { id: r[0], sub: r[1], lane: r[2], due: r[3], unread: r[2] === "needs you", flag: r[2] === "needs you" ? (r[0] === "it_a5" ? "alert" : "attn") : "", kind: "row", from: "Ops board" }; });
+    } else {
+      shown = items.filter(function (x) { return (!f || !f[2] || x.g === f[2]); }).filter(match);
+    }
+    if (sel >= shown.length) sel = Math.max(0, shown.length - 1);
+    // folders
+    var fh = ""; FOLDERS.forEach(function (x, i) {
+      if (i === 1) fh += '<div class="g-fh">Folders</div>'; if (i === 5) fh += '<div class="g-fh">Watching</div>'; if (i === 8) fh += '<div class="g-fh">Pages</div>';
+      var n = folderCount(x[0]); fh += '<button type="button" class="g-f' + (n && (x[0] === "today" || x[0] === "needs" || x[0] === "services") ? " has" : "") + (x[0] === "services" && n ? " flag" : "") + '" data-f="' + x[0] + '" aria-current="' + (x[0] === view) + '"><span>' + x[1] + '</span><span class="n">' + (n || "") + '</span></button>';
+    });
+    document.getElementById("g-folders").innerHTML = fh;
+    document.querySelector(".g-body").className = "g-body" + (board ? " wide" : "");
+    // list
+    var L = document.getElementById("g-list"), h = "";
+    if (!shown.length) h = '<div class="g-empty"><b style="color:var(--fg-strong)">' + (view === "soaking" ? "Nothing is soaking." : "Nothing here.") + '</b><br>Items that wait on a timer or on someone else appear in this folder.</div>';
+    else if (board) {
+      h = '<table class="g-tbl"><thead><tr><th></th><th>Item</th><th>Title</th><th>Lane</th><th class="num">Due</th></tr></thead><tbody>';
+      shown.forEach(function (r, i) { h += '<tr class="' + (r.unread && !done[r.id] ? "unread" : "") + '" data-i="' + i + '" aria-selected="' + (i === sel) + '"><td class="mk">' + (done[r.id] ? '<span class="tick">&#10003;</span>' : r.flag ? '<span class="pen ' + r.flag + '"></span>' : r.unread ? '<span class="dot"></span>' : "") + '</td><td class="id">' + r.id + '</td><td class="t">' + esc(r.sub) + '</td><td>' + esc(r.lane) + '</td><td class="num">' + esc(r.due) + '</td></tr>'; });
+      h += "</tbody></table>";
+    } else {
+      var last = ""; shown.forEach(function (x, i) {
+        if (x.g !== last) { var c = shown.filter(function (y) { return y.g === x.g; }).length; h += '<div class="g-gh">' + x.g + '<span>' + c + '</span></div>'; last = x.g; }
+        var mk = done[x.id] ? '<span class="tick">&#10003;</span>' : x.flag ? '<span class="pen ' + x.flag + '"></span>' : x.unread ? '<span class="dot"></span>' : "";
+        h += '<div class="g-row' + (x.unread && !done[x.id] ? " unread" : "") + (x.flag ? " flagged" : "") + (done[x.id] ? " done" : "") + '" data-i="' + i + '" aria-selected="' + (i === sel) + '"><span class="mk">' + mk + '</span><div class="l1"><span class="from">' + esc(x.from) + '</span><span class="when">' + esc(x.when) + '</span></div><div class="l2"><span class="sub">' + esc(x.sub) + '</span></div></div>';
+      });
+    }
+    L.innerHTML = h;
+    var cur = L.querySelector('[aria-selected="true"]'); if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: "nearest" });
+    reading(); status();
+  }
+  function match(x) { if (!q) return true; var s = (x.sub || x[1] || "") + " " + (x.from || "") + " " + (x.id || ""); return s.toLowerCase().indexOf(q.toLowerCase()) !== -1; }
+  function reading() {
+    var R = document.getElementById("g-read"), x = shown[sel];
+    if (!x) { R.innerHTML = '<div class="g-empty">Select an item to read it.</div>'; return; }
+    var meta = '<dt>From</dt><dd>' + esc(x.from || "Ops board") + '</dd>';
+    if (x.raised) meta += '<dt>Raised</dt><dd>' + esc(x.raised) + (/^\d/.test(x.raised) ? ' ago' : '') + '</dd>';
+    if (x.due) meta += '<dt>Due</dt><dd>' + esc(x.due) + '</dd>';
+    if (x.lane) meta += '<dt>Lane</dt><dd>' + esc(x.lane) + '</dd>';
+    if (x.state) meta += '<dt>State</dt><dd>' + esc(x.state) + '</dd>';
+    var body = TXT[x.kind] || (x.kind === "service" ? (x.state === "down" ? "No reply for " + esc(x.note.replace("no reply for ", "")) + ". Check the machine, then the tunnel. Nothing else depends on it tonight." : x.state === "degraded" ? "The last good copy was at " + esc(x.note.replace("last good ", "")) + ". The next hourly run will tell if it recovered." : "Answering normally.") : x.kind === "run" ? "Claude is working on this. You will see it here when it needs you." : x.kind === "log" ? "Recorded in the activity log." : x.kind === "cal" ? "Planned for this day." : "Open the item to see its steps and notes.");
+    var acts = "";
+    if (x.unread || x.flag) acts += '<button class="pri" type="button" data-a="open">Open item<kbd>Enter</kbd></button><button type="button" data-a="done">Mark done<kbd>e</kbd></button><button type="button" data-a="snooze">Snooze to Mon<kbd>s</kbd></button>';
+    else acts += '<button type="button" data-a="open">Open item<kbd>Enter</kbd></button>';
+    R.innerHTML = '<h1>' + esc(x.sub) + '</h1><dl class="g-meta">' + meta + '</dl><hr><p>' + body + '</p><div class="g-act">' + acts + '</div>';
+  }
+  function status() {
+    var down = D.services.filter(function (s) { return s.state === "down"; }).length, need = folderCount("needs");
+    document.getElementById("g-status").innerHTML = '<span><b>' + need + '</b> need you' + (down ? ' &middot; <span class="down">' + down + ' down</span>' : '') + ' &middot; synced 22:51</span><span><kbd>j</kbd><kbd>k</kbd> move <kbd>e</kbd> done <kbd>s</kbd> snooze <kbd>/</kbd> search <kbd>1</kbd> Today <kbd>2</kbd> Ops board</span>';
+  }
+  function act(a) {
+    var x = shown[sel]; if (!x) return;
+    if (a === "done") { done[x.id] = true; if (sel < shown.length - 1) sel++; render(); }
+    else if (a === "snooze") { snooze[x.id] = true; document.getElementById("g-status").firstChild.innerHTML += " &middot; snoozed"; }
+  }
+  document.getElementById("stage").innerHTML = '<div class="g"><header class="g-top"><span class="g-brand">Barnyard</span><label class="g-search"><span class="sr-only">Search</span><input id="g-q" placeholder="Search items  ( / )" autocomplete="off"></label><span class="sp"></span><span class="g-who">Alex</span></header><div class="g-body"><nav class="g-folders" id="g-folders" aria-label="Folders"></nav><section class="g-list" id="g-list" aria-label="Items"></section><article class="g-read" id="g-read"></article></div><footer class="g-status" id="g-status"></footer></div>';
+  document.getElementById("stage").addEventListener("click", function (e) {
+    var f = e.target.closest("[data-f]"); if (f) { view = f.getAttribute("data-f"); sel = 0; render(); return; }
+    var r = e.target.closest("[data-i]"); if (r) { sel = +r.getAttribute("data-i"); render(); return; }
+    var b = e.target.closest("[data-a]"); if (b) act(b.getAttribute("data-a"));
+  });
+  document.getElementById("g-q").addEventListener("input", function (e) { q = e.target.value; sel = 0; render(); });
+  document.addEventListener("keydown", function (e) {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.ctrlKey || e.metaKey) { if (e.key === "Escape") { e.target.blur(); } return; }
+    var k = e.key;
+    if (k === "j" || k === "ArrowDown") { sel = Math.min(shown.length - 1, sel + 1); render(); e.preventDefault(); }
+    else if (k === "k" || k === "ArrowUp") { sel = Math.max(0, sel - 1); render(); e.preventDefault(); }
+    else if (k === "e") act("done"); else if (k === "s") act("snooze");
+    else if (k === "/") { document.getElementById("g-q").focus(); e.preventDefault(); }
+    else if (k === "1") { view = "today"; sel = 0; render(); } else if (k === "2") { view = "board"; sel = 0; render(); }
+  });
+  Look.init({ id: "G", name: "Mailroom", theme: "steel", mode: "light", bg: "plain", density: "comfortable" });
+  if (window.HASH.view) { view = window.HASH.view; } if (window.HASH.sel) { sel = +window.HASH.sel; }
+  render();
+})();
+
+</script></body></html>

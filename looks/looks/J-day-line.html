@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../landing.css?v=92f5d814">
+<link rel="stylesheet" href="../gate-vars.css">
+<script src="../../landing.js?v=c2537ed8"></script>
+<script src="../gate-ready.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barnyard: Day Line (look J)</title>
+<style>
+/* Mockup controls only: neutral, small, never part of a look. */
+#mk-panel { position: fixed; z-index: 99; right: 12px; bottom: 12px; font: 12px/1.35 system-ui, "Segoe UI", sans-serif; color: var(--fg); background: var(--panel); border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(0,0,0,.25); max-width: 230px; }
+#mk-panel * { box-sizing: border-box; }
+#mk-toggle { display: block; width: 100%; padding: 6px 10px; font: inherit; font-weight: 600; text-align: left; color: var(--fg-strong); background: var(--panel-2); border: 0; cursor: pointer; }
+#mk-panel .mk-body { display: grid; gap: 7px; padding: 9px 10px 10px; }
+#mk-panel.mk-closed .mk-body { display: none; }
+#mk-panel .mk-f { display: grid; gap: 2px; }
+#mk-panel .mk-f > span { color: var(--fg-dim); }
+#mk-panel select { width: 100%; font: inherit; color: var(--fg-strong); background: var(--bg); border: 1px solid var(--line); padding: 3px 4px; }
+#mk-panel [data-mode] { font: inherit; padding: 3px 9px; color: var(--fg); background: var(--bg); border: 1px solid var(--line); cursor: pointer; margin-right: 4px; }
+#mk-panel [data-mode][aria-pressed="true"] { background: var(--fg-strong); color: var(--bg); }
+#mk-panel .mk-check { display: flex; gap: 6px; align-items: center; }
+#mk-panel .mk-note { color: var(--fg-dim); font-size: 11px; }
+#mk-panel :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* the site's background layer */
+.bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+:root[data-bgs="subtle"] .bg { opacity: .5; } :root[data-bgs="medium"] .bg { opacity: .85; } :root[data-bgs="strong"] .bg { opacity: 1; }
+
+.bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+:root[data-bgs="subtle"] .bg { opacity: .5; } :root[data-bgs="medium"] .bg { opacity: .85; } :root[data-bgs="strong"] .bg { opacity: 1; }
+.bgx-glow { background: radial-gradient(60% 55% at 88% -8%, color-mix(in srgb, var(--accent) 42%, transparent), transparent 72%), radial-gradient(50% 45% at -6% 104%, color-mix(in srgb, var(--attn) 34%, transparent), transparent 70%); }
+.bgx-mesh { background: radial-gradient(40% 40% at 12% 18%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 70%), radial-gradient(38% 40% at 86% 22%, color-mix(in srgb, var(--attn) 32%, transparent), transparent 70%), radial-gradient(44% 44% at 70% 92%, color-mix(in srgb, var(--info) 32%, transparent), transparent 70%), radial-gradient(36% 36% at 6% 86%, color-mix(in srgb, var(--ok) 24%, transparent), transparent 70%); }
+.bgx-aurora { background: linear-gradient(112deg, transparent 12%, color-mix(in srgb, var(--accent) 34%, transparent) 34%, color-mix(in srgb, var(--attn) 32%, transparent) 50%, color-mix(in srgb, var(--info) 30%, transparent) 66%, transparent 88%), radial-gradient(60% 50% at 20% 100%, color-mix(in srgb, var(--attn) 20%, transparent), transparent 70%); background-size: 160% 70%, 100% 100%; background-repeat: no-repeat; background-position: 30% 0, 0 0; -webkit-mask-image: linear-gradient(180deg, #000 20%, transparent 95%); mask-image: linear-gradient(180deg, #000 20%, transparent 95%); }
+.bgx-spotlight { background: radial-gradient(34% 42% at 50% -6%, color-mix(in srgb, var(--fg-strong) 22%, transparent), transparent 72%), radial-gradient(80% 62% at 50% -12%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 74%); }
+.bgx-horizon { background: linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--accent) 26%, transparent) 75%, color-mix(in srgb, var(--attn) 38%, transparent) 100%), repeating-linear-gradient(180deg, transparent 0 22px, color-mix(in srgb, var(--accent) 12%, transparent) 22px 23px); }
+.bgx-dots { background-image: radial-gradient(color-mix(in srgb, var(--fg-dim) 60%, transparent) 1.2px, transparent 1.6px); background-size: 24px 24px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 85%); mask-image: linear-gradient(180deg, #000, transparent 85%); }
+.bgx-grid { background-image: linear-gradient(color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px); background-size: 44px 44px; -webkit-mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); }
+.bgx-blueprint { background-image: linear-gradient(color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px); background-size: 110px 110px, 110px 110px, 22px 22px, 22px 22px; -webkit-mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); }
+.bgx-ledger { background-image: linear-gradient(90deg, transparent calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 25px), transparent calc(var(--side-w) + 25px)), repeating-linear-gradient(180deg, transparent 0 31px, color-mix(in srgb, var(--fg-dim) 28%, transparent) 31px 32px); }
+.bgx-stripes { background: repeating-linear-gradient(135deg, transparent 0 16px, color-mix(in srgb, var(--fg-dim) 30%, transparent) 16px 17px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.bgx-lattice { background: repeating-linear-gradient(45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px), repeating-linear-gradient(-45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.bgx-scales { background-image: radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px), radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px); background-size: 28px 14px, 28px 14px; background-position: 0 0, 14px 7px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 88%); mask-image: linear-gradient(180deg, #000, transparent 88%); }
+.bgx-beams { background: repeating-linear-gradient(90deg, transparent 0 22px, color-mix(in srgb, var(--accent) 34%, transparent) 22px 24px, transparent 24px 41px, color-mix(in srgb, var(--attn) 28%, transparent) 41px 42px, transparent 42px 64px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 82%); mask-image: linear-gradient(180deg, #000, transparent 82%); }
+.bgx-ripples { background: repeating-radial-gradient(circle at 92% -6%, transparent 0 38px, color-mix(in srgb, var(--accent) 40%, transparent) 38px 39px), repeating-radial-gradient(circle at -4% 104%, transparent 0 46px, color-mix(in srgb, var(--attn) 34%, transparent) 46px 47px); -webkit-mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); }
+.bgx-radar { background: repeating-radial-gradient(circle at 80% 20%, transparent 0 64px, color-mix(in srgb, var(--accent) 34%, transparent) 64px 65px), linear-gradient(90deg, transparent calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% + .5px), transparent calc(80% + .5px)), linear-gradient(180deg, transparent calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% + .5px), transparent calc(20% + .5px)), conic-gradient(from 190deg at 80% 20%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 55deg); -webkit-mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); }
+.bgx-contours { background: repeating-radial-gradient(ellipse 70% 45% at 18% 28%, transparent 0 24px, color-mix(in srgb, var(--accent) 34%, transparent) 24px 25px), repeating-radial-gradient(ellipse 50% 75% at 86% 78%, transparent 0 28px, color-mix(in srgb, var(--attn) 32%, transparent) 28px 29px), repeating-radial-gradient(ellipse 40% 30% at 62% 8%, transparent 0 30px, color-mix(in srgb, var(--info) 24%, transparent) 30px 31px); }
+.bgx-rays { background: repeating-conic-gradient(from 180deg at 100% 0%, color-mix(in srgb, var(--accent) 30%, transparent) 0 3deg, transparent 3deg 9deg); -webkit-mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); }
+
+/* ============ LOOK J: DAY LINE. The page is a time axis. Everything sits where it happens; a line marks now. ============ */
+:root { --font-body: "IBM Plex Sans", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; --font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, ui-monospace, monospace; --fs: 14px; --pad: 10px; --gut: 56px; --side-w: 110px; }
+:root[data-density="compact"] { --fs: 13px; --pad: 5px; }
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { margin: 0; min-height: 100vh; color: var(--fg); background: transparent; font: var(--fs)/1.45 var(--font-body); }
+#page { position: relative; z-index: 1; max-width: 1060px; margin: 0 auto; padding: 0 28px 120px; }
+.sheet { background: color-mix(in srgb, var(--bg) 90%, transparent); padding: 0 0 40px; min-height: 100vh; }
+a, button { font: inherit; }
+:focus-visible { outline: 2px solid var(--fg-strong); outline-offset: 2px; }
+/* top bar: the only chrome. Words, not boxes. */
+.top { display: flex; align-items: baseline; gap: 28px; padding: 16px 0 12px; border-bottom: 1px solid var(--line); }
+.top .name { font-weight: 600; color: var(--fg-strong); letter-spacing: .01em; }
+.top nav { display: flex; gap: 22px; }
+.top nav button { background: none; border: 0; padding: 2px 0; color: var(--fg-dim); cursor: pointer; border-bottom: 2px solid transparent; }
+.top nav button[aria-current="page"] { color: var(--fg-strong); border-bottom-color: var(--fg-strong); }
+.top .who { margin-left: auto; color: var(--fg-dim); }
+/* the sentence at the top is the summary */
+.says { margin: 26px 0 6px; font-size: calc(var(--fs) * 1.85); line-height: 1.28; font-weight: 500; color: var(--fg-strong); max-width: 30em; text-wrap: balance; }
+.how { margin: 0 0 24px; color: var(--fg-dim); max-width: 46em; }
+/* the line */
+.line { position: relative; list-style: none; margin: 0; padding: 0; }
+.r, .day, .gap, .now { display: grid; grid-template-columns: var(--gut) 66px 20px minmax(0, 1fr) 190px; align-items: baseline; column-gap: 10px; }
+.r > *, .now > * { min-width: 0; }
+.day { padding: calc(var(--pad) * 1.6) 0 2px; }
+.day .d { grid-column: 2 / 5; font-weight: 600; color: var(--fg-strong); }
+.gap { color: var(--fg-dim); padding: 2px 0; }
+.gap .tx { grid-column: 4 / 6; font-style: italic; }
+.r { padding: var(--pad) 0; }
+.r time, .now time { grid-column: 2; text-align: right; font: 12.5px var(--font-mono); color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+.r .m, .now .m { grid-column: 3; position: relative; align-self: stretch; }
+.r .m::before, .day::after { content: ""; position: absolute; left: 50%; top: calc(var(--pad) * -1); bottom: calc(var(--pad) * -1); width: 2px; margin-left: -1px; background: var(--line); }
+.r .m::after { content: ""; position: absolute; left: 50%; top: .38em; width: 11px; height: 11px; margin-left: -5.5px; background: var(--bg); border: 2px solid var(--fg-dim); border-radius: 50%; }
+.r.need .m::after { border-radius: 0; background: var(--attn); border-color: var(--attn); }
+.r.down .m::after { border-radius: 0; transform: rotate(45deg); background: var(--alert); border-color: var(--alert); }
+.r.done .m::after { background: var(--ok); border-color: var(--ok); }
+.r.future .m::after { border-style: dashed; }
+.r.need.future .m::after { background: var(--bg); border-color: var(--attn); border-style: solid; border-radius: 0; }
+.r .tx { color: var(--fg); }
+.r.need .tx, .r.down .tx { color: var(--fg-strong); font-weight: 600; }
+.r .side { text-align: right; color: var(--fg-dim); font-size: .93em; }
+.tag { font-weight: 600; }
+.r.need .side .tag { color: var(--fg-strong); }
+.day::after { top: auto; bottom: -6px; height: 0; }
+/* now */
+.now { position: relative; padding: 9px 0; }
+.now time { grid-column: 2; justify-self: end; background: var(--accent); color: var(--accent-ink); padding: 1px 6px; font-weight: 600; z-index: 1; }
+.now::before { content: ""; position: absolute; left: var(--gut); right: 0; top: 50%; height: 2px; background: var(--accent); }
+.now .m { display: none; }
+.now .lbl { grid-column: 4; z-index: 1; justify-self: start; background: color-mix(in srgb, var(--bg) 96%, transparent); padding: 0 8px 0 6px; color: var(--fg-strong); font-weight: 600; }
+/* duration bars in the gutter: from when it started until now */
+.lane { position: absolute; width: 10px; z-index: 0; }
+.lane.solid { background: var(--alert); }
+.lane.dash { background: repeating-linear-gradient(180deg, var(--attn) 0 6px, transparent 6px 10px); }
+.lane.dot { background: repeating-linear-gradient(180deg, var(--attn) 0 3px, transparent 3px 7px); }
+.lane.cut::before { content: ""; position: absolute; left: -1px; top: -9px; border: 6px solid transparent; border-bottom: 8px solid currentColor; border-top: 0; }
+/* second view: the board by date */
+.board { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.board th { text-align: left; font-weight: 600; color: var(--fg-dim); padding: 0 12px 8px 0; border-bottom: 1px solid var(--line); }
+.board td { padding: var(--pad) 12px var(--pad) 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.board .id { font: 12.5px var(--font-mono); color: var(--fg-dim); }
+.board .ttl { color: var(--fg-strong); }
+.board .lane-t { white-space: nowrap; }
+.axis { position: relative; width: 264px; height: 22px; }
+.axis::before { content: ""; position: absolute; left: 0; right: 0; top: 10px; height: 2px; background: var(--line); }
+.axis .today { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); }
+.axis .pt { position: absolute; top: 5px; width: 12px; height: 12px; margin-left: -6px; background: var(--attn); }
+.axis .pt.far { background: var(--bg); border: 2px solid var(--attn); }
+.ticks { position: relative; width: 264px; height: 14px; font: 11px var(--font-mono); color: var(--fg-dim); } .ticks span { position: absolute; top: 0; transform: translateX(-50%); }
+.legend2 { color: var(--fg-dim); margin: 10px 0 0; }
+[hidden] { display: none !important; }
+@media (max-width: 760px) { #page { padding: 0 14px 120px; } .r, .day, .gap, .now { grid-template-columns: var(--gut) 50px 16px minmax(0,1fr); column-gap: 8px; } .r .side { grid-column: 4; text-align: left; } :root { --gut: 42px; } .board th:nth-child(4), .board td:nth-child(4), .legend2 { display: none; } .board th, .board td { padding-right: 8px; } .top { flex-wrap: wrap; gap: 8px 20px; } .top .who { margin-left: 0; width: 100%; } .now .lbl { grid-column: 4; } .axis, .ticks { width: 160px; } }
+@media (prefers-reduced-motion: no-preference) { .now::before { transition: opacity .2s; } }
+</style>
+</head>
+<body>
+<div id="page"><div class="sheet">
+  <header class="top">
+    <span class="name">Barnyard</span>
+    <nav aria-label="Pages"><button type="button" data-v="line" aria-current="page">Day line</button><button type="button" data-v="ops">Ops board</button></nav>
+    <span class="who">Alex &middot; <span data-mk-theme-name></span></span>
+  </header>
+  <main>
+    <section id="v-line" aria-labelledby="says">
+      <h1 class="says" id="says"></h1>
+      <p class="how">Time runs down the page. The line marks now. A bar on the left runs from when something started until now: solid is down, dashed is degraded, dotted is overdue.</p>
+      <ol class="line" id="line"></ol>
+    </section>
+    <section id="v-ops" hidden aria-labelledby="ops-h">
+      <h1 class="says" id="ops-h"></h1>
+      <p class="how">Every open item against a 12-day strip, 19 to 30 November. The vertical line is today (24 November).</p>
+      <table class="board" id="board"></table>
+      <p class="legend2">Filled square: due date. Hollow square: no date yet, shown at the end.</p>
+    </section>
+  </main>
+</div></div>
+<script>
+var MK_VARS=["--bg","--panel","--panel-2","--line","--fg","--fg-strong","--fg-dim","--accent","--accent-ink","--accent-soft","--attn","--attn-soft"];
+var MK_THEMES=[{"id":"cobalt","name":"Cobalt","group":"blue","light":["#f0f2f8","#ffffff","#f5f6fa","#dcdfec","#272e42","#0d1222","#566079","#2849d6","#ffffff","rgba(40,73,214,.09)","#a05a00","rgba(160,90,0,.10)"],"dark":["#0c0f15","#131821","#19202b","#252d3b","#cfd5e2","#f3f5fa","#8b94a8","#6c8cff","#070d24","rgba(108,140,255,.14)","#f0a54a","rgba(240,165,74,.13)"]},{"id":"azure","name":"Azure","group":"blue","light":["#eef4f9","#ffffff","#f3f8fc","#d3e1ee","#233546","#0b1b2b","#526a80","#0a68b0","#ffffff","rgba(10,104,176,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#091119","#0f1a25","#14212e","#1f3244","#c9d9e8","#eef6fd","#83a0b8","#3db4ff","#021a2c","rgba(61,180,255,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"ultra","name":"Ultramarine","group":"blue","light":["#f1f0fa","#ffffff","#f6f5fc","#deddf0","#2a2a4a","#11112b","#5c5c86","#3d3bd1","#ffffff","rgba(61,59,209,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0c0c18","#131324","#1a1a30","#292946","#d0d0ec","#f3f3ff","#9393bd","#8587ff","#0d0d38","rgba(133,135,255,.15)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"steel","name":"Steel","group":"blue","light":["#eff2f5","#ffffff","#f4f6f8","#d9dfe6","#2b3642","#101820","#586878","#35628f","#ffffff","rgba(53,98,143,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0d1217","#141b22","#19222b","#26323d","#cdd6df","#f0f4f8","#8a9bab","#8fb4da","#0b1c2d","rgba(143,180,218,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"navy","name":"Navy","group":"blue","light":["#edf1f9","#ffffff","#f2f5fb","#d4dcee","#22304d","#0a1430","#53628a","#1f5fd1","#ffffff","rgba(31,95,209,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#060e1d","#0c172b","#112038","#1c2f4d","#c7d4ec","#eff4ff","#8799be","#5aa2ff","#031230","rgba(90,162,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"amber","name":"Amber","group":"other","light":["#f0f3f6","#ffffff","#f5f7f9","#dce2e9","#2a3540","#0e1720","#586674","#a85f00","#ffffff","rgba(168,95,0,.10)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0b1016","#121920","#172029","#232e3a","#ced7e0","#f2f5f8","#8c99a7","#e8a33d","#1b1304","rgba(232,163,61,.12)","#a891ff","rgba(168,145,255,.12)"]},{"id":"harbour","name":"Harbour","group":"other","light":["#eef4f4","#ffffff","#f4f8f8","#d5e2e3","#243438","#0b1a1d","#526a70","#0b7c6e","#ffffff","rgba(11,124,110,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0a1215","#101a1e","#152227","#22343b","#cbdadd","#f0f6f7","#86a0a6","#3cc4b0","#04201b","rgba(60,196,176,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"plum","name":"Plum","group":"other","light":["#f4f1f8","#ffffff","#f8f6fb","#e2dcec","#2e2840","#130f20","#615878","#7a3fc8","#ffffff","rgba(122,63,200,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0f0d14","#17141f","#1e1a28","#2d2739","#d6d0e2","#f6f3fb","#9890aa","#b98cf5","#170a2b","rgba(185,140,245,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"graphite","name":"Graphite","group":"other","light":["#f1f2f3","#ffffff","#f6f7f8","#dcdfe2","#2a2e33","#101215","#5a6168","#1b1f24","#ffffff","rgba(27,31,36,.07)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0d0e10","#151719","#1b1d20","#2a2d31","#cfd2d6","#f4f5f6","#8e949b","#e9ebee","#0d0e10","rgba(233,235,238,.10)","#a891ff","rgba(168,145,255,.12)"]},{"id":"rose","name":"Rose","group":"other","light":["#f7f0f3","#ffffff","#faf5f7","#ead9e0","#3a2a33","#1d1017","#6d5662","#b4306b","#ffffff","rgba(180,48,107,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#130c10","#1b1217","#23171d","#34222b","#e0d0d7","#fbf3f6","#a58f99","#f27aa8","#2b0715","rgba(242,122,168,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"ember","name":"Ember","group":"other","light":["#f3f1f0","#ffffff","#f8f6f5","#e2dcd8","#34302d","#181412","#675f5a","#b8470f","#ffffff","rgba(184,71,15,.10)","#5b3fd0","rgba(91,63,208,.09)"],"dark":["#110e0c","#191512","#211c18","#322a24","#dcd3cc","#f8f3ee","#9e9389","#ff8d4d","#2a1103","rgba(255,141,77,.14)","#b79bff","rgba(183,155,255,.13)"]},{"id":"stone","name":"Stone","group":"other","light":["#eeeeeb","#fcfcfb","#f4f4f1","#dcdcd6","#34342f","#171713","#636359","#4a49c9","#ffffff","rgba(74,73,201,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#121210","#1a1a17","#21211d","#31312b","#d9d9d1","#f6f6f0","#98988c","#9a9cff","#12123a","rgba(154,156,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"pine","name":"Pine","group":"other","light":["#eef2ef","#ffffff","#f3f6f4","#d6e0da","#243229","#0c1710","#54675a","#8a6410","#ffffff","rgba(138,100,16,.10)","#6446d6","rgba(100,70,214,.09)"],"dark":["#08110d","#0e1914","#13211b","#1f3329","#cbd9d0","#eff6f1","#85a090","#dcbc66","#261c03","rgba(220,188,102,.13)","#a891ff","rgba(168,145,255,.12)"]},{"id":"arctic","name":"Arctic","group":"other","light":["#eef5f6","#ffffff","#f3f8f9","#d2e2e5","#213a40","#0a1c21","#4f6d74","#0a7790","#ffffff","rgba(10,119,144,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#081217","#0e1c22","#13262d","#1f3841","#c6dde3","#ecf8fb","#80a3ad","#55d3ea","#021e26","rgba(85,211,234,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"copper","name":"Copper","group":"other","light":["#f3f0ee","#ffffff","#f8f5f3","#e3dad4","#3a302a","#1b1410","#6b5d53","#9c5527","#ffffff","rgba(156,85,39,.10)","#5b3fd0","rgba(91,63,208,.09)"],"dark":["#120e0b","#1a1511","#221b16","#34281f","#ddd0c4","#f8f1ea","#a29080","#d9955a","#2a1507","rgba(217,149,90,.14)","#b79bff","rgba(183,155,255,.13)"]},{"id":"olive","name":"Olive","group":"other","light":["#f1f2ec","#ffffff","#f6f7f2","#dfe1d4","#2f3325","#14170c","#5e6350","#66701a","#ffffff","rgba(102,112,26,.11)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0f110a","#171a10","#1e2216","#2d3320","#d6dac6","#f5f7ea","#9aa384","#bccb5a","#1c2204","rgba(188,203,90,.13)","#a891ff","rgba(168,145,255,.12)"]},{"id":"orchid","name":"Orchid","group":"other","light":["#f6f0f7","#ffffff","#faf5fb","#e6d8e8","#36263a","#1b0f1f","#6a5470","#a2299e","#ffffff","rgba(162,41,158,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#130b14","#1b111c","#231724","#35223a","#e2d0e4","#fcf3fd","#a98fae","#e078dc","#2b0829","rgba(224,120,220,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"dusk","name":"Dusk","group":"other","light":["#f0eff3","#ffffff","#f5f4f8","#dedce7","#2e2c3c","#14131e","#5d5a73","#a84a1d","#ffffff","rgba(168,74,29,.10)","#4a56c9","rgba(74,86,201,.09)"],"dark":["#0f0f17","#171722","#1e1e2b","#2c2c3d","#d3d2e0","#f4f3fb","#9291ab","#ffb08a","#2e1203","rgba(255,176,138,.13)","#9fb0ff","rgba(159,176,255,.13)"]}];
+var MK_BACKGROUNDS=[{"id":"plain","name":"Plain","group":"light"},{"id":"glow","name":"Glow","group":"light"},{"id":"mesh","name":"Mesh","group":"light"},{"id":"aurora","name":"Aurora","group":"light"},{"id":"spotlight","name":"Spotlight","group":"light"},{"id":"horizon","name":"Horizon","group":"light"},{"id":"dots","name":"Dots","group":"pattern"},{"id":"grid","name":"Grid","group":"pattern"},{"id":"blueprint","name":"Blueprint","group":"pattern"},{"id":"ledger","name":"Ledger","group":"pattern"},{"id":"stripes","name":"Stripes","group":"pattern"},{"id":"lattice","name":"Lattice","group":"pattern"},{"id":"scales","name":"Scales","group":"pattern"},{"id":"beams","name":"Beams","group":"pattern"},{"id":"ripples","name":"Ripples","group":"ring"},{"id":"radar","name":"Radar","group":"ring"},{"id":"contours","name":"Contours","group":"ring"},{"id":"rays","name":"Rays","group":"ring"}];
+
+var MK_CONTENT = {
+  "_note": "Example data for every look's mockup. Same content in every look so they can be compared. All values are made up.",
+  "owner": "Alex",
+  "now": "Tue 24 Nov, 22:51 AWST",
+  "waiting_on_you": [
+    {"id": "it_a1", "title": "Approve renewal: barnyard.site domain", "age": "2 days", "lane": "needs you", "due": "28 Nov", "kind": "renewal"},
+    {"id": "it_a2", "title": "Sign off the Setup first run (installer 3f9a1c7e)", "age": "today", "lane": "needs you", "due": "", "kind": "approval"},
+    {"id": "it_a3", "title": "Choose the Barnyard look", "age": "today", "lane": "needs you", "due": "", "kind": "decision"},
+    {"id": "it_a4", "title": "Purge Cloudflare cache for old timeline file", "age": "done 01:00", "lane": "done", "due": "", "kind": "task"},
+    {"id": "it_a5", "title": "Backup restore test is overdue", "age": "5 days", "lane": "needs you", "due": "19 Nov", "kind": "overdue"}
+  ],
+  "in_progress": [
+    {"title": "Project Atlas: build step 1", "who": "Claude", "progress": "reads 7 of 9"},
+    {"title": "Landing page for signed-out visitors", "who": "Claude", "progress": "live"},
+    {"title": "Vulnerability clean-up (14 open)", "who": "you", "progress": "3 critical"}
+  ],
+  "services": [
+    {"name": "api.barnyard.site", "state": "up", "note": "212 ms"},
+    {"name": "dashboard.barnyard.site", "state": "up", "note": "98 ms"},
+    {"name": "APP-02", "state": "down", "note": "no reply for 14 min"},
+    {"name": "Backups (hourly copy)", "state": "degraded", "note": "last good 03:10"},
+    {"name": "Cloudflare tunnel", "state": "up", "note": "2 connectors"},
+    {"name": "Entra sign-in", "state": "up", "note": "token ok"}
+  ],
+  "since_last_looked": [
+    {"t": "21:40", "text": "Security cleared the Setup installer build"},
+    {"t": "20:12", "text": "Landing page deployed to the dashboard"},
+    {"t": "18:05", "text": "Two vulnerabilities marked fixed"},
+    {"t": "09:30", "text": "Hourly backup copy failed once, retried ok"}
+  ],
+  "week": [
+    {"day": "Tue", "items": ["Setup dry run (PC)"]},
+    {"day": "Wed", "items": ["Renewals review 10:00", "Domain check"]},
+    {"day": "Thu", "items": ["First real Setup run (laptop)"]},
+    {"day": "Fri", "items": []},
+    {"day": "Sat", "items": []},
+    {"day": "Sun", "items": ["Backup test"]},
+    {"day": "Mon", "items": ["sign-off sentence"]}
+  ],
+  "ops_board": [
+    {"lane": "Needs you", "n": 4},
+    {"lane": "In progress", "n": 3},
+    {"lane": "Soaking", "n": 6},
+    {"lane": "Backlog", "n": 27}
+  ],
+  "second_view_ops_rows": [
+    ["it_a2", "Sign off the Setup first run", "needs you", "today"],
+    ["it_a1", "Approve renewal: barnyard.site domain", "needs you", "28 Nov"],
+    ["it_a5", "Backup restore test is overdue", "needs you", "19 Nov"],
+    ["it_b1", "Project Atlas: build step 1", "in progress", "-"],
+    ["it_b2", "Vulnerability clean-up (14 open)", "in progress", "30 Nov"],
+    ["it_c1", "Cloudflare Access in front of the dashboard", "backlog", "-"],
+    ["it_c2", "VPS host purchase (late)", "backlog", "-"]
+  ]
+};
+/* Shared mockup controls (NOT part of any look): theme, light/dark, background, background strength, density.
+   Applies the REAL tokens of themes.js (12 colour variables per theme and mode) plus the fixed status colours of shell.css. */
+var MK = { theme: "amber", mode: "dark", bg: "plain", bgs: "medium", density: "comfortable", extra: {} };
+var MK_STATUS = {
+  light: { "--ok": "#17794d", "--ok-soft": "rgba(23,121,77,.10)", "--alert": "#bd3326", "--alert-soft": "rgba(189,51,38,.09)", "--info": "#1d63b8", "--info-soft": "rgba(29,99,184,.09)" },
+  dark: { "--ok": "#4cc38a", "--ok-soft": "rgba(76,195,138,.12)", "--alert": "#ff7b6e", "--alert-soft": "rgba(255,123,110,.12)", "--info": "#6aaaf0", "--info-soft": "rgba(106,170,240,.13)" }
+};
+function mkTheme(id) { for (var i = 0; i < MK_THEMES.length; i++) if (MK_THEMES[i].id === id) return MK_THEMES[i]; return MK_THEMES[0]; }
+function mkApply() {
+  var root = document.documentElement, th = mkTheme(MK.theme), set = th[MK.mode], i;
+  for (i = 0; i < MK_VARS.length; i++) root.style.setProperty(MK_VARS[i], set[i]);
+  var st = MK_STATUS[MK.mode]; for (var k in st) root.style.setProperty(k, st[k]);
+  root.style.setProperty("color-scheme", MK.mode);
+  root.setAttribute("data-theme", MK.mode); root.setAttribute("data-density", MK.density); root.setAttribute("data-bgs", MK.bgs);
+  var bg = document.getElementById("mk-bg"); if (bg) bg.className = "bg bgx-" + MK.bg;
+  var names = document.querySelectorAll("[data-mk-theme-name]"); for (i = 0; i < names.length; i++) names[i].textContent = th.name + ", " + MK.mode;
+  if (window.mkOnChange) window.mkOnChange(MK);
+}
+function mkEl(tag, attrs, kids) { var e = document.createElement(tag); for (var a in attrs || {}) { if (a === "text") e.textContent = attrs[a]; else e.setAttribute(a, attrs[a]); } (kids || []).forEach(function (k) { e.appendChild(k); }); return e; }
+function mkSelect(label, id, options, value, onchange) {
+  var s = mkEl("select", { id: id, "aria-label": label });
+  options.forEach(function (o) { if (o.group) { var g = mkEl("optgroup", { label: o.group }); o.items.forEach(function (it) { var op = mkEl("option", { value: it.id, text: it.name }); if (it.id === value) op.selected = true; g.appendChild(op); }); s.appendChild(g); } else { var op2 = mkEl("option", { value: o.id, text: o.name }); if (o.id === value) op2.selected = true; s.appendChild(op2); } });
+  s.addEventListener("change", function () { onchange(s.value); });
+  return mkEl("label", { class: "mk-f" }, [mkEl("span", { text: label }), s]);
+}
+function mkBuildControls(extras) {
+  var bgItems = function (g) { return MK_BACKGROUNDS.filter(function (b) { return b.group === g; }); };
+  var panel = mkEl("div", { id: "mk-panel", role: "group", "aria-label": "Mockup controls (not part of the look)" });
+  var head = mkEl("button", { type: "button", id: "mk-toggle", text: "Controls" }); head.addEventListener("click", function () { panel.classList.toggle("mk-closed"); });
+  var body = mkEl("div", { class: "mk-body" });
+  body.appendChild(mkSelect("Colour theme", "mk-theme", [{ group: "Blues", items: MK_THEMES.filter(function (t) { return t.group === "blue"; }) }, { group: "Others", items: MK_THEMES.filter(function (t) { return t.group !== "blue"; }) }], MK.theme, function (v) { MK.theme = v; mkApply(); }));
+  var modeRow = mkEl("div", { class: "mk-f" }, [mkEl("span", { text: "Mode" })]);
+  ["light", "dark"].forEach(function (m) { var b = mkEl("button", { type: "button", "data-mode": m, text: m === "light" ? "Light" : "Dark" }); b.addEventListener("click", function () { MK.mode = m; mkApply(); mkSync(); }); modeRow.appendChild(b); });
+  body.appendChild(modeRow);
+  body.appendChild(mkSelect("Background", "mk-bg-sel", [{ group: "Soft light", items: bgItems("light") }, { group: "Lines and patterns", items: bgItems("pattern") }, { group: "Rings and rays", items: bgItems("ring") }], MK.bg, function (v) { MK.bg = v; mkApply(); }));
+  body.appendChild(mkSelect("Strength", "mk-bgs", [{ id: "subtle", name: "Subtle" }, { id: "medium", name: "Medium" }, { id: "strong", name: "Strong" }], MK.bgs, function (v) { MK.bgs = v; mkApply(); }));
+  body.appendChild(mkSelect("Density", "mk-density", [{ id: "comfortable", name: "Comfortable" }, { id: "compact", name: "Compact" }], MK.density, function (v) { MK.density = v; mkApply(); }));
+  (extras || []).forEach(function (x) { var cb = mkEl("input", { type: "checkbox", id: "mk-x-" + x.id }); cb.checked = !!x.value; cb.addEventListener("change", function () { MK.extra[x.id] = cb.checked; mkApply(); }); MK.extra[x.id] = !!x.value; body.appendChild(mkEl("label", { class: "mk-f mk-check" }, [cb, mkEl("span", { text: x.label })])); });
+  body.appendChild(mkEl("div", { class: "mk-note", text: "Mockup controls. They stand in for Settings; the look itself is the page." }));
+  panel.appendChild(head); panel.appendChild(body); document.body.appendChild(panel);
+  if (MK.extra.panel === false) panel.classList.add("mk-closed");
+}
+function mkSync() { var bs = document.querySelectorAll("#mk-panel [data-mode]"); for (var i = 0; i < bs.length; i++) bs[i].setAttribute("aria-pressed", bs[i].getAttribute("data-mode") === MK.mode ? "true" : "false"); }
+function mkInit(extras) {
+  // deep link: #theme=cobalt&mode=light&bg=grid&bgs=strong&density=compact&view=ops&grid=1 (used for screenshots and sharing a state)
+  location.hash.replace(/^#/, "").split("&").forEach(function (kv) { var p = kv.split("="); if (p.length !== 2) return; var k = decodeURIComponent(p[0]), v = decodeURIComponent(p[1]); if (["theme", "mode", "bg", "bgs", "density"].indexOf(k) > -1) MK[k] = v; else if (k === "view") MK.view = v; else MK.extra[k] = v === "1"; });
+  (extras || []).forEach(function (x) { if (MK.extra[x.id] !== undefined) x.value = MK.extra[x.id]; });
+  var bg = document.createElement("div"); bg.id = "mk-bg"; bg.className = "bg bgx-plain"; document.body.insertBefore(bg, document.body.firstChild);
+  mkBuildControls(extras); mkApply(); mkSync();
+}
+
+(function () {
+  "use strict";
+  var C = MK_CONTENT, line = document.getElementById("line");
+  function tm(s) { var m = /(\d{1,2}):(\d{2})/.exec(s || ""); return m ? (+m[1]) * 60 + (+m[2]) : null; }
+  function hhmm(n) { return ("0" + Math.floor(n / 60)).slice(-2) + ":" + ("0" + (n % 60)).slice(-2); }
+  var nowMin = tm(C.now);                                               // 22:51
+  var down = C.services.filter(function (s) { return s.state === "down"; });
+  var degraded = C.services.filter(function (s) { return s.state === "degraded"; });
+  var needs = C.waiting_on_you.filter(function (w) { return w.lane === "needs you"; });
+  var dayNames = { Tue: "Tue 24 Nov", Wed: "Wed 25 Nov", Thu: "Thu 26 Nov", Fri: "Fri 27 Nov", Sat: "Sat 28 Nov", Sun: "Sun 29 Nov", Mon: "Mon 30 Nov" };
+  var dayOf = { "28 Nov": "Sat 28 Nov", "19 Nov": "Mon 19 Nov" };
+
+  // headline: the one sentence a person needs
+  var d0 = down[0], dm = d0 ? (/(\d+) min/.exec(d0.note) || [0, 0])[1] : 0;
+  document.getElementById("says").textContent = hhmm(nowMin) + " Tuesday. " + (d0 ? d0.name + " has not replied for " + dm + " minutes. " : "") + needs.length + " items need you.";
+  document.getElementById("ops-h").textContent = C.ops_board[0].n + " need you, " + C.ops_board[1].n + " in progress, " + C.ops_board[3].n + " waiting in the backlog.";
+
+  // rows: {day, t (minutes or null), kind, text, side, lane}
+  var rows = [];
+  rows.push({ day: "Mon 19 Nov", t: 0, time: "due", kind: "need", text: "Backup restore test", side: "overdue 5 days", bar: "dot" });
+  C.since_last_looked.forEach(function (e) { rows.push({ day: "Tue 24 Nov", t: tm(e.t), kind: "ev", text: e.text, side: "" }); });
+  rows.push({ day: "Tue 24 Nov", t: tm("03:10"), kind: "ev", text: "Last good copy from Backups", side: "degraded since", bar: "dash" });
+  rows.push({ day: "Tue 24 Nov", t: tm("01:00"), kind: "done", text: C.waiting_on_you[3].title, side: "done" });
+  if (d0) rows.push({ day: "Tue 24 Nov", t: nowMin - (+dm), kind: "down", text: d0.name + " stopped replying", side: "down " + dm + " min", bar: "solid" });
+  var undated = needs.filter(function (w) { return !w.due && w.id !== "it_a5"; });
+  var later = [];
+  C.week.forEach(function (d) { d.items.forEach(function (x) { later.push({ day: dayNames[d.day], t: tm(x), kind: "future", text: x.replace(/\s*\d{1,2}:\d{2}$/, ""), side: "" }); }); });
+  needs.filter(function (w) { return w.due === "28 Nov"; }).forEach(function (w) { later.push({ day: "Sat 28 Nov", t: null, kind: "need future", text: w.title, side: "due 28 Nov" }); });
+
+  var past = rows.filter(function (r) { return r.day === "Mon 19 Nov"; });
+  var today = rows.filter(function (r) { return r.day === "Tue 24 Nov"; }).sort(function (a, b) { return a.t - b.t; });
+  var order = ["Wed 25 Nov", "Thu 26 Nov", "Fri 27 Nov", "Sat 28 Nov", "Sun 29 Nov", "Mon 30 Nov"];
+
+  function li(cls, html) { var e = document.createElement("li"); e.className = cls; e.innerHTML = html; line.appendChild(e); return e; }
+  function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); }
+  function row(r, ids) {
+    var cls = "r " + (r.kind === "ev" ? "" : r.kind) + (r.kind.indexOf("future") > -1 ? " future" : "");
+    var t = r.time || (r.t == null ? "all day" : hhmm(r.t));
+    var side = r.kind.indexOf("need") > -1 && !r.side ? '<span class="tag">needs you</span>' : esc(r.side || "");
+    if (r.kind.indexOf("need") > -1 && r.side) side = '<span class="tag">needs you</span> ' + esc(r.side);
+    var e = li(cls.replace(/\s+/g, " "), '<span></span><time>' + esc(t) + '</time><span class="m"></span><span class="tx">' + esc(r.text) + '</span><span class="side">' + side + '</span>');
+    if (r.bar) { e.setAttribute("data-bar", r.bar); }
+    return e;
+  }
+  li("day", '<span></span><span class="d">Mon 19 Nov</span>'); past.forEach(function (r) { row(r); });
+  li("gap", '<span></span><span></span><span></span><span class="tx">Nothing else from 20 to 23 Nov</span>');
+  li("day", '<span></span><span class="d">Tue 24 Nov, today</span>');
+  var nowDone = false;
+  today.forEach(function (r) { row(r); });
+  var nowRow = li("now", '<span></span><time>' + hhmm(nowMin) + '</time><span class="m"></span><span class="lbl">now</span>'); nowRow.id = "nowrow";
+  undated.forEach(function (w) { row({ day: "Tue 24 Nov", t: nowMin, time: "now", kind: "need", text: w.title, side: w.age }); });
+  order.forEach(function (d) {
+    var items = later.filter(function (x) { return x.day === d; }).sort(function (a, b) { return (a.t == null ? -1 : a.t) - (b.t == null ? -1 : b.t); });
+    if (!items.length) { li("gap", '<span></span><span></span><span></span><span class="tx">' + d + ': nothing planned</span>'); return; }
+    li("day", '<span></span><span class="d">' + d + '</span>'); items.forEach(function (r) { row(r); });
+  });
+
+  // gutter bars, measured from the rows
+  function bars() {
+    var old = line.querySelectorAll(".lane"); for (var i = 0; i < old.length; i++) old[i].remove();
+    var base = line.getBoundingClientRect().top, now = document.getElementById("nowrow"), n = now.getBoundingClientRect(), lane = 0;
+    var els = line.querySelectorAll("[data-bar]");
+    for (var k = 0; k < els.length; k++) {
+      var r = els[k].getBoundingClientRect(), b = document.createElement("div"), kind = els[k].getAttribute("data-bar");
+      b.className = "lane " + kind + (kind === "dot" ? " cut" : ""); b.style.color = "var(--attn)";
+      b.style.left = (lane * 13) + "px"; b.style.top = (r.top - base + r.height / 2) + "px"; b.style.height = (n.top - r.top - r.height / 2 + n.height / 2) + "px";
+      b.setAttribute("aria-hidden", "true"); line.appendChild(b); lane++;
+    }
+  }
+
+  // second view: the board against a strip of days
+  var boardEl = document.getElementById("board");
+  function dayIndex(due) { var m = /^(\d{1,2}) Nov$/.exec(due || ""); return m ? (+m[1]) - 19 : null; }     // 0..11 for 19..30 Nov
+  var html = '<thead><tr><th>Item</th><th>Where</th><th>Due</th><th><div class="ticks"><span style="left:0">19</span><span style="left:27.3%">22</span><span style="left:54.5%">25</span><span style="left:81.8%">28</span><span style="left:100%">30</span></div></th></tr></thead><tbody>';
+  C.second_view_ops_rows.slice().sort(function (a, b) { var da = dayIndex(a[3]), db = dayIndex(b[3]); if (a[3] === "today") da = 5; if (b[3] === "today") db = 5; return (da == null ? 99 : da) - (db == null ? 99 : db); }).forEach(function (r) {
+    var di = r[3] === "today" ? 5 : dayIndex(r[3]); var x = di == null ? null : (di / 11 * 100);
+    html += '<tr><td class="ttl">' + esc(r[1]) + '<div class="id">' + esc(r[0]) + '</div></td><td class="lane-t">' + esc(r[2]) + '</td><td>' + esc(r[3] === "-" ? "no date" : r[3]) + '</td><td><div class="axis"><span class="today" style="left:' + (5 / 11 * 100) + '%"></span>' + (x == null ? '<span class="pt far" style="left:100%"></span>' : '<span class="pt" style="left:' + x + '%"></span>') + '</div></td></tr>';
+  });
+  boardEl.innerHTML = html + "</tbody>";
+
+  var tabs = document.querySelectorAll(".top nav button");
+  tabs.forEach(function (b) { b.addEventListener("click", function () {
+    tabs.forEach(function (o) { o.removeAttribute("aria-current"); }); b.setAttribute("aria-current", "page");
+    document.getElementById("v-line").hidden = b.dataset.v !== "line"; document.getElementById("v-ops").hidden = b.dataset.v !== "ops"; bars();
+  }); });
+  window.mkOnChange = function () { requestAnimationFrame(bars); };
+  mkInit([]);
+  if (MK.view === "ops") { tabs[1].click(); }
+  window.addEventListener("resize", bars); setTimeout(bars, 60); if (document.fonts && document.fonts.ready) document.fonts.ready.then(bars);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../landing.css?v=92f5d814">
+<link rel="stylesheet" href="../gate-vars.css">
+<script src="../../landing.js?v=c2537ed8"></script>
+<script src="../gate-ready.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barnyard - look Q: Classic Desktop (mockup)</title>
+<style>
+/* Look Q "Classic Desktop". A desktop-application look (title bars, menu bar, toolbar, tabs, list views, status bar, group boxes) drawn
+   from the 12 theme tokens. The grey "face" of every window is the theme's --line colour mixed a little toward --panel, so Cobalt gives a
+   cool Windows-2000-style slate, Stone a warm one, and the dark themes a dark classic. Bevels are CSS box-shadows (no images). */
+:root { --side-w: 0px; }
+.bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+:root[data-bgs="subtle"] .bg { opacity: .5; } :root[data-bgs="medium"] .bg { opacity: .85; } :root[data-bgs="strong"] .bg { opacity: 1; }
+.bgx-glow { background: radial-gradient(60% 55% at 88% -8%, color-mix(in srgb, var(--accent) 42%, transparent), transparent 72%), radial-gradient(50% 45% at -6% 104%, color-mix(in srgb, var(--attn) 34%, transparent), transparent 70%); }
+.bgx-mesh { background: radial-gradient(40% 40% at 12% 18%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 70%), radial-gradient(38% 40% at 86% 22%, color-mix(in srgb, var(--attn) 32%, transparent), transparent 70%), radial-gradient(44% 44% at 70% 92%, color-mix(in srgb, var(--info) 32%, transparent), transparent 70%), radial-gradient(36% 36% at 6% 86%, color-mix(in srgb, var(--ok) 24%, transparent), transparent 70%); }
+.bgx-aurora { background: linear-gradient(112deg, transparent 12%, color-mix(in srgb, var(--accent) 34%, transparent) 34%, color-mix(in srgb, var(--attn) 32%, transparent) 50%, color-mix(in srgb, var(--info) 30%, transparent) 66%, transparent 88%), radial-gradient(60% 50% at 20% 100%, color-mix(in srgb, var(--attn) 20%, transparent), transparent 70%); background-size: 160% 70%, 100% 100%; background-repeat: no-repeat; background-position: 30% 0, 0 0; -webkit-mask-image: linear-gradient(180deg, #000 20%, transparent 95%); mask-image: linear-gradient(180deg, #000 20%, transparent 95%); }
+.bgx-spotlight { background: radial-gradient(34% 42% at 50% -6%, color-mix(in srgb, var(--fg-strong) 22%, transparent), transparent 72%), radial-gradient(80% 62% at 50% -12%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 74%); }
+.bgx-horizon { background: linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--accent) 26%, transparent) 75%, color-mix(in srgb, var(--attn) 38%, transparent) 100%), repeating-linear-gradient(180deg, transparent 0 22px, color-mix(in srgb, var(--accent) 12%, transparent) 22px 23px); }
+.bgx-dots { background-image: radial-gradient(color-mix(in srgb, var(--fg-dim) 60%, transparent) 1.2px, transparent 1.6px); background-size: 24px 24px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 85%); mask-image: linear-gradient(180deg, #000, transparent 85%); }
+.bgx-grid { background-image: linear-gradient(color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px); background-size: 44px 44px; -webkit-mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); }
+.bgx-blueprint { background-image: linear-gradient(color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px); background-size: 110px 110px, 110px 110px, 22px 22px, 22px 22px; -webkit-mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); }
+.bgx-ledger { background-image: linear-gradient(90deg, transparent calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 25px), transparent calc(var(--side-w) + 25px)), repeating-linear-gradient(180deg, transparent 0 31px, color-mix(in srgb, var(--fg-dim) 28%, transparent) 31px 32px); }
+.bgx-stripes { background: repeating-linear-gradient(135deg, transparent 0 16px, color-mix(in srgb, var(--fg-dim) 30%, transparent) 16px 17px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.bgx-lattice { background: repeating-linear-gradient(45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px), repeating-linear-gradient(-45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.bgx-scales { background-image: radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px), radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px); background-size: 28px 14px, 28px 14px; background-position: 0 0, 14px 7px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 88%); mask-image: linear-gradient(180deg, #000, transparent 88%); }
+.bgx-beams { background: repeating-linear-gradient(90deg, transparent 0 22px, color-mix(in srgb, var(--accent) 34%, transparent) 22px 24px, transparent 24px 41px, color-mix(in srgb, var(--attn) 28%, transparent) 41px 42px, transparent 42px 64px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 82%); mask-image: linear-gradient(180deg, #000, transparent 82%); }
+.bgx-ripples { background: repeating-radial-gradient(circle at 92% -6%, transparent 0 38px, color-mix(in srgb, var(--accent) 40%, transparent) 38px 39px), repeating-radial-gradient(circle at -4% 104%, transparent 0 46px, color-mix(in srgb, var(--attn) 34%, transparent) 46px 47px); -webkit-mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); }
+.bgx-radar { background: repeating-radial-gradient(circle at 80% 20%, transparent 0 64px, color-mix(in srgb, var(--accent) 34%, transparent) 64px 65px), linear-gradient(90deg, transparent calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% + .5px), transparent calc(80% + .5px)), linear-gradient(180deg, transparent calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% + .5px), transparent calc(20% + .5px)), conic-gradient(from 190deg at 80% 20%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 55deg); -webkit-mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); }
+.bgx-contours { background: repeating-radial-gradient(ellipse 70% 45% at 18% 28%, transparent 0 24px, color-mix(in srgb, var(--accent) 34%, transparent) 24px 25px), repeating-radial-gradient(ellipse 50% 75% at 86% 78%, transparent 0 28px, color-mix(in srgb, var(--attn) 32%, transparent) 28px 29px), repeating-radial-gradient(ellipse 40% 30% at 62% 8%, transparent 0 30px, color-mix(in srgb, var(--info) 24%, transparent) 30px 31px); }
+.bgx-rays { background: repeating-conic-gradient(from 180deg at 100% 0%, color-mix(in srgb, var(--accent) 30%, transparent) 0 3deg, transparent 3deg 9deg); -webkit-mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); }
+* { box-sizing: border-box; }
+:root {
+  --face: color-mix(in srgb, var(--line) 78%, var(--panel));
+  --hi: #ffffff; --hi2: color-mix(in srgb, var(--face) 55%, #ffffff);
+  --sh: color-mix(in srgb, var(--fg-dim) 55%, var(--face)); --dk: color-mix(in srgb, #000000 62%, var(--face));
+  --ui: Tahoma, "Segoe UI", Verdana, Geneva, sans-serif; --mono: "Lucida Console", "Courier New", monospace;
+}
+:root[data-theme="dark"] {
+  --hi: color-mix(in srgb, #ffffff 26%, var(--face)); --hi2: color-mix(in srgb, #ffffff 11%, var(--face));
+  --sh: color-mix(in srgb, #000000 36%, var(--face)); --dk: #000000;
+}
+html { background: var(--bg); color: var(--fg); }
+body { margin: 0; font: 14px/1.35 var(--ui); background: transparent; color: var(--fg); }
+html[data-density="compact"] body { font-size: 13px; line-height: 1.25; }
+#desk { position: relative; z-index: 1; padding: 14px; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+.raised { background: var(--face); box-shadow: inset -1px -1px 0 var(--dk), inset 1px 1px 0 var(--hi), inset -2px -2px 0 var(--sh), inset 2px 2px 0 var(--hi2); }
+.sunken { background: var(--panel); color: var(--fg-strong); box-shadow: inset 1px 1px 0 var(--sh), inset -1px -1px 0 var(--hi), inset 2px 2px 0 var(--dk), inset -2px -2px 0 var(--hi2); }
+.win { padding: 3px; width: min(1100px, 100%); color: var(--fg-strong); }
+.win.dialog { width: min(560px, 100%); margin-left: 60px; }
+@media (max-width: 700px) { .win.dialog { margin-left: 0; } #desk { padding: 6px; } .body { flex-direction: column; } .tree { width: auto; max-height: 150px; } .titlebar .t { font-size: 12px; } .toolbar button { min-width: 0; padding: 3px 8px; } }
+.titlebar { display: flex; align-items: center; gap: 6px; height: 24px; padding: 2px 3px 2px 6px; background: var(--accent); color: var(--accent-ink); font-weight: bold; }
+.win.inactive > .titlebar { background: var(--fg-dim); color: var(--panel); }
+.titlebar .t { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.titlebar .cb { width: 18px; height: 16px; font: bold 11px/1 var(--ui); color: var(--fg-strong); padding: 0; text-align: center; }
+.menubar { display: flex; gap: 0; padding: 1px 2px; position: relative; border-bottom: 1px solid var(--sh); box-shadow: 0 1px 0 var(--hi); }
+.mi { position: relative; }
+.menubar button.m, .toolbar button, .tabs button, .dd button, button.btn { font: inherit; color: var(--fg-strong); background: transparent; border: 0; padding: 2px 9px; cursor: default; }
+.menubar button.m[aria-expanded="true"], .menubar button.m:hover { background: var(--accent); color: var(--accent-ink); }
+.dd { position: absolute; left: 0; top: 100%; min-width: 230px; padding: 2px; z-index: 20; display: none; }
+.dd.open { display: block; }
+.dd button { display: block; width: 100%; text-align: left; padding: 3px 16px 3px 22px; white-space: nowrap; }
+.dd button:hover, .dd button:focus-visible { background: var(--accent); color: var(--accent-ink); outline: 0; }
+.dd hr { border: 0; border-top: 1px solid var(--sh); border-bottom: 1px solid var(--hi); margin: 3px 2px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 3px; border-bottom: 1px solid var(--sh); box-shadow: 0 1px 0 var(--hi); }
+.toolbar button, button.btn { background: var(--face); box-shadow: inset -1px -1px 0 var(--dk), inset 1px 1px 0 var(--hi), inset -2px -2px 0 var(--sh), inset 2px 2px 0 var(--hi2); padding: 3px 12px; min-width: 64px; }
+.toolbar button:active, button.btn:active, .toolbar button.on { box-shadow: inset 1px 1px 0 var(--dk), inset -1px -1px 0 var(--hi), inset 2px 2px 0 var(--sh), inset -2px -2px 0 var(--hi2); padding: 4px 11px 2px 13px; }
+.toolbar .sep { width: 2px; height: 20px; margin: 0 3px; border-left: 1px solid var(--sh); border-right: 1px solid var(--hi); }
+.tabs { display: flex; gap: 0; padding: 6px 6px 0; }
+.tabs button { background: var(--face); padding: 3px 14px; margin-right: 2px; box-shadow: inset 1px 1px 0 var(--hi), inset -1px 0 0 var(--dk), inset 2px 2px 0 var(--hi2), inset -2px 0 0 var(--sh); position: relative; top: 1px; }
+.tabs button[aria-selected="true"] { padding-top: 5px; margin-top: -2px; top: 1px; z-index: 2; font-weight: bold; }
+.tabs button:not([aria-selected="true"]) { top: 2px; }
+.body { display: flex; gap: 6px; padding: 6px; min-height: 340px; box-shadow: inset 1px 1px 0 var(--hi), inset -1px -1px 0 var(--dk), inset -2px -2px 0 var(--sh); margin: 0 4px; }
+html[data-tree="hidden"] .tree { display: none; }
+.tree { width: 190px; flex: none; padding: 6px 4px; overflow: auto; font-size: 1em; }
+.tree ul { list-style: none; margin: 0; padding: 0; }
+.tree ul ul { padding-left: 16px; }
+.tree .g { font-family: var(--mono); font-size: .9em; margin-right: 4px; }
+.tree button { font: inherit; color: var(--fg-strong); background: transparent; border: 0; padding: 1px 4px; text-align: left; cursor: default; width: 100%; }
+.tree button[aria-current="page"], .tree button.sel { background: var(--accent); color: var(--accent-ink); }
+.pane { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 2px; overflow: auto; }
+fieldset { margin: 6px 0 2px; padding: 8px 10px 8px; border: 1px solid var(--sh); box-shadow: 1px 1px 0 var(--hi), inset 1px 1px 0 var(--hi); min-width: 0; }
+legend { padding: 0 4px; color: var(--fg-strong); font-weight: bold; }
+.list { width: 100%; border-collapse: separate; border-spacing: 0; }
+.list th { background: var(--face); color: var(--fg-strong); font-weight: normal; text-align: left; padding: 2px 8px; box-shadow: inset -1px -1px 0 var(--dk), inset 1px 1px 0 var(--hi), inset -2px -2px 0 var(--sh), inset 2px 2px 0 var(--hi2); white-space: nowrap; }
+.list td { padding: 2px 8px; border-bottom: 1px dotted var(--fg-dim); vertical-align: top; }
+html[data-density="compact"] .list td { padding: 0 8px; }
+.list tr.row { cursor: default; }
+.list tr.row.sel td { background: var(--accent); color: var(--accent-ink); border-bottom-color: var(--accent); }
+.list tr.done td { text-decoration: line-through; }
+.fieldwrap { padding: 2px; overflow: auto; }
+.lamp { display: inline-block; width: 11px; height: 11px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--dk); box-shadow: inset 1px 1px 0 var(--hi); }
+.lamp.up { background: var(--ok); } .lamp.down { background: var(--alert); } .lamp.degraded { background: var(--attn); }
+.id { font-family: var(--mono); font-size: .92em; }
+.statusbar { display: flex; gap: 3px; padding: 3px 4px 2px; }
+.statusbar .cell { padding: 2px 8px; box-shadow: inset 1px 1px 0 var(--sh), inset -1px -1px 0 var(--hi); color: var(--fg-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.statusbar .cell.grow { flex: 1; }
+.det { padding: 6px 8px; min-height: 3.2em; }
+.row2 { display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: center; margin: 3px 0; }
+.row2 label { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-strong); }
+select { font: inherit; color: var(--fg-strong); background: var(--panel); border: 0; padding: 2px 4px; box-shadow: inset 1px 1px 0 var(--sh), inset -1px -1px 0 var(--hi), inset 2px 2px 0 var(--dk), inset -2px -2px 0 var(--hi2); min-width: 9em; }
+input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); }
+button:focus-visible, select:focus-visible, input:focus-visible, tr.row:focus-visible { outline: 2px dotted var(--fg-strong); outline-offset: -4px; }
+.tabs button:focus-visible, .tree button:focus-visible { outline-offset: -3px; }
+.hidden { display: none !important; }
+.note { margin: 2px 0; color: var(--fg-strong); }
+</style>
+<script>window.LOOK_DEFAULTS = { id: "Q", theme: "cobalt", mode: "light", bg: "plain" };</script>
+</head>
+<body>
+<div class="bg bgx-plain" id="bg" aria-hidden="true"></div>
+<div id="desk">
+
+  <div class="win raised" id="mainwin" role="application" aria-label="Barnyard window">
+    <div class="titlebar"><span class="t" id="wtitle">Barnyard - Overview</span><span class="cb raised" aria-hidden="true">_</span><span class="cb raised" aria-hidden="true">[ ]</span><span class="cb raised" aria-hidden="true">x</span></div>
+    <div class="menubar" role="menubar" id="menubar">
+      <div class="mi"><button type="button" class="m" role="menuitem" aria-haspopup="true" aria-expanded="false" data-menu="file">File</button>
+        <div class="dd raised" role="menu" id="m-file"><button type="button" role="menuitem" data-act="refresh">Refresh</button><button type="button" role="menuitem" data-act="stub" data-label="Export a backup">Export a backup...</button><hr><button type="button" role="menuitem" data-act="stub" data-label="Sign out">Sign out</button></div></div>
+      <div class="mi"><button type="button" class="m" role="menuitem" aria-haspopup="true" aria-expanded="false" data-menu="view">View</button>
+        <div class="dd raised" role="menu" id="m-view"><button type="button" role="menuitem" data-act="v-overview" id="mv-ov">Overview</button><button type="button" role="menuitem" data-act="v-ops" id="mv-ops">Ops board</button><hr><button type="button" role="menuitem" data-act="tree" id="mv-tree">[x] Tree pane</button></div></div>
+      <div class="mi"><button type="button" class="m" role="menuitem" aria-haspopup="true" aria-expanded="false" data-menu="display">Display</button>
+        <div class="dd raised" role="menu" id="m-display"><button type="button" role="menuitem" data-act="m-light" id="md-light">( ) Light</button><button type="button" role="menuitem" data-act="m-dark" id="md-dark">( ) Dark</button><hr><button type="button" role="menuitem" data-act="density" id="md-dens">[ ] Compact rows</button><hr><button type="button" role="menuitem" data-act="settings">Display properties...</button></div></div>
+      <div class="mi"><button type="button" class="m" role="menuitem" aria-haspopup="true" aria-expanded="false" data-menu="help">Help</button>
+        <div class="dd raised" role="menu" id="m-help"><button type="button" role="menuitem" data-act="about">About this look</button></div></div>
+    </div>
+    <div class="toolbar" role="toolbar" aria-label="Actions">
+      <button type="button" data-act="refresh">Refresh</button>
+      <button type="button" data-act="open">Open</button>
+      <button type="button" data-act="mark">Mark done</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button type="button" data-act="v-ops">Ops board</button>
+      <button type="button" data-act="settings">Display...</button>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Pages"><button type="button" role="tab" id="tab-ov" data-act="v-overview" aria-selected="true">Overview</button><button type="button" role="tab" id="tab-ops" data-act="v-ops" aria-selected="false">Ops board</button></div>
+    <div class="body">
+      <nav class="tree sunken" aria-label="Pages and lanes" id="tree"></nav>
+      <section class="pane" id="view" role="tabpanel" aria-live="polite"></section>
+    </div>
+    <div class="statusbar" role="status"><span class="cell grow" id="st-msg">Ready</span><span class="cell" id="st-a"></span><span class="cell" id="st-b"></span><span class="cell">Tue 24 Nov, 22:51</span></div>
+  </div>
+
+  <div class="win raised dialog inactive" id="dlg" role="dialog" aria-label="Display properties">
+    <div class="titlebar"><span class="t">Display Properties</span><span class="cb raised" aria-hidden="true">?</span><button type="button" class="cb raised" data-act="close-settings" aria-label="Close Display Properties">x</button></div>
+    <div style="padding:8px 10px 10px">
+      <fieldset><legend>Colour scheme</legend>
+        <div class="row2"><label>Scheme <select data-ctl="theme"></select></label>
+          <label><input type="radio" name="qmode" value="light" data-ctl="mode"> Light</label>
+          <label><input type="radio" name="qmode" value="dark" data-ctl="mode"> Dark</label></div></fieldset>
+      <fieldset><legend>Desktop pattern</legend>
+        <div class="row2"><label>Pattern <select data-ctl="bg"></select></label>
+          <label>Strength <select data-ctl="bgs"><option value="subtle">subtle</option><option value="medium">medium</option><option value="strong">strong</option></select></label></div></fieldset>
+      <fieldset><legend>Layout</legend>
+        <div class="row2"><label><input type="radio" name="qdens" value="normal" data-ctl="density"> Normal rows</label>
+          <label><input type="radio" name="qdens" value="compact" data-ctl="density"> Compact rows</label>
+          <label><input type="checkbox" data-ctl="tree" data-on="full" data-off="hidden"> Show the tree pane</label></div>
+        <p class="note">The tree pane is this look's sidebar. Switching it off leaves the tabs and the toolbar.</p></fieldset>
+      <div style="text-align:right;margin-top:6px"><button type="button" class="btn" data-act="close-settings">Close</button></div>
+    </div>
+  </div>
+
+</div>
+<script>
+(function () {
+  "use strict";
+  var THEMES = [{"id":"cobalt","name":"Cobalt","group":"blue","light":["#f0f2f8","#ffffff","#f5f6fa","#dcdfec","#272e42","#0d1222","#566079","#2849d6","#ffffff","rgba(40,73,214,.09)","#a05a00","rgba(160,90,0,.10)"],"dark":["#0c0f15","#131821","#19202b","#252d3b","#cfd5e2","#f3f5fa","#8b94a8","#6c8cff","#070d24","rgba(108,140,255,.14)","#f0a54a","rgba(240,165,74,.13)"]},{"id":"azure","name":"Azure","group":"blue","light":["#eef4f9","#ffffff","#f3f8fc","#d3e1ee","#233546","#0b1b2b","#526a80","#0a68b0","#ffffff","rgba(10,104,176,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#091119","#0f1a25","#14212e","#1f3244","#c9d9e8","#eef6fd","#83a0b8","#3db4ff","#021a2c","rgba(61,180,255,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"ultra","name":"Ultramarine","group":"blue","light":["#f1f0fa","#ffffff","#f6f5fc","#deddf0","#2a2a4a","#11112b","#5c5c86","#3d3bd1","#ffffff","rgba(61,59,209,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0c0c18","#131324","#1a1a30","#292946","#d0d0ec","#f3f3ff","#9393bd","#8587ff","#0d0d38","rgba(133,135,255,.15)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"steel","name":"Steel","group":"blue","light":["#eff2f5","#ffffff","#f4f6f8","#d9dfe6","#2b3642","#101820","#586878","#35628f","#ffffff","rgba(53,98,143,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0d1217","#141b22","#19222b","#26323d","#cdd6df","#f0f4f8","#8a9bab","#8fb4da","#0b1c2d","rgba(143,180,218,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"navy","name":"Navy","group":"blue","light":["#edf1f9","#ffffff","#f2f5fb","#d4dcee","#22304d","#0a1430","#53628a","#1f5fd1","#ffffff","rgba(31,95,209,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#060e1d","#0c172b","#112038","#1c2f4d","#c7d4ec","#eff4ff","#8799be","#5aa2ff","#031230","rgba(90,162,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"amber","name":"Amber","group":"other","light":["#f0f3f6","#ffffff","#f5f7f9","#dce2e9","#2a3540","#0e1720","#586674","#a85f00","#ffffff","rgba(168,95,0,.10)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0b1016","#121920","#172029","#232e3a","#ced7e0","#f2f5f8","#8c99a7","#e8a33d","#1b1304","rgba(232,163,61,.12)","#a891ff","rgba(168,145,255,.12)"]},{"id":"harbour","name":"Harbour","group":"other","light":["#eef4f4","#ffffff","#f4f8f8","#d5e2e3","#243438","#0b1a1d","#526a70","#0b7c6e","#ffffff","rgba(11,124,110,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0a1215","#101a1e","#152227","#22343b","#cbdadd","#f0f6f7","#86a0a6","#3cc4b0","#04201b","rgba(60,196,176,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"plum","name":"Plum","group":"other","light":["#f4f1f8","#ffffff","#f8f6fb","#e2dcec","#2e2840","#130f20","#615878","#7a3fc8","#ffffff","rgba(122,63,200,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#0f0d14","#17141f","#1e1a28","#2d2739","#d6d0e2","#f6f3fb","#9890aa","#b98cf5","#170a2b","rgba(185,140,245,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"graphite","name":"Graphite","group":"other","light":["#f1f2f3","#ffffff","#f6f7f8","#dcdfe2","#2a2e33","#101215","#5a6168","#1b1f24","#ffffff","rgba(27,31,36,.07)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0d0e10","#151719","#1b1d20","#2a2d31","#cfd2d6","#f4f5f6","#8e949b","#e9ebee","#0d0e10","rgba(233,235,238,.10)","#a891ff","rgba(168,145,255,.12)"]},{"id":"rose","name":"Rose","group":"other","light":["#f7f0f3","#ffffff","#faf5f7","#ead9e0","#3a2a33","#1d1017","#6d5662","#b4306b","#ffffff","rgba(180,48,107,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#130c10","#1b1217","#23171d","#34222b","#e0d0d7","#fbf3f6","#a58f99","#f27aa8","#2b0715","rgba(242,122,168,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"ember","name":"Ember","group":"other","light":["#f3f1f0","#ffffff","#f8f6f5","#e2dcd8","#34302d","#181412","#675f5a","#b8470f","#ffffff","rgba(184,71,15,.10)","#5b3fd0","rgba(91,63,208,.09)"],"dark":["#110e0c","#191512","#211c18","#322a24","#dcd3cc","#f8f3ee","#9e9389","#ff8d4d","#2a1103","rgba(255,141,77,.14)","#b79bff","rgba(183,155,255,.13)"]},{"id":"stone","name":"Stone","group":"other","light":["#eeeeeb","#fcfcfb","#f4f4f1","#dcdcd6","#34342f","#171713","#636359","#4a49c9","#ffffff","rgba(74,73,201,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#121210","#1a1a17","#21211d","#31312b","#d9d9d1","#f6f6f0","#98988c","#9a9cff","#12123a","rgba(154,156,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"pine","name":"Pine","group":"other","light":["#eef2ef","#ffffff","#f3f6f4","#d6e0da","#243229","#0c1710","#54675a","#8a6410","#ffffff","rgba(138,100,16,.10)","#6446d6","rgba(100,70,214,.09)"],"dark":["#08110d","#0e1914","#13211b","#1f3329","#cbd9d0","#eff6f1","#85a090","#dcbc66","#261c03","rgba(220,188,102,.13)","#a891ff","rgba(168,145,255,.12)"]},{"id":"arctic","name":"Arctic","group":"other","light":["#eef5f6","#ffffff","#f3f8f9","#d2e2e5","#213a40","#0a1c21","#4f6d74","#0a7790","#ffffff","rgba(10,119,144,.10)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#081217","#0e1c22","#13262d","#1f3841","#c6dde3","#ecf8fb","#80a3ad","#55d3ea","#021e26","rgba(85,211,234,.13)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"copper","name":"Copper","group":"other","light":["#f3f0ee","#ffffff","#f8f5f3","#e3dad4","#3a302a","#1b1410","#6b5d53","#9c5527","#ffffff","rgba(156,85,39,.10)","#5b3fd0","rgba(91,63,208,.09)"],"dark":["#120e0b","#1a1511","#221b16","#34281f","#ddd0c4","#f8f1ea","#a29080","#d9955a","#2a1507","rgba(217,149,90,.14)","#b79bff","rgba(183,155,255,.13)"]},{"id":"olive","name":"Olive","group":"other","light":["#f1f2ec","#ffffff","#f6f7f2","#dfe1d4","#2f3325","#14170c","#5e6350","#66701a","#ffffff","rgba(102,112,26,.11)","#6446d6","rgba(100,70,214,.09)"],"dark":["#0f110a","#171a10","#1e2216","#2d3320","#d6dac6","#f5f7ea","#9aa384","#bccb5a","#1c2204","rgba(188,203,90,.13)","#a891ff","rgba(168,145,255,.12)"]},{"id":"orchid","name":"Orchid","group":"other","light":["#f6f0f7","#ffffff","#faf5fb","#e6d8e8","#36263a","#1b0f1f","#6a5470","#a2299e","#ffffff","rgba(162,41,158,.09)","#9a5b00","rgba(154,91,0,.10)"],"dark":["#130b14","#1b111c","#231724","#35223a","#e2d0e4","#fcf3fd","#a98fae","#e078dc","#2b0829","rgba(224,120,220,.14)","#f0b45a","rgba(240,180,90,.13)"]},{"id":"dusk","name":"Dusk","group":"other","light":["#f0eff3","#ffffff","#f5f4f8","#dedce7","#2e2c3c","#14131e","#5d5a73","#a84a1d","#ffffff","rgba(168,74,29,.10)","#4a56c9","rgba(74,86,201,.09)"],"dark":["#0f0f17","#171722","#1e1e2b","#2c2c3d","#d3d2e0","#f4f3fb","#9291ab","#ffb08a","#2e1203","rgba(255,176,138,.13)","#9fb0ff","rgba(159,176,255,.13)"]}];
+  var DATA = {"owner":"Alex","now":"Tue 24 Nov, 22:51 AWST","waiting_on_you":[{"id":"it_a1","title":"Approve renewal: barnyard.site domain","age":"2 days","lane":"needs you","due":"28 Nov","kind":"renewal"},{"id":"it_a2","title":"Sign off the Setup first run (installer 3f9a1c7e)","age":"today","lane":"needs you","due":"","kind":"approval"},{"id":"it_a3","title":"Choose the Barnyard look","age":"today","lane":"needs you","due":"","kind":"decision"},{"id":"it_a4","title":"Purge Cloudflare cache for old timeline file","age":"done 01:00","lane":"done","due":"","kind":"task"},{"id":"it_a5","title":"Backup restore test is overdue","age":"5 days","lane":"needs you","due":"19 Nov","kind":"overdue"}],"in_progress":[{"title":"Project Atlas: build step 1","who":"Claude","progress":"reads 7 of 9"},{"title":"Landing page for signed-out visitors","who":"Claude","progress":"live"},{"title":"Vulnerability clean-up (14 open)","who":"you","progress":"3 critical"}],"services":[{"name":"api.barnyard.site","state":"up","note":"212 ms"},{"name":"dashboard.barnyard.site","state":"up","note":"98 ms"},{"name":"APP-02","state":"down","note":"no reply for 14 min"},{"name":"Backups (hourly copy)","state":"degraded","note":"last good 03:10"},{"name":"Cloudflare tunnel","state":"up","note":"2 connectors"},{"name":"Entra sign-in","state":"up","note":"token ok"}],"since_last_looked":[{"t":"21:40","text":"Security cleared the Setup installer build"},{"t":"20:12","text":"Landing page deployed to the dashboard"},{"t":"18:05","text":"Two vulnerabilities marked fixed"},{"t":"09:30","text":"Hourly backup copy failed once, retried ok"}],"week":[{"day":"Tue","items":["Setup dry run (PC)"]},{"day":"Wed","items":["Renewals review 10:00","Domain check"]},{"day":"Thu","items":["First real Setup run (laptop)"]},{"day":"Fri","items":[]},{"day":"Sat","items":[]},{"day":"Sun","items":["Backup test"]},{"day":"Mon","items":["sign-off sentence"]}],"ops_board":[{"lane":"Needs you","n":4},{"lane":"In progress","n":3},{"lane":"Soaking","n":6},{"lane":"Backlog","n":27}],"second_view_ops_rows":[["it_a2","Sign off the Setup first run","needs you","today"],["it_a1","Approve renewal: barnyard.site domain","needs you","28 Nov"],["it_a5","Backup restore test is overdue","needs you","19 Nov"],["it_b1","Project Atlas: build step 1","in progress","-"],["it_b2","Vulnerability clean-up (14 open)","in progress","30 Nov"],["it_c1","Cloudflare Access in front of the dashboard","backlog","-"],["it_c2","VPS host purchase (late)","backlog","-"]]};
+  var KEYS = ["--bg", "--panel", "--panel-2", "--line", "--fg", "--fg-strong", "--fg-dim", "--accent", "--accent-ink", "--accent-soft", "--attn", "--attn-soft"];
+  var STATUS = {
+    light: { "--ok": "#17794d", "--ok-soft": "rgba(23,121,77,.10)", "--alert": "#bd3326", "--alert-soft": "rgba(189,51,38,.09)", "--info": "#1d63b8", "--info-soft": "rgba(29,99,184,.09)" },
+    dark: { "--ok": "#4cc38a", "--ok-soft": "rgba(76,195,138,.12)", "--alert": "#ff7b6e", "--alert-soft": "rgba(255,123,110,.12)", "--info": "#6aaaf0", "--info-soft": "rgba(106,170,240,.13)" }
+  };
+  var BGS = [
+    ["plain", "Plain", "Soft light"], ["glow", "Glow", "Soft light"], ["mesh", "Mesh", "Soft light"], ["aurora", "Aurora", "Soft light"], ["spotlight", "Spotlight", "Soft light"], ["horizon", "Horizon", "Soft light"],
+    ["dots", "Dots", "Lines and patterns"], ["grid", "Grid", "Lines and patterns"], ["blueprint", "Blueprint", "Lines and patterns"], ["ledger", "Ledger", "Lines and patterns"], ["stripes", "Stripes", "Lines and patterns"], ["lattice", "Lattice", "Lines and patterns"], ["scales", "Scales", "Lines and patterns"], ["beams", "Beams", "Lines and patterns"],
+    ["ripples", "Ripples", "Rings and rays"], ["radar", "Radar", "Rings and rays"], ["contours", "Contours", "Rings and rays"], ["rays", "Rays", "Rings and rays"]
+  ];
+  var D = window.LOOK_DEFAULTS || {};
+  var state = { theme: D.theme || "graphite", mode: D.mode || "light", bg: D.bg || "plain", bgs: "medium", density: "normal", view: "overview", tree: "full" };
+  var KEY = "looks-" + (D.id || "x");
+  try { var saved = JSON.parse(localStorage.getItem(KEY) || "null"); if (saved) for (var k in saved) if (k in state) state[k] = saved[k]; } catch (e) { /* storage may be blocked */ }
+  try {
+    var h = (location.hash || "").replace(/^#/, "");
+    h.split("&").forEach(function (kv) { var p = kv.split("="); if (p[0] in state && p[1]) state[p[0]] = decodeURIComponent(p[1]); });
+  } catch (e) { /* ignore */ }
+
+  function theme() { for (var i = 0; i < THEMES.length; i++) if (THEMES[i].id === state.theme) return THEMES[i]; return THEMES[0]; }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignore */ } }
+  function el(id) { return document.getElementById(id); }
+
+  function fillSelects() {
+    var ts = document.querySelectorAll('select[data-ctl="theme"]');
+    for (var i = 0; i < ts.length; i++) {
+      var s = ts[i], groups = { blue: "Blues", other: "Others" };
+      ["blue", "other"].forEach(function (g) {
+        var og = document.createElement("optgroup"); og.label = groups[g];
+        THEMES.filter(function (t) { return t.group === g; }).forEach(function (t) { var o = document.createElement("option"); o.value = t.id; o.textContent = t.name; og.appendChild(o); });
+        s.appendChild(og);
+      });
+    }
+    var bs = document.querySelectorAll('select[data-ctl="bg"]');
+    for (var j = 0; j < bs.length; j++) {
+      var cur = null, og2 = null;
+      BGS.forEach(function (b) {
+        if (b[2] !== cur) { cur = b[2]; og2 = document.createElement("optgroup"); og2.label = cur; bs[j].appendChild(og2); }
+        var o = document.createElement("option"); o.value = b[0]; o.textContent = b[1]; og2.appendChild(o);
+      });
+    }
+  }
+  function syncControls() {
+    var c = document.querySelectorAll("[data-ctl]");
+    for (var i = 0; i < c.length; i++) {
+      var k = c[i].getAttribute("data-ctl");
+      if (c[i].type === "radio") c[i].checked = String(state[k]) === c[i].value;
+      else if (c[i].type === "checkbox") c[i].checked = state[k] === (c[i].getAttribute("data-on") || "full");
+      else c[i].value = state[k];
+    }
+  }
+  function apply() {
+    var set = theme()[state.mode], r = document.documentElement;
+    KEYS.forEach(function (k, i) { r.style.setProperty(k, set[i]); });
+    var st = STATUS[state.mode]; for (var k in st) r.style.setProperty(k, st[k]);
+    r.setAttribute("data-theme", state.mode); r.setAttribute("data-bgs", state.bgs); r.setAttribute("data-density", state.density); r.setAttribute("data-tree", state.tree);
+    r.style.colorScheme = state.mode;
+    var bg = el("bg"); if (bg) bg.className = "bg bgx-" + state.bg;
+    save(); syncControls();
+    if (window.LOOK_RENDER) window.LOOK_RENDER(state, DATA);
+  }
+  function onCtl(e) {
+    var t = e.target, k = t.getAttribute && t.getAttribute("data-ctl"); if (!k) return;
+    if (t.type === "checkbox") state[k] = t.checked ? (t.getAttribute("data-on") || "full") : (t.getAttribute("data-off") || "hidden");
+    else state[k] = t.value;
+    apply();
+  }
+  document.addEventListener("change", onCtl);
+  window.LOOK = {
+    state: state, data: DATA, themes: THEMES, set: function (o) { for (var k in o) state[k] = o[k]; apply(); }, apply: apply, fill: fillSelects,
+    init: function () { fillSelects(); apply(); }
+  };
+
+  /* ---- contrast checking (sRGB, WCAG 2) over all 18 themes x light/dark ---- */
+  function parse(c) {
+    c = String(c).trim();
+    if (c.charAt(0) === "#") { if (c.length === 4) c = "#" + c[1] + c[1] + c[2] + c[2] + c[3] + c[3]; return [parseInt(c.substr(1, 2), 16), parseInt(c.substr(3, 2), 16), parseInt(c.substr(5, 2), 16), 1]; }
+    var m = c.match(/rgba?\(([^)]+)\)/); if (m) { var p = m[1].split(",").map(function (x) { return parseFloat(x); }); return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1]; }
+    return [0, 0, 0, 1];
+  }
+  function over(fg, bg) { var a = fg[3]; return [fg[0] * a + bg[0] * (1 - a), fg[1] * a + bg[1] * (1 - a), fg[2] * a + bg[2] * (1 - a), 1]; }
+  function mix(a, pct, b) { var p = pct / 100; return [a[0] * p + b[0] * (1 - p), a[1] * p + b[1] * (1 - p), a[2] * p + b[2] * (1 - p), 1]; }
+  function lum(c) { var f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); }
+  function ratio(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  function tokens(t, m) {
+    var o = {}, set = t[m];
+    KEYS.forEach(function (k, i) { o[k.slice(2)] = parse(set[i]); });
+    var st = STATUS[m]; for (var k in st) o[k.slice(2)] = parse(st[k]);
+    o.white = [255, 255, 255, 1]; o.black = [0, 0, 0, 1];
+    return o;
+  }
+  window.LOOK_CONTRAST = function (pairsFn) {
+    var fails = [], total = 0, worst = {};
+    THEMES.forEach(function (t) {
+      ["light", "dark"].forEach(function (m) {
+        var tok = tokens(t, m);
+        pairsFn(tok, { parse: parse, over: over, mix: mix }, m).forEach(function (p) {
+          total++; var r = ratio(over(p.fg, p.bg), p.bg);
+          if (!worst[p.label] || r < worst[p.label].r) worst[p.label] = { r: Math.round(r * 100) / 100, at: t.id + "/" + m };
+          if (r < p.min) fails.push({ pair: p.label, theme: t.id, mode: m, ratio: Math.round(r * 100) / 100, min: p.min });
+        });
+      });
+    });
+    return { checked: total, failures: fails, worst: worst };
+  };
+})();
+
+(function () {
+  var done = {}, sel = "it_a1", msg = "Ready", dlgOpen = true, openMenu = null;
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+  var LAMP = { up: "up", down: "down", degraded: "degraded" };
+  function needs(d) { return d.waiting_on_you.filter(function (x) { return x.lane === "needs you"; }); }
+  function overview(d) {
+    var rank = { down: 0, degraded: 1, up: 2 };
+    var svc = d.services.slice().sort(function (a, b) { return rank[a.state] - rank[b.state]; });
+    var h = '<fieldset><legend>Decisions and approvals</legend><div class="fieldwrap sunken"><table class="list" aria-label="Decisions and approvals"><thead><tr><th scope="col">Item</th><th scope="col">Kind</th><th scope="col">Open for</th><th scope="col">Due</th></tr></thead><tbody>';
+    needs(d).forEach(function (x) { h += '<tr class="row' + (sel === x.id ? " sel" : "") + (done[x.id] ? " done" : "") + '" tabindex="0" data-id="' + x.id + '" aria-selected="' + (sel === x.id) + '"><td>' + esc(x.title) + '</td><td>' + esc(x.kind) + '</td><td>' + esc(x.age) + '</td><td>' + (x.due || "-") + '</td></tr>'; });
+    h += '</tbody></table></div></fieldset>';
+    h += '<fieldset><legend>Services</legend><div class="fieldwrap sunken"><table class="list" aria-label="Services"><thead><tr><th scope="col">State</th><th scope="col">Service</th><th scope="col">Detail</th></tr></thead><tbody>';
+    svc.forEach(function (s) { h += '<tr><td><span class="lamp ' + LAMP[s.state] + '" aria-hidden="true"></span>' + s.state + '</td><td>' + esc(s.name) + '</td><td>' + esc(s.note) + '</td></tr>'; });
+    h += '</tbody></table></div></fieldset>';
+    h += '<fieldset><legend>In progress</legend><div class="fieldwrap sunken"><table class="list" aria-label="In progress"><thead><tr><th scope="col">Work</th><th scope="col">Who</th><th scope="col">Status</th></tr></thead><tbody>';
+    d.in_progress.forEach(function (x) { h += '<tr><td>' + esc(x.title) + '</td><td>' + esc(x.who) + '</td><td>' + esc(x.progress) + '</td></tr>'; });
+    h += '</tbody></table></div></fieldset>';
+    h += '<fieldset><legend>Changes today</legend><div class="fieldwrap sunken"><table class="list" aria-label="Changes today"><thead><tr><th scope="col">Time</th><th scope="col">Change</th></tr></thead><tbody>';
+    d.since_last_looked.forEach(function (x) { h += '<tr><td class="id">' + x.t + '</td><td>' + esc(x.text) + '</td></tr>'; });
+    h += '</tbody></table></div></fieldset>';
+    h += '<fieldset><legend>Next 7 days</legend><div class="fieldwrap sunken"><table class="list" aria-label="Next 7 days"><thead><tr><th scope="col">Day</th><th scope="col">Entries</th></tr></thead><tbody>';
+    d.week.forEach(function (w) { h += '<tr><td>' + w.day + '</td><td>' + (w.items.length ? w.items.map(esc).join("; ") : "none") + '</td></tr>'; });
+    h += '</tbody></table></div></fieldset>';
+    return h;
+  }
+  function ops(d) {
+    var h = '<fieldset><legend>Ops board: ' + d.ops_board.map(function (l) { return l.n + " " + l.lane.toLowerCase(); }).join(", ") + '</legend><div class="fieldwrap sunken"><table class="list" aria-label="Ops board items"><thead><tr><th scope="col">ID</th><th scope="col">Item</th><th scope="col">Lane</th><th scope="col">Due</th></tr></thead><tbody>';
+    d.second_view_ops_rows.forEach(function (r) { h += '<tr class="row' + (sel === r[0] ? " sel" : "") + (done[r[0]] ? " done" : "") + '" tabindex="0" data-id="' + r[0] + '" aria-selected="' + (sel === r[0]) + '"><td class="id">' + r[0] + '</td><td>' + esc(r[1]) + '</td><td>' + r[2] + '</td><td>' + r[3] + '</td></tr>'; });
+    h += '</tbody></table></div></fieldset>';
+    var cur = d.second_view_ops_rows.filter(function (r) { return r[0] === sel; })[0];
+    h += '<fieldset><legend>Details</legend><div class="det sunken">' + (cur ? '<strong>' + esc(cur[1]) + '</strong><br>' + cur[0] + ", lane: " + cur[2] + ", due: " + cur[3] + (done[cur[0]] ? ". Marked done." : ".") : "Select an item.") + '</div></fieldset>';
+    return h;
+  }
+  function tree(s, d) {
+    var cnt = {}; d.ops_board.forEach(function (l) { cnt[l.lane] = l.n; });
+    function b(label, extra, attrs) { return '<li><button type="button" ' + (attrs || "") + '>' + label + (extra || "") + '</button></li>'; }
+    var h = '<ul><li><span class="g">[-]</span>Barnyard<ul>';
+    h += b("Overview", "", 'data-act="v-overview"' + (s.view === "overview" ? ' aria-current="page"' : ""));
+    h += b("Ops board", "", 'data-act="v-ops"' + (s.view === "ops" ? ' aria-current="page"' : ""));
+    ["Monitoring", "Calendar", "Projects", "Vulnerabilities"].forEach(function (n) { h += b(n, "", 'data-act="stub" data-label="' + n + '"'); });
+    h += '</ul></li><li><span class="g">[-]</span>Lanes<ul>';
+    d.ops_board.forEach(function (l) { h += b(l.lane, " (" + l.n + ")", 'data-act="v-ops"'); });
+    return h + '</ul></li></ul>';
+  }
+  function status(s, d) {
+    var nd = needs(d).filter(function (x) { return !done[x.id]; }).length, down = d.services.filter(function (x) { return x.state === "down"; }).length;
+    document.getElementById("st-msg").textContent = msg;
+    document.getElementById("st-a").textContent = nd + " need you";
+    document.getElementById("st-b").textContent = down + " service down";
+  }
+  function menuChecks(s) {
+    function set(id, t) { var e = document.getElementById(id); if (e) e.textContent = t; }
+    set("mv-tree", (s.tree === "full" ? "[x]" : "[ ]") + " Tree pane");
+    set("md-light", (s.mode === "light" ? "(o)" : "( )") + " Light"); set("md-dark", (s.mode === "dark" ? "(o)" : "( )") + " Dark");
+    set("md-dens", (s.density === "compact" ? "[x]" : "[ ]") + " Compact rows");
+    set("mv-ov", (s.view === "overview" ? "(o)" : "( )") + " Overview"); set("mv-ops", (s.view === "ops" ? "(o)" : "( )") + " Ops board");
+  }
+  window.LOOK_RENDER = function (s, d) {
+    var ov = s.view !== "ops";
+    document.getElementById("view").innerHTML = ov ? overview(d) : ops(d);
+    document.getElementById("tree").innerHTML = tree(s, d);
+    document.getElementById("wtitle").textContent = "Barnyard - " + (ov ? "Overview" : "Ops board");
+    document.title = "Barnyard - " + (ov ? "Overview" : "Ops board") + " - look Q (Classic Desktop)";
+    document.getElementById("tab-ov").setAttribute("aria-selected", ov); document.getElementById("tab-ops").setAttribute("aria-selected", !ov);
+    document.getElementById("dlg").classList.toggle("hidden", !dlgOpen);
+    menuChecks(s); status(s, d);
+  };
+  function closeMenus() { var m = document.querySelectorAll(".dd.open"); for (var i = 0; i < m.length; i++) m[i].classList.remove("open"); var b = document.querySelectorAll("[data-menu]"); for (var j = 0; j < b.length; j++) b[j].setAttribute("aria-expanded", "false"); openMenu = null; }
+  function act(a, t) {
+    var S = LOOK.state;
+    if (a === "v-overview") LOOK.set({ view: "overview" });
+    else if (a === "v-ops") LOOK.set({ view: "ops" });
+    else if (a === "tree") LOOK.set({ tree: S.tree === "full" ? "hidden" : "full" });
+    else if (a === "m-light") LOOK.set({ mode: "light" });
+    else if (a === "m-dark") LOOK.set({ mode: "dark" });
+    else if (a === "density") LOOK.set({ density: S.density === "compact" ? "normal" : "compact" });
+    else if (a === "settings") { dlgOpen = true; LOOK.apply(); var f = document.querySelector('#dlg select'); if (f) f.focus(); }
+    else if (a === "close-settings") { dlgOpen = false; LOOK.apply(); }
+    else if (a === "refresh") { msg = "Refreshed at 22:51"; LOOK.apply(); }
+    else if (a === "open") { msg = sel ? "Opened " + sel + " (not part of this mockup)" : "Select an item first"; LOOK.apply(); }
+    else if (a === "mark") { if (sel) { done[sel] = !done[sel]; msg = (done[sel] ? "Marked done: " : "Reopened: ") + sel; } else msg = "Select an item first"; LOOK.apply(); }
+    else if (a === "about") { msg = "Look Q: Classic Desktop. Mockup with example data."; LOOK.apply(); }
+    else if (a === "stub") { msg = (t.getAttribute("data-label") || "That page") + " is not part of this mockup."; LOOK.apply(); }
+  }
+  document.addEventListener("click", function (e) {
+    var m = e.target.closest ? e.target.closest("[data-menu]") : null;
+    if (m) { var id = m.getAttribute("data-menu"), dd = document.getElementById("m-" + id), was = dd.classList.contains("open"); closeMenus(); if (!was) { dd.classList.add("open"); m.setAttribute("aria-expanded", "true"); openMenu = m; } return; }
+    var r = e.target.closest ? e.target.closest("tr.row") : null;
+    if (r) { sel = r.getAttribute("data-id"); LOOK.apply(); return; }
+    var t = e.target.closest ? e.target.closest("[data-act]") : null;
+    closeMenus();
+    if (t) act(t.getAttribute("data-act"), t);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { if (openMenu) { var b = openMenu; closeMenus(); b.focus(); } }
+    else if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches("tr.row")) { e.preventDefault(); sel = e.target.getAttribute("data-id"); LOOK.apply(); var n = document.querySelector('tr.row[data-id="' + sel + '"]'); if (n) n.focus(); }
+    else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && e.target.matches && e.target.matches("tr.row")) { e.preventDefault(); var n2 = e.key === "ArrowDown" ? e.target.nextElementSibling : e.target.previousElementSibling; if (n2) n2.focus(); }
+    else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && openMenu) { var items = [].slice.call(document.querySelectorAll("#m-" + openMenu.getAttribute("data-menu") + " button")); var i = items.indexOf(document.activeElement); i = e.key === "ArrowDown" ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1); e.preventDefault(); items[i].focus(); }
+  });
+  LOOK.init();
+  /* contrast: the pairs this look puts text on, over all 18 themes x light/dark. face = line mixed 78% with panel, as in the CSS. */
+  window.LOOK_PAIRS = function (k, u) {
+    var face = u.mix(k.line, 78, k.panel);
+    return [
+      { label: "fg-strong on face (window, menus, buttons, tabs)", fg: k["fg-strong"], bg: face, min: 4.5 },
+      { label: "fg on face", fg: k.fg, bg: face, min: 4.5 },
+      { label: "fg-strong on panel (list views, tree, fields)", fg: k["fg-strong"], bg: k.panel, min: 4.5 },
+      { label: "accent-ink on accent (title bar, menu hover, selection)", fg: k["accent-ink"], bg: k.accent, min: 4.5 },
+      { label: "panel on fg-dim (inactive title bar)", fg: k.panel, bg: k["fg-dim"], min: 4.5 },
+      { label: "fg-dim on panel (dotted row rules only, not text)", fg: k["fg-dim"], bg: k.panel, min: 3 }
+    ];
+  };
+  if (/contrast=1/.test(location.hash)) { var pre = document.createElement("pre"); pre.id = "contrast-report"; pre.textContent = JSON.stringify(window.LOOK_CONTRAST(window.LOOK_PAIRS)); document.body.appendChild(pre); } /* dev check: open with #contrast=1 */
+})();
+</script>
+</body>
+</html>

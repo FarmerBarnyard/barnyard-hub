@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../landing.css?v=92f5d814">
+<link rel="stylesheet" href="../gate-vars.css">
+<script src="../../landing.js?v=c2537ed8"></script>
+<script src="../gate-ready.js"></script><meta name="viewport" content="width=device-width, initial-scale=1"><title>I Paper Terminal (mockup)</title><style>
+/* Shared by every look mockup: colour tokens (driven by the real themes.js table), the real CSS-only backgrounds, and the mockup control strip.
+   The control strip is NOT part of any look: it only lets the owner swap theme, mode, background, strength and density. */
+:root {
+  --bg: #0b1016; --panel: #121920; --panel-2: #172029; --line: #232e3a;
+  --fg: #ced7e0; --fg-strong: #f2f5f8; --fg-dim: #8c99a7;
+  --accent: #e8a33d; --accent-ink: #1b1304; --accent-soft: rgba(232,163,61,.12);
+  --attn: #a891ff; --attn-soft: rgba(168,145,255,.12);
+  --ok: #4cc38a; --ok-soft: rgba(76,195,138,.12);
+  --alert: #ff7b6e; --alert-soft: rgba(255,123,110,.12);
+  --info: #6aaaf0; --info-soft: rgba(106,170,240,.13);
+  --side-w: 232px; --base: 14px; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--fg); overflow: hidden; }
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+/* ---- the real page backgrounds (copied from shell.css) ---- */
+.bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+:root[data-bgs="subtle"] .bg { opacity: .5; } :root[data-bgs="medium"] .bg { opacity: .85; } :root[data-bgs="strong"] .bg { opacity: 1; }
+.bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+:root[data-bgs="subtle"] .bg { opacity: .5; } :root[data-bgs="medium"] .bg { opacity: .85; } :root[data-bgs="strong"] .bg { opacity: 1; }
+.bgx-glow { background: radial-gradient(60% 55% at 88% -8%, color-mix(in srgb, var(--accent) 42%, transparent), transparent 72%), radial-gradient(50% 45% at -6% 104%, color-mix(in srgb, var(--attn) 34%, transparent), transparent 70%); }
+.bgx-mesh { background: radial-gradient(40% 40% at 12% 18%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 70%), radial-gradient(38% 40% at 86% 22%, color-mix(in srgb, var(--attn) 32%, transparent), transparent 70%), radial-gradient(44% 44% at 70% 92%, color-mix(in srgb, var(--info) 32%, transparent), transparent 70%), radial-gradient(36% 36% at 6% 86%, color-mix(in srgb, var(--ok) 24%, transparent), transparent 70%); }
+.bgx-aurora { background: linear-gradient(112deg, transparent 12%, color-mix(in srgb, var(--accent) 34%, transparent) 34%, color-mix(in srgb, var(--attn) 32%, transparent) 50%, color-mix(in srgb, var(--info) 30%, transparent) 66%, transparent 88%), radial-gradient(60% 50% at 20% 100%, color-mix(in srgb, var(--attn) 20%, transparent), transparent 70%); background-size: 160% 70%, 100% 100%; background-repeat: no-repeat; background-position: 30% 0, 0 0; -webkit-mask-image: linear-gradient(180deg, #000 20%, transparent 95%); mask-image: linear-gradient(180deg, #000 20%, transparent 95%); }
+.bgx-spotlight { background: radial-gradient(34% 42% at 50% -6%, color-mix(in srgb, var(--fg-strong) 22%, transparent), transparent 72%), radial-gradient(80% 62% at 50% -12%, color-mix(in srgb, var(--accent) 36%, transparent), transparent 74%); }
+.bgx-horizon { background: linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--accent) 26%, transparent) 75%, color-mix(in srgb, var(--attn) 38%, transparent) 100%), repeating-linear-gradient(180deg, transparent 0 22px, color-mix(in srgb, var(--accent) 12%, transparent) 22px 23px); }
+.bgx-dots { background-image: radial-gradient(color-mix(in srgb, var(--fg-dim) 60%, transparent) 1.2px, transparent 1.6px); background-size: 24px 24px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 85%); mask-image: linear-gradient(180deg, #000, transparent 85%); }
+.bgx-grid { background-image: linear-gradient(color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--fg-dim) 38%, transparent) 1px, transparent 1px); background-size: 44px 44px; -webkit-mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); mask-image: radial-gradient(90% 80% at 50% 0%, #000 10%, transparent 80%); }
+.bgx-blueprint { background-image: linear-gradient(color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 40%, transparent) 1px, transparent 1px), linear-gradient(color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--info) 18%, transparent) 1px, transparent 1px); background-size: 110px 110px, 110px 110px, 22px 22px, 22px 22px; -webkit-mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); mask-image: radial-gradient(100% 90% at 50% 0%, #000 10%, transparent 82%); }
+.bgx-ledger { background-image: linear-gradient(90deg, transparent calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 24px), color-mix(in srgb, var(--alert) 46%, transparent) calc(var(--side-w) + 25px), transparent calc(var(--side-w) + 25px)), repeating-linear-gradient(180deg, transparent 0 31px, color-mix(in srgb, var(--fg-dim) 28%, transparent) 31px 32px); }
+.bgx-stripes { background: repeating-linear-gradient(135deg, transparent 0 16px, color-mix(in srgb, var(--fg-dim) 30%, transparent) 16px 17px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.bgx-lattice { background: repeating-linear-gradient(45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px), repeating-linear-gradient(-45deg, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 26%, transparent) 13px 14px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 90%); mask-image: linear-gradient(180deg, #000, transparent 90%); }
+.bgx-scales { background-image: radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px), radial-gradient(circle at 50% 100%, transparent 0 13px, color-mix(in srgb, var(--fg-dim) 36%, transparent) 13px 14px, transparent 14px); background-size: 28px 14px, 28px 14px; background-position: 0 0, 14px 7px; -webkit-mask-image: linear-gradient(180deg, #000, transparent 88%); mask-image: linear-gradient(180deg, #000, transparent 88%); }
+.bgx-beams { background: repeating-linear-gradient(90deg, transparent 0 22px, color-mix(in srgb, var(--accent) 34%, transparent) 22px 24px, transparent 24px 41px, color-mix(in srgb, var(--attn) 28%, transparent) 41px 42px, transparent 42px 64px); -webkit-mask-image: linear-gradient(180deg, #000, transparent 82%); mask-image: linear-gradient(180deg, #000, transparent 82%); }
+.bgx-ripples { background: repeating-radial-gradient(circle at 92% -6%, transparent 0 38px, color-mix(in srgb, var(--accent) 40%, transparent) 38px 39px), repeating-radial-gradient(circle at -4% 104%, transparent 0 46px, color-mix(in srgb, var(--attn) 34%, transparent) 46px 47px); -webkit-mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); mask-image: linear-gradient(180deg, #000 30%, rgba(0,0,0,.35)); }
+.bgx-radar { background: repeating-radial-gradient(circle at 80% 20%, transparent 0 64px, color-mix(in srgb, var(--accent) 34%, transparent) 64px 65px), linear-gradient(90deg, transparent calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(80% + .5px), transparent calc(80% + .5px)), linear-gradient(180deg, transparent calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% - .5px), color-mix(in srgb, var(--accent) 28%, transparent) calc(20% + .5px), transparent calc(20% + .5px)), conic-gradient(from 190deg at 80% 20%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 55deg); -webkit-mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); mask-image: radial-gradient(90% 90% at 80% 20%, #000 20%, transparent 90%); }
+.bgx-contours { background: repeating-radial-gradient(ellipse 70% 45% at 18% 28%, transparent 0 24px, color-mix(in srgb, var(--accent) 34%, transparent) 24px 25px), repeating-radial-gradient(ellipse 50% 75% at 86% 78%, transparent 0 28px, color-mix(in srgb, var(--attn) 32%, transparent) 28px 29px), repeating-radial-gradient(ellipse 40% 30% at 62% 8%, transparent 0 30px, color-mix(in srgb, var(--info) 24%, transparent) 30px 31px); }
+.bgx-rays { background: repeating-conic-gradient(from 180deg at 100% 0%, color-mix(in srgb, var(--accent) 30%, transparent) 0 3deg, transparent 3deg 9deg); -webkit-mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); mask-image: radial-gradient(85% 95% at 100% 0%, #000 5%, transparent 78%); }
+
+/* ---- mockup control strip ---- */
+.mx { position: fixed; top: 0; left: 0; right: 0; z-index: 100; height: 38px; display: flex; align-items: center; gap: 14px; padding: 0 12px; background: var(--panel-2); border-bottom: 1px solid var(--line); font: 12px/1 system-ui, "Segoe UI", sans-serif; color: var(--fg); white-space: nowrap; overflow-x: auto; }
+.mx b { color: var(--fg-strong); font-weight: 600; }
+.mx label { display: inline-flex; align-items: center; gap: 5px; color: var(--fg-dim); }
+.mx select { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 2px 4px; height: 24px; color: var(--fg); }
+.mx .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.mx .seg button { background: var(--panel); border: 0; padding: 0 9px; height: 24px; cursor: pointer; color: var(--fg-dim); }
+.mx .seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.mx .sp { flex: 1; }
+.mx .hint { color: var(--fg-dim); }
+#stage { position: fixed; top: 38px; left: 0; right: 0; bottom: 0; z-index: 1; }
+
+/* I Paper Terminal: a text-mode screen. A fixed grid of characters (132 x 33), double-line outer frame, single-line panels, a selection bar in inverse video,
+   function keys along the bottom. Monospace only, no radius, no icons. Colours come from the theme tokens: ink = --fg, paper = --panel. Pairs best with the light "paper" themes
+   (Stone, Copper, Olive, Pine) or their soft dark sets, never neon. */
+#stage.i-stage { display: flex; align-items: center; justify-content: center; }
+.i-term { background: var(--panel); color: var(--fg); font-family: "IBM Plex Mono", "Cascadia Mono", "Cascadia Code", Consolas, "Liberation Mono", "Courier New", monospace; font-variant-ligatures: none; font-kerning: none; white-space: pre; border: 1px solid var(--line); cursor: default; user-select: none; }
+.i-term .ln { display: block; height: 1em; }
+.i-term .d { color: var(--fg-dim); } .i-term .s { color: var(--fg-strong); font-weight: 600; } .i-term .r { color: var(--alert); font-weight: 600; } .i-term .g { color: var(--ok); }
+.i-term .t { color: var(--attn); font-weight: 600; } .i-term .n { color: var(--info); }
+.i-term .v { background: var(--fg); color: var(--panel); } .i-term .va { background: var(--accent); color: var(--accent-ink); font-weight: 600; } .i-term .vd { background: var(--panel-2); color: var(--fg-strong); }
+.i-probe { position: absolute; visibility: hidden; left: -9999px; top: 0; white-space: pre; font-family: "IBM Plex Mono", "Cascadia Mono", "Cascadia Code", Consolas, "Liberation Mono", "Courier New", monospace; font-size: 100px; }
+
+</style></head><body><div class="bg bgx-plain" id="bg"></div><div class="mx" id="mx"></div><div id="stage"></div><script>
+var THEMES=[
+  {id:"cobalt",name:"Cobalt",group:"blue",light:["#f0f2f8","#ffffff","#f5f6fa","#dcdfec","#272e42","#0d1222","#566079","#2849d6","#ffffff","rgba(40,73,214,.09)","#a05a00","rgba(160,90,0,.10)"],dark:["#0c0f15","#131821","#19202b","#252d3b","#cfd5e2","#f3f5fa","#8b94a8","#6c8cff","#070d24","rgba(108,140,255,.14)","#f0a54a","rgba(240,165,74,.13)"]},
+  {id:"azure",name:"Azure",group:"blue",light:["#eef4f9","#ffffff","#f3f8fc","#d3e1ee","#233546","#0b1b2b","#526a80","#0a68b0","#ffffff","rgba(10,104,176,.10)","#9a5b00","rgba(154,91,0,.10)"],dark:["#091119","#0f1a25","#14212e","#1f3244","#c9d9e8","#eef6fd","#83a0b8","#3db4ff","#021a2c","rgba(61,180,255,.13)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"ultra",name:"Ultramarine",group:"blue",light:["#f1f0fa","#ffffff","#f6f5fc","#deddf0","#2a2a4a","#11112b","#5c5c86","#3d3bd1","#ffffff","rgba(61,59,209,.09)","#9a5b00","rgba(154,91,0,.10)"],dark:["#0c0c18","#131324","#1a1a30","#292946","#d0d0ec","#f3f3ff","#9393bd","#8587ff","#0d0d38","rgba(133,135,255,.15)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"steel",name:"Steel",group:"blue",light:["#eff2f5","#ffffff","#f4f6f8","#d9dfe6","#2b3642","#101820","#586878","#35628f","#ffffff","rgba(53,98,143,.10)","#9a5b00","rgba(154,91,0,.10)"],dark:["#0d1217","#141b22","#19222b","#26323d","#cdd6df","#f0f4f8","#8a9bab","#8fb4da","#0b1c2d","rgba(143,180,218,.13)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"navy",name:"Navy",group:"blue",light:["#edf1f9","#ffffff","#f2f5fb","#d4dcee","#22304d","#0a1430","#53628a","#1f5fd1","#ffffff","rgba(31,95,209,.09)","#9a5b00","rgba(154,91,0,.10)"],dark:["#060e1d","#0c172b","#112038","#1c2f4d","#c7d4ec","#eff4ff","#8799be","#5aa2ff","#031230","rgba(90,162,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"amber",name:"Amber",group:"other",light:["#f0f3f6","#ffffff","#f5f7f9","#dce2e9","#2a3540","#0e1720","#586674","#a85f00","#ffffff","rgba(168,95,0,.10)","#6446d6","rgba(100,70,214,.09)"],dark:["#0b1016","#121920","#172029","#232e3a","#ced7e0","#f2f5f8","#8c99a7","#e8a33d","#1b1304","rgba(232,163,61,.12)","#a891ff","rgba(168,145,255,.12)"]},
+  {id:"harbour",name:"Harbour",group:"other",light:["#eef4f4","#ffffff","#f4f8f8","#d5e2e3","#243438","#0b1a1d","#526a70","#0b7c6e","#ffffff","rgba(11,124,110,.10)","#9a5b00","rgba(154,91,0,.10)"],dark:["#0a1215","#101a1e","#152227","#22343b","#cbdadd","#f0f6f7","#86a0a6","#3cc4b0","#04201b","rgba(60,196,176,.13)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"plum",name:"Plum",group:"other",light:["#f4f1f8","#ffffff","#f8f6fb","#e2dcec","#2e2840","#130f20","#615878","#7a3fc8","#ffffff","rgba(122,63,200,.09)","#9a5b00","rgba(154,91,0,.10)"],dark:["#0f0d14","#17141f","#1e1a28","#2d2739","#d6d0e2","#f6f3fb","#9890aa","#b98cf5","#170a2b","rgba(185,140,245,.14)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"graphite",name:"Graphite",group:"other",light:["#f1f2f3","#ffffff","#f6f7f8","#dcdfe2","#2a2e33","#101215","#5a6168","#1b1f24","#ffffff","rgba(27,31,36,.07)","#6446d6","rgba(100,70,214,.09)"],dark:["#0d0e10","#151719","#1b1d20","#2a2d31","#cfd2d6","#f4f5f6","#8e949b","#e9ebee","#0d0e10","rgba(233,235,238,.10)","#a891ff","rgba(168,145,255,.12)"]},
+  {id:"rose",name:"Rose",group:"other",light:["#f7f0f3","#ffffff","#faf5f7","#ead9e0","#3a2a33","#1d1017","#6d5662","#b4306b","#ffffff","rgba(180,48,107,.09)","#9a5b00","rgba(154,91,0,.10)"],dark:["#130c10","#1b1217","#23171d","#34222b","#e0d0d7","#fbf3f6","#a58f99","#f27aa8","#2b0715","rgba(242,122,168,.14)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"ember",name:"Ember",group:"other",light:["#f3f1f0","#ffffff","#f8f6f5","#e2dcd8","#34302d","#181412","#675f5a","#b8470f","#ffffff","rgba(184,71,15,.10)","#5b3fd0","rgba(91,63,208,.09)"],dark:["#110e0c","#191512","#211c18","#322a24","#dcd3cc","#f8f3ee","#9e9389","#ff8d4d","#2a1103","rgba(255,141,77,.14)","#b79bff","rgba(183,155,255,.13)"]},
+  {id:"stone",name:"Stone",group:"other",light:["#eeeeeb","#fcfcfb","#f4f4f1","#dcdcd6","#34342f","#171713","#636359","#4a49c9","#ffffff","rgba(74,73,201,.09)","#9a5b00","rgba(154,91,0,.10)"],dark:["#121210","#1a1a17","#21211d","#31312b","#d9d9d1","#f6f6f0","#98988c","#9a9cff","#12123a","rgba(154,156,255,.14)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"pine",name:"Pine",group:"other",light:["#eef2ef","#ffffff","#f3f6f4","#d6e0da","#243229","#0c1710","#54675a","#8a6410","#ffffff","rgba(138,100,16,.10)","#6446d6","rgba(100,70,214,.09)"],dark:["#08110d","#0e1914","#13211b","#1f3329","#cbd9d0","#eff6f1","#85a090","#dcbc66","#261c03","rgba(220,188,102,.13)","#a891ff","rgba(168,145,255,.12)"]},
+  {id:"arctic",name:"Arctic",group:"other",light:["#eef5f6","#ffffff","#f3f8f9","#d2e2e5","#213a40","#0a1c21","#4f6d74","#0a7790","#ffffff","rgba(10,119,144,.10)","#9a5b00","rgba(154,91,0,.10)"],dark:["#081217","#0e1c22","#13262d","#1f3841","#c6dde3","#ecf8fb","#80a3ad","#55d3ea","#021e26","rgba(85,211,234,.13)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"copper",name:"Copper",group:"other",light:["#f3f0ee","#ffffff","#f8f5f3","#e3dad4","#3a302a","#1b1410","#6b5d53","#9c5527","#ffffff","rgba(156,85,39,.10)","#5b3fd0","rgba(91,63,208,.09)"],dark:["#120e0b","#1a1511","#221b16","#34281f","#ddd0c4","#f8f1ea","#a29080","#d9955a","#2a1507","rgba(217,149,90,.14)","#b79bff","rgba(183,155,255,.13)"]},
+  {id:"olive",name:"Olive",group:"other",light:["#f1f2ec","#ffffff","#f6f7f2","#dfe1d4","#2f3325","#14170c","#5e6350","#66701a","#ffffff","rgba(102,112,26,.11)","#6446d6","rgba(100,70,214,.09)"],dark:["#0f110a","#171a10","#1e2216","#2d3320","#d6dac6","#f5f7ea","#9aa384","#bccb5a","#1c2204","rgba(188,203,90,.13)","#a891ff","rgba(168,145,255,.12)"]},
+  {id:"orchid",name:"Orchid",group:"other",light:["#f6f0f7","#ffffff","#faf5fb","#e6d8e8","#36263a","#1b0f1f","#6a5470","#a2299e","#ffffff","rgba(162,41,158,.09)","#9a5b00","rgba(154,91,0,.10)"],dark:["#130b14","#1b111c","#231724","#35223a","#e2d0e4","#fcf3fd","#a98fae","#e078dc","#2b0829","rgba(224,120,220,.14)","#f0b45a","rgba(240,180,90,.13)"]},
+  {id:"dusk",name:"Dusk",group:"other",light:["#f0eff3","#ffffff","#f5f4f8","#dedce7","#2e2c3c","#14131e","#5d5a73","#a84a1d","#ffffff","rgba(168,74,29,.10)","#4a56c9","rgba(74,86,201,.09)"],dark:["#0f0f17","#171722","#1e1e2b","#2c2c3d","#d3d2e0","#f4f3fb","#9291ab","#ffb08a","#2e1203","rgba(255,176,138,.13)","#9fb0ff","rgba(159,176,255,.13)"]}
+];
+var DATA = {
+  "_note": "Example data for every look's mockup. Same content in every look so they can be compared. All values are made up.",
+  "owner": "Alex",
+  "now": "Tue 24 Nov, 22:51 AWST",
+  "waiting_on_you": [
+    {"id": "it_a1", "title": "Approve renewal: barnyard.site domain", "age": "2 days", "lane": "needs you", "due": "28 Nov", "kind": "renewal"},
+    {"id": "it_a2", "title": "Sign off the Setup first run (installer 3f9a1c7e)", "age": "today", "lane": "needs you", "due": "", "kind": "approval"},
+    {"id": "it_a3", "title": "Choose the Barnyard look", "age": "today", "lane": "needs you", "due": "", "kind": "decision"},
+    {"id": "it_a4", "title": "Purge Cloudflare cache for old timeline file", "age": "done 01:00", "lane": "done", "due": "", "kind": "task"},
+    {"id": "it_a5", "title": "Backup restore test is overdue", "age": "5 days", "lane": "needs you", "due": "19 Nov", "kind": "overdue"}
+  ],
+  "in_progress": [
+    {"title": "Project Atlas: build step 1", "who": "Claude", "progress": "reads 7 of 9"},
+    {"title": "Landing page for signed-out visitors", "who": "Claude", "progress": "live"},
+    {"title": "Vulnerability clean-up (14 open)", "who": "you", "progress": "3 critical"}
+  ],
+  "services": [
+    {"name": "api.barnyard.site", "state": "up", "note": "212 ms"},
+    {"name": "dashboard.barnyard.site", "state": "up", "note": "98 ms"},
+    {"name": "APP-02", "state": "down", "note": "no reply for 14 min"},
+    {"name": "Backups (hourly copy)", "state": "degraded", "note": "last good 03:10"},
+    {"name": "Cloudflare tunnel", "state": "up", "note": "2 connectors"},
+    {"name": "Entra sign-in", "state": "up", "note": "token ok"}
+  ],
+  "since_last_looked": [
+    {"t": "21:40", "text": "Security cleared the Setup installer build"},
+    {"t": "20:12", "text": "Landing page deployed to the dashboard"},
+    {"t": "18:05", "text": "Two vulnerabilities marked fixed"},
+    {"t": "09:30", "text": "Hourly backup copy failed once, retried ok"}
+  ],
+  "week": [
+    {"day": "Tue", "items": ["Setup dry run (PC)"]},
+    {"day": "Wed", "items": ["Renewals review 10:00", "Domain check"]},
+    {"day": "Thu", "items": ["First real Setup run (laptop)"]},
+    {"day": "Fri", "items": []},
+    {"day": "Sat", "items": []},
+    {"day": "Sun", "items": ["Backup test"]},
+    {"day": "Mon", "items": ["sign-off sentence"]}
+  ],
+  "ops_board": [
+    {"lane": "Needs you", "n": 4},
+    {"lane": "In progress", "n": 3},
+    {"lane": "Soaking", "n": 6},
+    {"lane": "Backlog", "n": 27}
+  ],
+  "second_view_ops_rows": [
+    ["it_a2", "Sign off the Setup first run", "needs you", "today"],
+    ["it_a1", "Approve renewal: barnyard.site domain", "needs you", "28 Nov"],
+    ["it_a5", "Backup restore test is overdue", "needs you", "19 Nov"],
+    ["it_b1", "Project Atlas: build step 1", "in progress", "-"],
+    ["it_b2", "Vulnerability clean-up (14 open)", "in progress", "30 Nov"],
+    ["it_c1", "Cloudflare Access in front of the dashboard", "backlog", "-"],
+    ["it_c2", "VPS host purchase (late)", "backlog", "-"]
+  ]
+}
+;
+/* Shared runtime: applies a REAL theme from the themes.js table (12 colour tokens, light and dark), the status colours, the background class,
+   strength and density, and wires the mockup control strip. Each look calls Look.init({ id, name, theme, mode, bg, density, onChange }). */
+var COLOUR_VARS = ["--bg","--panel","--panel-2","--line","--fg","--fg-strong","--fg-dim","--accent","--accent-ink","--accent-soft","--attn","--attn-soft"];
+var STATUS = {
+  light: { "--ok":"#17794d","--ok-soft":"rgba(23,121,77,.10)","--alert":"#bd3326","--alert-soft":"rgba(189,51,38,.09)","--info":"#1d63b8","--info-soft":"rgba(29,99,184,.09)" },
+  dark:  { "--ok":"#4cc38a","--ok-soft":"rgba(76,195,138,.12)","--alert":"#ff7b6e","--alert-soft":"rgba(255,123,110,.12)","--info":"#6aaaf0","--info-soft":"rgba(106,170,240,.13)" }
+};
+var BACKGROUNDS = ["plain","glow","mesh","aurora","spotlight","horizon","dots","grid","blueprint","ledger","stripes","lattice","scales","beams","ripples","radar","contours","rays"];
+var Look = (function () {
+  var S = { theme: "stone", mode: "light", bg: "plain", bgs: "medium", density: "comfortable" }, cfg = {}, root = document.documentElement;
+  function theme(id) { for (var i = 0; i < THEMES.length; i++) if (THEMES[i].id === id) return THEMES[i]; return THEMES[0]; }
+  function apply() {
+    var t = theme(S.theme), set = S.mode === "dark" ? t.dark : t.light, st = STATUS[S.mode];
+    for (var i = 0; i < COLOUR_VARS.length; i++) root.style.setProperty(COLOUR_VARS[i], set[i]);
+    for (var k in st) root.style.setProperty(k, st[k]);
+    root.style.colorScheme = S.mode;
+    root.setAttribute("data-theme", S.mode); root.setAttribute("data-density", S.density); root.setAttribute("data-bgs", S.bgs); root.setAttribute("data-bg", S.bg);
+    var bg = document.getElementById("bg"); bg.className = "bg bgx-" + S.bg;
+    var sel = document.getElementById("mx-theme"); if (sel) sel.value = S.theme;
+    var b = document.getElementById("mx-bg"); if (b) b.value = S.bg;
+    var bs = document.getElementById("mx-bgs"); if (bs) bs.value = S.bgs;
+    document.querySelectorAll("[data-mode]").forEach(function (x) { x.setAttribute("aria-pressed", String(x.getAttribute("data-mode") === S.mode)); });
+    document.querySelectorAll("[data-density-btn]").forEach(function (x) { x.setAttribute("aria-pressed", String(x.getAttribute("data-density-btn") === S.density)); });
+    try { localStorage.setItem("look-" + cfg.id, JSON.stringify(S)); } catch (e) {}
+    if (cfg.onChange) cfg.onChange(S);
+  }
+  function option(v, t) { var o = document.createElement("option"); o.value = v; o.textContent = t; return o; }
+  function init(c) {
+    cfg = c; for (var k in c) if (k in S) S[k] = c[k];
+    try { var saved = JSON.parse(localStorage.getItem("look-" + c.id) || "null"); if (saved) for (var k2 in saved) if (k2 in S) S[k2] = saved[k2]; } catch (e) {}
+    // #theme=cobalt&mode=dark&bg=grid&bgs=strong&density=compact lets a link open a look in a given state (used for screenshots)
+    location.hash.replace(/^#/, "").split("&").forEach(function (p) { var kv = p.split("="); if (kv[0] in S && kv[1]) S[kv[0]] = decodeURIComponent(kv[1]); });
+    window.HASH = {}; location.hash.replace(/^#/, "").split("&").forEach(function (p) { var kv = p.split("="); if (kv[0]) window.HASH[kv[0]] = kv[1]; });
+    var mx = document.getElementById("mx");
+    mx.innerHTML = '<span><b>' + c.id + ' ' + c.name + '</b> (mockup)</span>' +
+      '<label>Theme <select id="mx-theme"></select></label>' +
+      '<span class="seg"><button type="button" data-mode="light">Light</button><button type="button" data-mode="dark">Dark</button></span>' +
+      '<label>Background <select id="mx-bg"></select></label>' +
+      '<label>Strength <select id="mx-bgs"><option>subtle</option><option>medium</option><option>strong</option></select></label>' +
+      '<span class="seg"><button type="button" data-density-btn="comfortable">Normal</button><button type="button" data-density-btn="compact">Compact</button></span>' +
+      '<span class="sp"></span><span class="hint">All 18 themes and 18 backgrounds are the real ones from themes.js and shell.css</span>';
+    var ts = document.getElementById("mx-theme"); THEMES.forEach(function (t) { ts.appendChild(option(t.id, t.name)); });
+    var bsel = document.getElementById("mx-bg"); BACKGROUNDS.forEach(function (b) { bsel.appendChild(option(b, b.charAt(0).toUpperCase() + b.slice(1))); });
+    ts.addEventListener("change", function () { S.theme = ts.value; apply(); });
+    bsel.addEventListener("change", function () { S.bg = bsel.value; apply(); });
+    document.getElementById("mx-bgs").addEventListener("change", function (e) { S.bgs = e.target.value; apply(); });
+    mx.addEventListener("click", function (e) {
+      var m = e.target.getAttribute && e.target.getAttribute("data-mode"); if (m) { S.mode = m; apply(); }
+      var d = e.target.getAttribute && e.target.getAttribute("data-density-btn"); if (d) { S.density = d; apply(); }
+    });
+    apply();
+  }
+  return { init: init, state: function () { return S; }, apply: apply, set: function (o) { for (var k in o) if (k in S) S[k] = o[k]; apply(); }, themes: function () { return THEMES; } };
+})();
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+(function () {
+  var D = DATA, COLS = 132, ROWS = 33, buf, view = "today", sel = 0, done = {}, hits = [], items = [], ratio = 0.6, fs = 16, lh = 19;
+  var BX = { dl: "║", dh: "═", dtl: "╔", dtr: "╗", dbl: "╚", dbr: "╝", h: "─", v: "│", tl: "┌", tr: "┐", bl: "└", br: "┘", lt: "├", rt: "┤", tt: "┬", bt: "┴", x: "┼" };
+  var FROM = { renewal: "Renewals", approval: "Security", decision: "You", task: "Ops", overdue: "Backups" };
+  var TXT = {
+    renewal: "The registrar renews this on the due date unless you decline. Open it to see the price and the payment method on file.",
+    approval: "The build is cleared and every file has been hashed. Your approval is by name and hash, in your own words, in this chat. Nothing runs before then.",
+    decision: "Six looks are ready for the dashboard, with every colour theme and background kept. Pick one, or ask for more.",
+    task: "Finished. Left here so the record is complete.",
+    overdue: "The last restore test was on 14 Nov. Run one this week so the hourly copy is proven."
+  };
+  function clear() { buf = []; for (var y = 0; y < ROWS; y++) { var r = []; for (var x = 0; x < COLS; x++) r.push({ c: " ", k: "" }); buf.push(r); } }
+  function put(x, y, s, k) { for (var i = 0; i < s.length; i++) { var X = x + i; if (y >= 0 && y < ROWS && X >= 0 && X < COLS) buf[y][X] = { c: s[i], k: k || "" }; } }
+  function recolor(x, y, w, k) { for (var i = 0; i < w; i++) if (buf[y] && buf[y][x + i]) buf[y][x + i].k = k; }
+  function pad(s, n) { s = String(s); return s.length > n ? s.slice(0, n - 3) + "..." : s + new Array(n - s.length + 1).join(" "); }
+  function right(s, n) { s = String(s); return s.length > n ? s.slice(0, n) : new Array(n - s.length + 1).join(" ") + s; }
+  function rep(ch, n) { return n > 0 ? new Array(n + 1).join(ch) : ""; }
+  function box(x, y, w, h, title, dbl, k) {
+    var c = dbl ? [BX.dtl, BX.dtr, BX.dbl, BX.dbr, BX.dh, BX.dl] : [BX.tl, BX.tr, BX.bl, BX.br, BX.h, BX.v];
+    put(x, y, c[0] + rep(c[4], w - 2) + c[1], k || "d"); put(x, y + h - 1, c[2] + rep(c[4], w - 2) + c[3], k || "d");
+    for (var i = 1; i < h - 1; i++) { put(x, y + i, c[5], k || "d"); put(x + w - 1, y + i, c[5], k || "d"); }
+    if (title) { put(x + 2, y, " ", k || "d"); put(x + 3, y, title, "s"); put(x + 3 + title.length, y, " ", k || "d"); }
+  }
+  function wrap(s, n) { var out = [], w = s.split(" "), l = ""; w.forEach(function (x) { if ((l + " " + x).trim().length > n) { out.push(l); l = x; } else l = (l + " " + x).trim(); }); if (l) out.push(l); return out; }
+  var svc = function () { return D.services.slice().sort(function (a, b) { var o = { down: 0, degraded: 1, up: 2 }; return o[a.state] - o[b.state]; }); };
+  function stateWord(s) { return s === "down" ? ["[ DOWN ]", "r"] : s === "degraded" ? ["[ SLOW ]", "t"] : ["[  ok  ]", "g"]; }
+  // an item the selection bar can stand on: y, x, w, detail
+  function item(id, x, y, w, d) { items.push({ id: id, x: x, y: y, w: w, d: d }); }
+  function needDetail(w) { return { t: w.title, meta: "From " + FROM[w.kind] + "     Raised " + w.age + (w.due ? "     Due " + w.due : "") + "     Lane " + w.lane, body: TXT[w.kind], keys: w.lane === "done" ? "" : "Enter open    e mark done    s snooze to Mon" }; }
+  function svcDetail(s) { return { t: s.name + " is " + (s.state === "up" ? "up" : s.state === "down" ? "not answering" : "degraded"), meta: "State " + s.state + "     Note " + s.note, body: s.state === "down" ? "No reply for " + s.note.replace("no reply for ", "") + ". Check the machine, then the tunnel. Nothing else depends on it tonight." : s.state === "degraded" ? "The last good copy was at " + s.note.replace("last good ", "") + ". The next hourly run will tell if it recovered." : "Answering normally.", keys: "Enter open" }; }
+  function runDetail(p) { return { t: p.title, meta: "Who " + p.who + "     Progress " + p.progress, body: "Claude is working on this. You will see it here when it needs you.", keys: "Enter open" }; }
+  function detailPanel(x, y, w, h, d) {
+    box(x, y, w, h, "Detail", false, "d");
+    if (!d) { put(x + 2, y + 2, "Select a line.", "d"); return; }
+    put(x + 2, y + 1, pad(d.t, w - 4), "s"); put(x + 2, y + 2, pad(d.meta, w - 4), "d");
+    wrap(d.body, w - 6).forEach(function (l, i) { if (y + 4 + i < y + h - 2) put(x + 2, y + 4 + i, l, ""); });
+    if (d.keys) put(x + 2, y + h - 2, d.keys, "d");
+  }
+  function layout() {
+    clear(); items = []; hits = [];
+    var need = D.waiting_on_you, nn = need.filter(function (w) { return w.lane !== "done"; }).length, sv = svc(), down = D.services.filter(function (s) { return s.state === "down"; }).length;
+    box(0, 0, COLS, 31, "", true, "d"); put(2, 0, " ", ""); put(3, 0, "Barnyard", "s"); put(11, 0, " - ", "d"); var vn = { today: "Today", board: "Ops board", services: "Services", calendar: "Calendar" }[view]; put(14, 0, vn + " ", "s");
+    put(COLS - 29, 0, " Alex   Tue 24 Nov  22:51 ", "d");
+    if (view === "today") {
+      box(2, 1, 76, need.length + 2, "Needs you (" + nn + ")");
+      need.forEach(function (w, i) { var y = 2 + i, isd = w.lane === "done" || done[w.id]; put(3, y, (isd ? "[x] " : "    ") + pad(w.title, 46) + right(w.age, 12) + right(w.due || "", 10), isd ? "d" : (w.kind === "overdue" ? "r" : "")); item("n" + i, 3, y, 74, needDetail(w)); });
+      box(80, 1, 50, sv.length + 2, "Services (" + sv.length + ")");
+      sv.forEach(function (s, i) { var y = 2 + i, sw = stateWord(s.state); put(81, y, "  " + pad(s.name, 34), s.state === "up" ? "d" : ""); put(117, y, sw[0], sw[1]); item("s" + i, 81, y, 48, svcDetail(s)); });
+      var ry = 2 + need.length + 1; box(2, ry, 76, D.in_progress.length + 2, "Running (" + D.in_progress.length + ")");
+      D.in_progress.forEach(function (p, i) { var y = ry + 1 + i; put(3, y, "    " + pad(p.title, 46) + right(p.who, 8) + right(p.progress, 14), ""); item("r" + i, 3, y, 74, runDetail(p)); });
+      var ty = 2 + sv.length + 1; box(80, ty, 50, D.since_last_looked.length + 2, "Tonight (" + D.since_last_looked.length + ")");
+      D.since_last_looked.forEach(function (e, i) { put(81, ty + 1 + i, "  " + right(e.t, 5) + "  " + pad(e.text, 38), "d"); });
+      var wy = ry + D.in_progress.length + 2 + 0; var days = D.week.filter(function (d) { return d.items.length; }); box(2, wy, 76, days.length + 2, "This week");
+      days.forEach(function (d, i) { put(3, wy + 1 + i, "    " + pad(d.day, 5) + pad(d.items.join("; "), 62), ""); });
+      var ky = ty + D.since_last_looked.length + 2; box(80, ky, 50, 6, "Keys");
+      put(82, ky + 1, " Up Down  move the bar", "d"); put(82, ky + 2, " Enter    open the item", "d"); put(82, ky + 3, " e        mark done", "d"); put(82, ky + 4, " 1 to 4   pages   9 theme   0 light/dark", "d");
+      var dy = Math.max(wy + days.length + 2, ky + 6); detailPanel(2, dy, 128, 30 - dy, items[sel] ? items[sel].d : null);
+    } else if (view === "board") {
+      var rows = D.second_view_ops_rows; box(2, 1, 128, rows.length + 4, "Ops board (" + rows.length + ")");
+      put(3, 2, "    " + pad("Item", 10) + pad("Title", 70) + pad("Lane", 24) + right("Due", 17), "s"); put(2, 3, BX.lt + rep(BX.h, 126) + BX.rt, "d");
+      rows.forEach(function (r, i) { var y = 4 + i, isd = done[r[0]]; put(3, y, (isd ? "[x] " : "    ") + pad(r[0], 10) + pad(r[1], 70) + pad(r[2], 24) + right(r[3], 17), isd ? "d" : (r[2] === "needs you" ? "s" : "")); item("b" + i, 3, y, 126, { t: r[1], meta: "Item " + r[0] + "     Lane " + r[2] + "     Due " + r[3], body: "Open the item to see its steps and notes.", keys: "Enter open    e mark done    s snooze to Mon" }); });
+      detailPanel(2, rows.length + 5, 128, 30 - rows.length - 5, items[sel] ? items[sel].d : null);
+    } else if (view === "services") {
+      box(2, 1, 128, sv.length + 4, "Services (" + sv.length + ")");
+      put(3, 2, "    " + pad("Service", 40) + pad("State", 16) + pad("Note", 60), "s"); put(2, 3, BX.lt + rep(BX.h, 126) + BX.rt, "d");
+      sv.forEach(function (s, i) { var y = 4 + i, sw = stateWord(s.state); put(3, y, "    " + pad(s.name, 40), ""); put(47, y, sw[0], sw[1]); put(63, y, pad(s.note, 60), "d"); item("s" + i, 3, y, 126, svcDetail(s)); });
+      detailPanel(2, sv.length + 5, 128, 30 - sv.length - 5, items[sel] ? items[sel].d : null);
+    } else {
+      box(2, 1, 128, 8, "Calendar - week of Tue 24 Nov"); var cw = 18;
+      D.week.forEach(function (d, i) { var x = 3 + i * cw; put(x, 2, pad(d.day, cw - 1), "s"); if (i) { for (var y = 2; y < 8; y++) put(x - 1, y, BX.v, "d"); } d.items.forEach(function (t, j) { wrap(t, cw - 2).slice(0, 2).forEach(function (l, m) { put(x, 4 + j * 2 + m, l, ""); }); }); });
+      put(3, 3, rep(BX.h, 124), "d"); D.week.forEach(function (d, i) { if (i) put(3 + i * cw - 1, 3, BX.x, "d"); });
+      var ny = 10; box(2, ny, 128, need.length + 2, "Needs you (" + nn + ")");
+      need.forEach(function (w, i) { var y = ny + 1 + i, isd = w.lane === "done" || done[w.id]; put(3, y, (isd ? "[x] " : "    ") + pad(w.title, 90) + right(w.age, 12) + right(w.due || "", 10), isd ? "d" : (w.kind === "overdue" ? "r" : "")); item("n" + i, 3, y, 126, needDetail(w)); });
+      var cy = ny + need.length + 3; detailPanel(2, cy, 128, 30 - cy, items[sel] ? items[sel].d : null);
+    }
+    if (sel >= items.length) sel = Math.max(0, items.length - 1);
+    var it = items[sel]; if (it) { recolor(it.x, it.y, it.w, "v"); hits = items; }
+    // status line and function keys
+    put(2, 31, "", ""); put(3, 31, nn + " need you", "s"); if (down) { put(3 + (nn + " need you").length + 2, 31, down + " down", "r"); } put(COLS - 16, 31, "synced 22:51", "d");
+    var fk = [["1", "Today"], ["2", "Ops board"], ["3", "Services"], ["4", "Calendar"], ["9", "Theme"], ["0", "Light/Dark"]], x = 1; hits.fk = [];
+    fk.forEach(function (f) { put(x, 32, f[0], "va"); put(x + 1, 32, " " + pad(f[1], 11), "vd"); hits.fk.push({ x: x, w: 13, k: f[0] }); x += 14; });
+  }
+  function paint() {
+    var out = "";
+    buf.forEach(function (row) { var h = "", k = null, run = ""; row.forEach(function (c) { if (c.k !== k) { if (run) h += span(k, run); k = c.k; run = ""; } run += c.c; }); if (run) h += span(k, run); out += '<span class="ln">' + h + "</span>"; });
+    term.innerHTML = out;
+  }
+  function span(k, s) { s = esc(s).replace(/"/g, "&quot;"); return k ? '<span class="' + k + '">' + s + "</span>" : s; }
+  var stage = document.getElementById("stage"); stage.className = "i-stage";
+  stage.innerHTML = '<span class="i-probe" id="probe"></span><div class="i-term" id="term" role="application" aria-label="Barnyard text screen" tabindex="0"></div>';
+  var term = document.getElementById("term");
+  function fit() {
+    var pr = document.getElementById("probe"); pr.textContent = new Array(101).join("M"); ratio = pr.getBoundingClientRect().width / 100 / 100;
+    var W = stage.clientWidth - 16, H = stage.clientHeight - 16;
+    fs = Math.min(W / (COLS * ratio), H / (ROWS * 1.18)); fs = Math.floor(fs * 10) / 10; lh = fs * 1.18;
+    term.style.fontSize = fs + "px"; term.style.lineHeight = lh + "px"; term.style.width = (COLS * ratio * fs + 2) + "px";
+    var lns = term.querySelectorAll(".ln"); for (var i = 0; i < lns.length; i++) lns[i].style.height = lh + "px";
+  }
+  function redraw() { layout(); paint(); fit(); }
+  function setView(v) { view = v; sel = 0; redraw(); }
+  term.addEventListener("click", function (e) {
+    var r = term.getBoundingClientRect(), col = Math.floor((e.clientX - r.left) / (fs * ratio)), row = Math.floor((e.clientY - r.top) / lh);
+    if (row === 32) { (hits.fk || []).forEach(function (f) { if (col >= f.x && col < f.x + f.w) key(f.k); }); return; }
+    items.forEach(function (it, i) { if (row === it.y && col >= it.x && col < it.x + it.w) { sel = i; redraw(); } });
+  });
+  function key(k) {
+    var names = ["1", "2", "3", "4"], views = ["today", "board", "services", "calendar"];
+    if (names.indexOf(k) !== -1) { setView(views[names.indexOf(k)]); return true; }
+    if (k === "9") { var T = Look.themes(), cur = Look.state().theme, i = 0; for (var j = 0; j < T.length; j++) if (T[j].id === cur) i = j; Look.set({ theme: T[(i + 1) % T.length].id }); return true; }
+    if (k === "0") { Look.set({ mode: Look.state().mode === "dark" ? "light" : "dark" }); return true; }
+    if (k === "ArrowDown") { sel = Math.min(items.length - 1, sel + 1); redraw(); return true; }
+    if (k === "ArrowUp") { sel = Math.max(0, sel - 1); redraw(); return true; }
+    if (k === "e" && items[sel]) { markDone(items[sel]); return true; }
+    return false;
+  }
+  function markDone(it) { if (it.id[0] === "n") { var w = D.waiting_on_you[+it.id.slice(1)]; done[w.id] = true; } else if (it.id[0] === "b") { done[D.second_view_ops_rows[+it.id.slice(1)][0]] = true; } sel = Math.min(items.length - 1, sel + 1); redraw(); }
+  document.addEventListener("keydown", function (e) { if (e.target.tagName === "SELECT" || e.ctrlKey || e.metaKey) return; if (key(e.key)) e.preventDefault(); });
+  window.addEventListener("resize", fit);
+  Look.init({ id: "I", name: "Paper Terminal", theme: "stone", mode: "light", bg: "plain", density: "comfortable", onChange: function () { if (term && buf) fit(); } });
+  if (window.HASH.view) view = window.HASH.view; if (window.HASH.sel) sel = +window.HASH.sel;
+  redraw();
+})();
+
+</script></body></html>

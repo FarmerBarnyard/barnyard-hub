@@ -1,0 +1,3 @@
+A. Shift Log
+
+From the first round. A hand-over log: text first, one column, no cards, no icons, a bone-grey ground with deep teal marks, IBM Plex. In this gallery the mock-up is wired to the same 12 colour tokens as the real themes (the first round used a fixed teal and grey), and it gets the same background, strength and density controls. Amber light needs a link fix (accent as text is 4.38 to 1). Effort 4 to 6 days is my estimate.
