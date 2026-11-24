@@ -2,7 +2,8 @@
 //
 // The live part reads the Ops board exactly as the Ops page does (GET /ops/board, plus GET /ops/done for finished items, with the
 // signed-in session cookie). It never writes: items are edited on the Ops board and this page just reflects them. The plan (timeline,
-// sittings, costs) is plain data in projects-data.js. All rules are in projects-logic.js (tested in test/projects.test.js).
+// sittings, costs) is private data kept in the Worker and read with GET /ops/projects-plan (owner only), never shipped with this page.
+// All rules are in projects-logic.js (tested in test/projects.test.js).
 //
 // When the API cannot be reached, shell.js serves the last board this browser fetched and shows its "old data" banner; nothing
 // here needs to know. Everything from the server reaches the page through textContent, never innerHTML, and the page's CSP has no
@@ -14,7 +15,7 @@
   "use strict";
 
   var L = window.BarnyardProjectsLogic;
-  var DATA = window.BarnyardProjectsData;
+  var DATA = { projects: [] }; // replaced by the plan the Worker sends once the person is signed in as the owner
   var API = "https://api.barnyard.site/ops";
   var POLL_MS = 60000;
 
@@ -35,7 +36,13 @@
   }
 
   function load() {
-    return getJson("/board").then(function (snap) {
+    // The plan is private: it comes from the Worker with the board, so a stranger (or a guest) is never sent it.
+    return getJson("/projects-plan").then(function (r) {
+      var plan = r && r.plan;
+      if (!plan || !Array.isArray(plan.projects) || !plan.projects.length) throw new Error("plan");
+      DATA = plan;
+      pickFromHash();
+    }).then(function () { return getJson("/board"); }).then(function (snap) {
       model.open = Array.isArray(snap.items) ? snap.items : [];
       model.state = "ok";
       model.fetchedAt = Date.now();
@@ -54,7 +61,7 @@
   function currentProject() {
     var list = DATA.projects, i;
     for (i = 0; i < list.length; i++) if (list[i].id === model.projectId) return list[i];
-    return list[0];
+    return list[0] || null;
   }
 
   // ---- 2. small DOM helpers ---------------------------------------------------
@@ -450,9 +457,10 @@
     if (model.state === "error") return stop("Couldn’t reach the board just now. It will try again shortly.");
 
     var p = currentProject();
+    if (!p) return stop("The plan could not be loaded. It will try again shortly.");
     var problems = L.checkProject(p);
     renderSwitch();
-    if (problems.length) return stop("The plan data for " + p.name + " is not valid (" + problems.slice(0, 3).join(", ") + "). Fix projects-data.js.");
+    if (problems.length) return stop("The plan data for " + p.name + " is not valid (" + problems.slice(0, 3).join(", ") + "). Fix projects-plan.js in the Worker.");
     $("pj-switch").hidden = false;
 
     var d = new Date(model.fetchedAt);
@@ -484,7 +492,7 @@
   function pickFromHash() {
     var id = String(location.hash || "").replace(/^#/, "");
     for (var i = 0; i < DATA.projects.length; i++) if (DATA.projects[i].id === id) { model.projectId = id; return; }
-    if (!model.projectId) model.projectId = DATA.projects[0].id;
+    if (!model.projectId && DATA.projects.length) model.projectId = DATA.projects[0].id;
   }
 
   function boot() {
