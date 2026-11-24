@@ -129,7 +129,7 @@
     // ----
     { id: "switchboard", name: "Switchboard", blurb: "Titled panes with a top tab strip.", group: "apps", installed: true, renderer: false, v: "1ffe6748", jv: "00000000", sketch: "0,0,100,9,s;3,2,10,5,a;16,2,10,5,p;28,2,10,5,p;4,14,44,6,s;4,20,44,30,p;52,14,44,6,s;52,20,44,30,p;4,56,44,6,s;4,62,44,32,p;52,56,44,6,s;52,62,44,32,p" },
     // ----
-    { id: "wiki", name: "Wiki", blurb: "A living runbook: page tree, article, contents.", group: "documents", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "0,0,22,100,p;26,8,50,6,s;26,24,50,2,d;26,34,50,2,d;26,44,40,2,d;26,58,50,2,d;80,8,18,2,d;80,18,18,2,d;80,28,18,2,d" }
+    { id: "wiki", name: "Wiki", blurb: "A living runbook: page tree, article, contents.", group: "documents", installed: true, renderer: false, v: "a6e95a46", jv: "00000000", sketch: "0,0,22,100,q;3,10,14,3,s;5,18,12,2,d;5,24,12,2,d;5,30,12,2,d;5,36,12,2,d;26,8,50,6,s;26,16,60,1,l;26,24,60,3,d;26,34,60,3,d;26,44,50,3,d;26,52,60,1,l;26,60,60,3,d;26,70,40,3,d" }
     // ----
   ];
   var LOOK_STATES = [["installed", "Installed"], ["designed", "Designed, not built yet"]];
