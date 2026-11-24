@@ -115,7 +115,7 @@
     // ----
     { id: "plain-window", name: "Plain Window", blurb: "A native admin tool: a list pane, ruled blocks, system type.", group: "apps", installed: true, renderer: false, v: "b42949f7", jv: "00000000", sketch: "0,0,22,100,q;3,10,16,5,s;3,20,16,2,d;3,26,16,2,d;3,32,16,2,d;26,6,40,6,l;26,18,70,2,d;26,26,70,14,p;26,44,70,14,p;26,62,70,14,p" },
     // ----
-    { id: "poster", name: "Poster", blurb: "One big sentence over a plain ruled list.", group: "documents", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "10,10,80,14,s;10,30,60,4,d;10,48,80,2,l;10,60,80,2,l;10,72,80,2,l;10,84,80,2,l" },
+    { id: "poster", name: "Poster", blurb: "One big sentence over a plain ruled list.", group: "documents", installed: true, renderer: false, v: "9a3fc0cd", jv: "00000000", sketch: "6,4,60,3,s;72,4,22,3,d;4,10,92,1,s;8,20,76,12,s;8,36,50,4,d;4,50,92,2,s;8,58,60,5,s;4,68,92,1,l;8,74,50,5,s;4,84,92,1,l" },
     // ----
     { id: "prompt", name: "Prompt", blurb: "Command first: type what you want.", group: "text", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "10,10,80,16,q;14,15,40,4,s;10,38,80,2,l;10,50,60,3,d;10,62,70,3,d;10,74,50,3,d;10,86,40,3,d" },
     // ----
