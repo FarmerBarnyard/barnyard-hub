@@ -26,6 +26,8 @@ You change **only your own files and your own registry line**, so many people ca
 4. **Do not touch** `shell.js`, `shell.css`, `looks.md`, other looks' files, or other registry lines. If the look cannot be done without a shell change, say so in the PR: shell changes go through the shared-shell route (copied to Study, Campaign and Stocks).
 5. After merge the coordinator runs `node tools/sync-shell.js` to copy `themes.js` and your `look-layers/` files to the other three sites.
 
+**Reference implementation:** `look-layers/plain-window.css` (look D, a pure CSS layer: restyles the sidebar, blocks, chips, buttons and type on the page's own markup, with the narrow-window and icons-only-sidebar cases handled). Copy its structure.
+
 ## What a layer may do
 
 * **Every rule is scoped**: each selector starts with `html[data-look="<id>"]`. That is how a look can never change Original or another look. `@media` and `@supports` blocks are fine (the selectors inside are checked). `@keyframes` is allowed if the name starts with `<id>-`. `@import`, `@font-face` and `@charset` are not.

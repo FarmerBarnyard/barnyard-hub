@@ -113,7 +113,7 @@
     // ----
     { id: "paper-terminal", name: "Paper Terminal", blurb: "A text-mode screen in paper and ink, no neon.", group: "text", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "3,3,94,94,l;5,5,90,90,p;8,9,60,3,s;8,22,84,6,s;8,34,70,2,d;8,44,60,2,d;8,54,66,2,d;5,88,90,7,s" },
     // ----
-    { id: "plain-window", name: "Plain Window", blurb: "A native admin tool: a list, ruled tables, a status bar.", group: "apps", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "0,0,26,92,q;30,6,66,6,l;30,18,66,2,d;30,28,66,2,d;30,38,66,2,d;30,48,66,2,d;0,92,100,8,p" },
+    { id: "plain-window", name: "Plain Window", blurb: "A native admin tool: a list pane, ruled blocks, system type.", group: "apps", installed: true, renderer: false, v: "b42949f7", jv: "00000000", sketch: "0,0,22,100,q;3,10,16,5,s;3,20,16,2,d;3,26,16,2,d;3,32,16,2,d;26,6,40,6,l;26,18,70,2,d;26,26,70,14,p;26,44,70,14,p;26,62,70,14,p" },
     // ----
     { id: "poster", name: "Poster", blurb: "One big sentence over a plain ruled list.", group: "documents", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "10,10,80,14,s;10,30,60,4,d;10,48,80,2,l;10,60,80,2,l;10,72,80,2,l;10,84,80,2,l" },
     // ----
