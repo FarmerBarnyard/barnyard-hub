@@ -50,13 +50,13 @@ var MODEL = {
 function load(id) {
   var table = {};
   global.window = { BarnyardTheme: { look: { register: function (lookId, pageId, fn) { table[lookId + ":" + pageId] = fn; } } } };
-  global.document = { createTextNode: function (t) { var e = new El("#text"); e._text = t; return e; } };
+  global.document = { createElementNS: function (ns, tag) { return new El(tag); }, createTextNode: function (t) { var e = new El("#text"); e._text = t; return e; } };
   delete require.cache[require.resolve("../look-layers/" + id + ".js")];
   require("../look-layers/" + id + ".js");
   return table[id + ":overview"];
 }
 
-["grid-9", "day-line"].forEach(function (id) {
+["grid-9", "day-line", "lines"].forEach(function (id) {
   test(id + ": registers an overview renderer, draws from the page's own model, never uses innerHTML", function () {
     var src = read("look-layers/" + id + ".js").split(/\r?\n/).filter(function (l) { return !/^\s*\/\//.test(l); }).join("\n");   // code only, not the comments
     assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/.test(src), "DOM calls and textContent only");

@@ -107,7 +107,7 @@
     // ----
     { id: "lab-book", name: "Lab Book", blurb: "A ruled notebook page with index tabs on the edge.", group: "documents", installed: true, renderer: false, v: "9cbda9b9", jv: "00000000", sketch: "0,0,100,100,p;14,0,2,100,n;20,14,72,2,l;20,30,72,2,l;20,46,72,2,l;20,62,72,2,l;20,78,72,2,l;22,8,30,3,s" },
     // ----
-    { id: "lines", name: "Lines", blurb: "A transit map of your systems and projects.", group: "maps", installed: false, renderer: true, v: "00000000", jv: "00000000", sketch: "6,26,88,5,s;6,56,88,5,a;6,82,60,5,d;14,22,10,12,q;42,22,10,12,q;72,22,10,12,q;24,52,10,12,q;60,52,10,12,q" },
+    { id: "lines", name: "Lines", blurb: "A transit map of your systems and projects.", group: "maps", installed: true, renderer: true, v: "6beea888", jv: "a1768ab2", sketch: "6,26,88,5,s;6,56,88,5,a;6,82,60,5,d;14,22,10,12,q;42,22,10,12,q;72,22,10,12,q;24,52,10,12,q;60,52,10,12,q" },
     // ----
     { id: "mailroom", name: "Mailroom", blurb: "An email client: folders, a list, a reading pane.", group: "apps", installed: true, renderer: false, v: "33c4cdd9", jv: "00000000", sketch: "0,0,18,100,q;3,10,12,3,s;3,18,12,2,d;3,24,12,2,d;3,30,12,2,d;18,0,1,100,l;21,8,24,3,s;21,16,24,2,d;21,26,24,3,s;21,34,24,2,d;21,44,24,3,s;50,0,1,100,l;55,10,36,5,s;55,22,38,2,d;55,30,34,2,d;55,40,30,2,d" },
     // ----
