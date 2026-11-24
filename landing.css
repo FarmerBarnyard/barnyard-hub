@@ -1,0 +1,25 @@
+/* The sign-in gate (landing.js). Until landing.js has found a session the page body is hidden, so a stranger is never shown
+   the menu, a title or a widget; a signed-in person's page is shown the moment the answer arrives. */
+html:not([data-landing="ok"]) { background: var(--bg, #0b1016); }
+html:not([data-landing="ok"]) body { display: none !important; }
+
+/* Scripts off, or landing.js missing: nothing is shown but one line. */
+html:not([data-landing])::before {
+  content: "Barnyard. This page needs JavaScript to check your sign-in.";
+  display: block; padding: 22vh 24px 0; text-align: center;
+  color: var(--fg-dim, #8c99a7); font: 15px/1.5 var(--font-body, system-ui, sans-serif);
+}
+
+/* The one card a signed-out visitor sees. */
+#bh-landing {
+  min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; padding: 24px; text-align: center; background: var(--bg); color: var(--fg); font: var(--base, 14px)/1.55 var(--font-body, system-ui, sans-serif);
+}
+#bh-landing h1 {
+  margin: 0; font-family: var(--font-display, system-ui, sans-serif); font-weight: 700; letter-spacing: -.03em; line-height: 1;
+  font-size: clamp(40px, 9vw, 72px); color: var(--fg-strong);
+}
+#bh-landing .bh-dot { color: var(--accent); }
+#bh-landing p { margin: 10px 0 18px; font-size: 16px; color: var(--fg-dim); }
+#bh-landing .btn { height: 42px; padding: 0 26px; font-size: 15px; }
+#bh-landing .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

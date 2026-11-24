@@ -1,5 +1,6 @@
-// Coverage for the Projects page: the pure rules (projects-logic.js), the plan data (projects-data.js), and the page and menu entry
-// around them (the page only reads, draws with textContent, loads its files in order, and the Projects link is in the menu).
+// Coverage for the Projects page: the pure rules (projects-logic.js), and the page and menu entry around them. The plan data itself
+// is private and lives in the Worker (src/projects-plan.js, tested there); this file uses a small made-up plan so the page's rules can be
+// exercised without the real one, and checks that no copy of the real one is shipped with the page. (the page only reads, draws with textContent, loads its files in order, and the Projects link is in the menu).
 //
 //   node test/projects.test.js
 
@@ -8,14 +9,34 @@ var fs = require("fs");
 var path = require("path");
 var root = path.join(__dirname, "..");
 var L = require(path.join(root, "projects-logic.js"));
-var DATA = require(path.join(root, "projects-data.js"));
 
 var passed = 0;
 function test(name, fn) { fn(); passed++; console.log("ok - " + name); }
 function read(f) { return fs.readFileSync(path.join(root, f), "utf8").split("\r\n").join("\n"); }
 function code(src) { return src.split("\n").filter(function (l) { return l.trim().indexOf("//") !== 0; }).join("\n"); }
 
-var RL = DATA.projects[0];
+// A small made-up project in the shape the Worker sends (GET /ops/projects-plan). Not the real plan.
+var RL = {
+  id: "rl", name: "Example", prefix: "RL ", masterPrefix: "RL roadmap: master", phasePrefix: "RL R", costsPhase: 10,
+  title: "Example roadmap", intro: "An example.", estimateNote: "Dates and costs are planning estimates.",
+  milestones: [{ label: "First", value: "soon", note: "n" }],
+  kinds: { build: "Engineering", owner: "Owner", dash: "Design only", soft: "Other" },
+  timeline: { start: "2026-11", months: 12, note: "n", tracks: [
+    { id: "A", title: "Track A", rows: [
+      { label: "Row 1", note: "n", bars: [{ from: 0, to: 2, label: "Build", kind: "build" }] },
+      { label: "Row 2", note: "n", bars: [{ from: 2, to: 3, label: "Evening", kind: "owner" }] }
+    ] },
+    { id: "B", title: "Track B", rows: [{ label: "Row 3", note: "n", bars: [{ from: 1, to: 3, label: "Notes", kind: "dash" }] }] }
+  ] },
+  sittings: [
+    { n: "1", kind: "sitting", when: "Jan", date: "2027-01-15", lead: "First.", what: "w", length: "1 h", depends: "d" },
+    { n: "2", kind: "act", when: "Feb", what: "w", length: "5 min", depends: "d" }
+  ],
+  costs: [{ item: "Thing", when: "Now", cost: "10", basis: [{ tag: "est", text: "t" }] }],
+  scenarios: [{ label: "S", value: "about 1", note: "n" }],
+  assumptions: ["a"]
+};
+var DATA = { projects: [RL] };
 var TODAY = "2026-11-23";
 
 function item(over) {
@@ -230,7 +251,7 @@ test("the three confidence tags are verified, doc and estimate", function () {
   assert.strictEqual(L.confidence("other"), null);
 });
 
-// ---- the plan data -----------------------------------------------------------------------------------------------------------------
+// ---- the plan data (a made-up plan here; the real one is tested in the Worker) -------------------------------------------------------
 
 test("every project's data passes the checks the page makes before drawing it", function () {
   assert.ok(DATA.projects.length >= 1);
@@ -256,33 +277,13 @@ test("checkProject catches a broken bar, kind, tag and date", function () {
   assert.ok(L.checkProject(e).some(function (m) { return /phasePrefix/.test(m); }));
 });
 
-test("Remote Layout carries the reference plan: tracks A to G, the sittings, the costs and the scenario totals", function () {
-  assert.strictEqual(RL.name, "Remote Layout");
-  assert.strictEqual(RL.prefix, "RL ");
-  assert.deepStrictEqual(RL.timeline.tracks.map(function (t) { return t.id; }), ["A", "B", "C", "D", "E", "F", "G"]);
-  assert.deepStrictEqual(RL.timeline.tracks.map(function (t) { return t.rows.length; }), [7, 3, 3, 2, 2, 3, 1]);
-  assert.strictEqual(RL.timeline.months, 12);
-  assert.strictEqual(RL.milestones.length, 6);
-  assert.strictEqual(RL.sittings.length, 17);
-  assert.strictEqual(RL.costs.length, 18);
-  assert.deepStrictEqual(RL.scenarios.map(function (s) { return s.value; }), ["about 350 to 800", "+ 1,200 to 3,500", "+ 13,500 to 41,000", "+ 1,200 to 2,700"]);
-  // Spot-check bars against the reference's grid columns (column 2 is November): Setup slice 0 runs Nov to Jan, the penetration test runs Jun to Later.
-  var a = RL.timeline.tracks[0].rows[0].bars[0], g = RL.timeline.tracks[6].rows[0].bars[0];
-  assert.deepStrictEqual([a.from, a.to, a.kind], [0, 2, "build"]);
-  assert.deepStrictEqual([g.from, g.to, g.kind], [7, 12, "owner"]);
-  assert.strictEqual(RL.timeline.tracks[5].rows[0].bars[0].kind, "dash");
-  assert.deepStrictEqual(RL.sittings.filter(function (s) { return s.kind === "act"; }).map(function (s) { return s.n; }), ["1b", "3", "4", "5", "15"]);
-  assert.strictEqual(L.nextSitting(RL.sittings, TODAY).n, "1");
-  assert.ok(/planning estimates/.test(RL.estimateNote));
-});
-
 // ---- the page, and its menu entry ----------------------------------------------------------------------------------------------------
 
-test("the page loads its data and logic before its own script, and sits in the shared shell", function () {
+test("the page loads its logic before its own script, and sits in the shared shell", function () {
   var html = read("projects.html");
   assert.ok(/<body data-shell="projects" data-wide>/.test(html));
   assert.ok(/<main id="page" class="content">/.test(html) && /<div class="page-head">/.test(html));
-  var order = ["shell.js", "auth-gate.js", "projects-data.js", "projects-logic.js", "projects.js"].map(function (f) { return html.indexOf('src="' + f); });
+  var order = ["shell.js", "auth-gate.js", "projects-logic.js", "projects.js"].map(function (f) { return html.indexOf('src="' + f); });
   assert.ok(order.every(function (i) { return i > 0; }) && order.slice().sort(function (a, b) { return a - b; }).join() === order.join(), "order: " + order);
   assert.ok(/<title>Projects &middot; Barnyard<\/title>/.test(html));
 });
@@ -297,16 +298,16 @@ test("the page's policy allows only this site and the API, and the page has no i
   assert.ok(!/https?:\/\/(?!api\.barnyard\.site)/.test(html.replace(/<meta http-equiv[^>]+>/, "")), "no other web address");
 });
 
-test("the page only reads: GET to /ops/board and /ops/done, text set with textContent, nothing written", function () {
+test("the page only reads: GET to /ops/projects-plan, /ops/board and /ops/done, text set with textContent, nothing written", function () {
   var js = code(read("projects.js"));
   assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/.test(js), "no way to turn text into markup");
   assert.ok(!/method\s*:\s*["'](POST|PUT|PATCH|DELETE)/i.test(js), "no write call");
   assert.ok(!/WebSocket|localStorage|sessionStorage|document\.cookie|\.setAttribute\(["']style/.test(js));
-  assert.ok(/getJson\("\/board"\)/.test(js) && /getJson\("\/done\?limit=100"\)/.test(js));
+  assert.ok(/getJson\("\/projects-plan"\)/.test(js) && /getJson\("\/board"\)/.test(js) && /getJson\("\/done\?limit=100"\)/.test(js));
   assert.ok(/API = "https:\/\/api\.barnyard\.site\/ops"/.test(js));
   assert.ok(/credentials: "include"/.test(js) && /referrerPolicy: "no-referrer"/.test(js));
-  var logic = code(read("projects-logic.js")) + code(read("projects-data.js"));
-  assert.ok(!/fetch\(|XMLHttpRequest|innerHTML|\bdocument\.(get|create|query|body|write)/.test(logic), "logic and data touch neither the network nor the page");
+  var logic = code(read("projects-logic.js"));
+  assert.ok(!/fetch\(|XMLHttpRequest|innerHTML|\bdocument\.(get|create|query|body|write)/.test(logic), "logic touches neither the network nor the page");
 });
 
 test("each project's phase items link to the Ops board's own deep link", function () {
@@ -331,6 +332,17 @@ test("the page stylesheet keeps to the shell's tokens and never fixes the page r
   assert.ok(!/^#pj-root\s*\{[^}]*max-width/m.test(css));
   assert.ok(!/^\.page-head\s*\{/m.test(css));
   assert.ok(!/^\.tiles\s*\{/m.test(css), "does not touch the Settings panel's .tiles");
+});
+
+test("the plan is private: no copy of it ships with the page, and the page does not look for one", function () {
+  assert.ok(!fs.existsSync(path.join(root, "projects-data.js")), "projects-data.js is gone from the public repo");
+  var html = read("projects.html"), js = read("projects.js");
+  assert.ok(html.indexOf("projects-data") === -1 && js.indexOf("BarnyardProjectsData") === -1);
+  assert.ok(/getJson\("\/projects-plan"\)/.test(js), "it asks the Worker, which answers only the owner");
+  fs.readdirSync(root).filter(function (f) { return /\.(js|html|json|md)$/.test(f); }).forEach(function (f) {
+    var s = fs.readFileSync(path.join(root, f), "utf8");
+    assert.ok(!/Rackmill|flickerpane/i.test(s), f + " carries no part of the private plan");
+  });
 });
 
 console.log(passed + " passed");

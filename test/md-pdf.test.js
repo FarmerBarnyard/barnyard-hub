@@ -47,9 +47,10 @@ test("the renderer the tool relies on keeps tables and headings, and refuses scr
   assert.strictEqual(Markdown.safeUrl("https://example.com/a"), "https://example.com/a");
 });
 
-test("the page has no inline script or style, no network, and the script never writes markup", function () {
+test("the page has no inline script or style, no network but the sign-in check, and the script never writes markup", function () {
   var html = fs.readFileSync(path.join(root, "md-pdf.html"), "utf8");
-  assert.ok(html.indexOf("connect-src 'none'") !== -1 && html.indexOf("script-src 'self'") !== -1 && html.indexOf("style-src 'self'") !== -1);
+  // The only address the page may reach is the sign-in check of the dashboard gate (landing.js); this page's own script never uses the network.
+  assert.ok(/connect-src https:\/\/api\.barnyard\.site;/.test(html) && !/connect-src[^;]*('self'|wss:|\*)/.test(html) && html.indexOf("script-src 'self'") !== -1 && html.indexOf("style-src 'self'") !== -1);
   assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>/.test(html), "no inline script");
   assert.ok(!/\sstyle=/.test(html) && !/<style/.test(html), "no inline style");
   assert.ok(!/\son[a-z]+=/.test(html), "no inline handlers");
