@@ -105,7 +105,7 @@
     // ----
     { id: "grid-9", name: "Grid 9", blurb: "A strict Swiss grid: one typeface, hairline rules.", group: "maps", installed: false, renderer: true, v: "00000000", jv: "00000000", sketch: "0,0,100,2,l;4,8,92,18,s;4,34,28,2,d;36,34,28,2,d;68,34,28,2,d;4,44,28,22,q;36,44,28,22,q;68,44,28,22,q;4,74,92,2,l" },
     // ----
-    { id: "lab-book", name: "Lab Book", blurb: "A dated notebook with a margin column.", group: "documents", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "0,0,100,100,p;14,0,2,100,n;20,14,72,2,l;20,30,72,2,l;20,46,72,2,l;20,62,72,2,l;20,78,72,2,l;22,8,30,3,s" },
+    { id: "lab-book", name: "Lab Book", blurb: "A ruled notebook page with index tabs on the edge.", group: "documents", installed: true, renderer: false, v: "9cbda9b9", jv: "00000000", sketch: "0,0,100,100,p;14,0,2,100,n;20,14,72,2,l;20,30,72,2,l;20,46,72,2,l;20,62,72,2,l;20,78,72,2,l;22,8,30,3,s" },
     // ----
     { id: "lines", name: "Lines", blurb: "A transit map of your systems and projects.", group: "maps", installed: false, renderer: true, v: "00000000", jv: "00000000", sketch: "6,26,88,5,s;6,56,88,5,a;6,82,60,5,d;14,22,10,12,q;42,22,10,12,q;72,22,10,12,q;24,52,10,12,q;60,52,10,12,q" },
     // ----
