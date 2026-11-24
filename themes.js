@@ -125,7 +125,7 @@
     // ----
     { id: "sheet", name: "Sheet", blurb: "A spreadsheet workbook with tabs and a formula bar.", group: "apps", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "0,0,100,10,q;0,10,14,90,q;14,34,86,2,l;14,58,86,2,l;14,82,86,2,l;38,10,2,90,l;62,10,2,90,l;40,36,22,22,a" },
     // ----
-    { id: "shift-log", name: "Shift Log", blurb: "A text-first hand-over log: one column, no cards.", group: "documents", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "20,8,60,5,s;14,24,3,3,a;20,24,60,2,d;20,34,52,2,d;20,44,60,2,d;20,54,44,2,d;20,68,60,2,d;20,78,36,2,d" },
+    { id: "shift-log", name: "Shift Log", blurb: "A text-first hand-over log: one column, no cards.", group: "documents", installed: true, renderer: false, v: "8b0b800e", jv: "00000000", sketch: "20,8,60,5,s;14,24,3,3,a;20,24,60,2,d;20,34,52,2,d;20,44,60,2,d;20,54,44,2,d;20,68,60,2,d;20,78,36,2,d" },
     // ----
     { id: "switchboard", name: "Switchboard", blurb: "Titled panes with a top tab strip.", group: "apps", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "0,0,100,12,s;4,3,14,6,a;4,18,44,36,q;52,18,44,36,q;4,58,44,36,q;52,58,44,36,q" },
     // ----
