@@ -121,7 +121,7 @@
     // ----
     { id: "raw", name: "Raw", blurb: "Deliberately plain: browser-default HTML.", group: "documents", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "6,6,88,5,s;6,22,60,2,s;6,32,70,2,s;6,42,40,2,s;6,56,88,3,l;6,70,88,3,l" },
     // ----
-    { id: "run-sheet", name: "Run Sheet", blurb: "A printed day sheet, with times down the side.", group: "documents", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "6,6,12,88,q;24,12,70,2,d;24,26,70,2,d;24,38,46,8,a;24,40,70,2,d;24,54,70,2,d;24,68,70,2,d;24,82,70,2,d" },
+    { id: "run-sheet", name: "Run Sheet", blurb: "A printed day sheet, with times down the side.", group: "documents", installed: true, renderer: false, v: "462fc2e9", jv: "00000000", sketch: "6,6,12,88,q;24,12,70,2,d;24,26,70,2,d;24,38,46,8,a;24,40,70,2,d;24,54,70,2,d;24,68,70,2,d;24,82,70,2,d" },
     // ----
     { id: "sheet", name: "Sheet", blurb: "A spreadsheet workbook with tabs and a formula bar.", group: "apps", installed: true, renderer: false, v: "b7c7e03a", jv: "00000000", sketch: "0,0,100,8,q;0,9,100,5,q;0,14,100,2,l;0,24,100,2,l;0,34,100,2,l;0,44,100,2,l;0,54,100,2,l;0,64,100,2,l;25,9,1,81,l;50,9,1,81,l;75,9,1,81,l;4,17,16,4,s;30,17,16,4,d;55,27,16,4,a;0,92,100,8,q;4,94,12,4,s;20,94,12,4,d" },
     // ----
