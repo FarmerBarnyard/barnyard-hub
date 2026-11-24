@@ -109,7 +109,7 @@
     // ----
     { id: "lines", name: "Lines", blurb: "A transit map of your systems and projects.", group: "maps", installed: false, renderer: true, v: "00000000", jv: "00000000", sketch: "6,26,88,5,s;6,56,88,5,a;6,82,60,5,d;14,22,10,12,q;42,22,10,12,q;72,22,10,12,q;24,52,10,12,q;60,52,10,12,q" },
     // ----
-    { id: "mailroom", name: "Mailroom", blurb: "An email client: folders, a list, a reading pane.", group: "apps", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "0,0,20,100,p;22,0,34,100,q;58,0,42,100,p;24,8,30,4,s;24,24,30,4,d;24,40,30,4,d;62,10,34,4,s;62,24,32,2,d;62,34,30,2,d" },
+    { id: "mailroom", name: "Mailroom", blurb: "An email client: folders, a list, a reading pane.", group: "apps", installed: true, renderer: false, v: "33c4cdd9", jv: "00000000", sketch: "0,0,18,100,q;3,10,12,3,s;3,18,12,2,d;3,24,12,2,d;3,30,12,2,d;18,0,1,100,l;21,8,24,3,s;21,16,24,2,d;21,26,24,3,s;21,34,24,2,d;21,44,24,3,s;50,0,1,100,l;55,10,36,5,s;55,22,38,2,d;55,30,34,2,d;55,40,30,2,d" },
     // ----
     { id: "paper-terminal", name: "Paper Terminal", blurb: "A text-mode screen in paper and ink, no neon.", group: "text", installed: false, renderer: false, v: "00000000", jv: "00000000", sketch: "3,3,94,94,l;5,5,90,90,p;8,9,60,3,s;8,22,84,6,s;8,34,70,2,d;8,44,60,2,d;8,54,66,2,d;5,88,90,7,s" },
     // ----
