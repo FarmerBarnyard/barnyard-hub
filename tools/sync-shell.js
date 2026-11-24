@@ -1,6 +1,6 @@
 // Keeps the shared shell files identical across the four Barnyard sites (hub, Study, Campaign, Stocks).
 //
-// shell.js, themes.js and shell.css are written once, here, and hand-copied unchanged into the other three
+// shell.js, themes.js, shell.css and every file in look-layers/ (the look layers, see docs/looks.md) are written once, here, and hand-copied unchanged into the other three
 // repos (none of them has a build step). Copies drift when a change reaches one repo and not the others, and
 // the drift shows up as a nav item or a setting that works on one site and not on another. This makes the
 // copy a command and the check a test.
@@ -20,6 +20,7 @@ var fs = require("fs");
 var path = require("path");
 
 var FILES = ["shell.js", "themes.js", "shell.css"];
+var LAYER_DIR = "look-layers";
 var SIBLINGS = ["../study-hub", "../campaign-hub", "../market-dashboard"];
 var SITES = {
   hub: "https://dashboard.barnyard.site",
@@ -34,9 +35,17 @@ function read(file) {
   try { return fs.readFileSync(file, "utf8"); } catch (e) { return null; }
 }
 
+// Every shared file in srcDir: the fixed ones, then each file in look-layers/ (a look is one .css and, if it draws its own
+// markup, one .js; builders add files there, so the list is read from the folder, not written here).
+function sharedFiles(srcDir) {
+  var layers = [];
+  try { layers = fs.readdirSync(path.join(srcDir, LAYER_DIR)).filter(function (f) { return /^[a-z0-9-]+\.(css|js)$/.test(f); }).sort().map(function (f) { return LAYER_DIR + "/" + f; }); } catch (e) { layers = []; }
+  return FILES.concat(layers);
+}
+
 // One entry per shared file: {file, state: "same" | "differs" | "missing"}.
 function compare(srcDir, targetDir) {
-  return FILES.map(function (file) {
+  return sharedFiles(srcDir).map(function (file) {
     var want = read(path.join(srcDir, file));
     if (want === null) throw new Error(file + " is not in " + srcDir);
     var have = read(path.join(targetDir, file));
@@ -50,6 +59,7 @@ function copy(srcDir, targetDir) {
   var wrote = [];
   compare(srcDir, targetDir).forEach(function (c) {
     if (c.state === "same") return;
+    fs.mkdirSync(path.dirname(path.join(targetDir, c.file)), { recursive: true });
     fs.writeFileSync(path.join(targetDir, c.file), fs.readFileSync(path.join(srcDir, c.file)));
     wrote.push(c.file);
   });
@@ -70,8 +80,9 @@ function parseArgs(argv) {
 async function liveReport(srcDir, fetchFn) {
   var rows = [];
   for (var name in SITES) {
-    for (var i = 0; i < FILES.length; i++) {
-      var file = FILES[i], state;
+    var list = sharedFiles(srcDir);
+    for (var i = 0; i < list.length; i++) {
+      var file = list[i], state;
       try {
         var res = await fetchFn(SITES[name] + "/" + file + "?sync=" + Date.now(), { cache: "no-store" });
         state = !res.ok ? "http " + res.status : lf(await res.text()) === lf(read(path.join(srcDir, file))) ? "same" : "differs";
@@ -110,7 +121,7 @@ async function main(argv) {
   return problems ? 1 : 0;
 }
 
-module.exports = { FILES: FILES, SIBLINGS: SIBLINGS, SITES: SITES, compare: compare, copy: copy, parseArgs: parseArgs, liveReport: liveReport };
+module.exports = { FILES: FILES, LAYER_DIR: LAYER_DIR, sharedFiles: sharedFiles, SIBLINGS: SIBLINGS, SITES: SITES, compare: compare, copy: copy, parseArgs: parseArgs, liveReport: liveReport };
 
 if (require.main === module) {
   main(process.argv.slice(2)).then(function (code) { process.exitCode = code; }, function (e) { console.error(e.message); process.exitCode = 2; });

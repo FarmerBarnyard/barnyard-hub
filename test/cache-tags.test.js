@@ -78,4 +78,28 @@ test("a stale stamp is reported with what it should be", function () {
   assert.strictEqual(r.stale[0].wanted, stamp.hashOf(path.join(dir, "a.js")));
 });
 
+test("a look's cache versions (v for its .css, jv for its .js, in its registry line in themes.js) follow the files, only that look's line changes, and an entry with no layer file is left alone", function () {
+  var entry = function (id, v, jv) { return '    { id: "' + id + '", name: "X", blurb: "x", group: "apps", installed: true, renderer: true, v: "' + v + '", jv: "' + jv + '", sketch: "1,1,1,1,p" },'; };
+  var themes = '// ----\n' + entry('one', 'deadbeef', 'deadbeef') + '\n// ----\n' + entry('two', '00000000', '00000000') + '\n// ----\n' + entry('none', '00000000', '00000000') + '\n';
+  var dir = tempSite({ 'themes.js': themes });
+  fs.mkdirSync(path.join(dir, 'look-layers'));
+  fs.writeFileSync(path.join(dir, 'look-layers', 'one.css'), 'a{}\n');
+  fs.writeFileSync(path.join(dir, 'look-layers', 'one.js'), 'var x;\n');
+  fs.writeFileSync(path.join(dir, 'look-layers', 'two.css'), 'b{}\n');
+  var report = stamp.stampLookVersions(dir, false);
+  assert.deepStrictEqual(report.map(function (r) { return r.file; }).sort(), ['look-layers/one.css', 'look-layers/one.js', 'look-layers/two.css']);
+  assert.strictEqual(fs.readFileSync(path.join(dir, 'themes.js'), 'utf8'), themes, 'a check changes nothing');
+  stamp.stampLookVersions(dir, true);
+  var after = fs.readFileSync(path.join(dir, 'themes.js'), 'utf8');
+  assert.ok(after.indexOf('v: "' + stamp.hashOf(path.join(dir, 'look-layers', 'one.css')) + '"') !== -1);
+  assert.ok(after.indexOf('jv: "' + stamp.hashOf(path.join(dir, 'look-layers', 'one.js')) + '"') !== -1);
+  assert.ok(after.indexOf('id: "none"') !== -1 && after.split('\n').filter(function (l) { return /id: "none"/.test(l); })[0].indexOf('v: "00000000"') !== -1, 'no layer file: untouched');
+  assert.ok(after.split('\n').filter(function (l) { return /id: "two"/.test(l); })[0].indexOf('jv: "00000000"') !== -1, 'two has no .js: its jv is untouched');
+  assert.strictEqual(stamp.stampLookVersions(dir, false).length, 0, 'a second run has nothing to do');
+});
+
+test("the real registry's versions match the layer files that exist", function () {
+  assert.deepStrictEqual(stamp.stampLookVersions(root, false), [], 'run node tools/stamp-assets.js');
+});
+
 console.log("\n" + passed + " tests passed");

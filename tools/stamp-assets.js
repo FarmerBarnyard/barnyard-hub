@@ -37,9 +37,40 @@ function stampPage(html, root, pageName) {
   return { html: out, links: links, missing: missing };
 }
 
+// The look layers (look-layers/<id>.css and <id>.js) are fetched on demand by themes.js, so no page links them; the cache
+// version of each is a field in that look's own registry line in themes.js (v for the .css, jv for the .js). This keeps those
+// fields equal to the files' current hashes, and runs before the pages are stamped, because themes.js changes when they do.
+// A line is one registry entry: { id: "x", ... v: "<8 hex>", jv: "<8 hex>", ... }. Entries with no layer file are left alone.
+// -> the list of stale fields ({page: "themes.js", file: "look-layers/<id>.css", stamped, wanted}).
+var ENTRY = /^(\s*\{ id: ")([a-z0-9-]+)(".*)$/;
+function stampLookVersions(root, write) {
+  var themes = path.join(root, "themes.js");
+  if (!fs.existsSync(themes)) return [];
+  var raw = fs.readFileSync(themes, "utf8"), crlf = raw.indexOf("\r\n") >= 0;
+  var lines = raw.split("\r\n").join("\n").split("\n"), stale = [], changed = false;
+  lines = lines.map(function (line) {
+    var m = ENTRY.exec(line);
+    if (!m) return line;
+    [["v", ".css"], ["jv", ".js"]].forEach(function (f) {
+      var rel = "look-layers/" + m[2] + f[1], full = path.join(root, rel);
+      if (!fs.existsSync(full)) return;
+      var re = new RegExp("(\\b" + f[0] + ": \")([0-9a-f]{8})(\")"), found = re.exec(line);
+      if (!found) return;
+      var wanted = hashOf(full);
+      if (found[2] === wanted) return;
+      stale.push({ page: "themes.js", file: rel, stamped: found[2], wanted: wanted });
+      line = line.replace(re, function (all, a, b, c) { return a + wanted + c; });
+      changed = true;
+    });
+    return line;
+  });
+  if (write && changed) fs.writeFileSync(themes, lines.join(crlf ? "\r\n" : "\n"));
+  return stale;
+}
+
 // Every .html page in the folder. write=false only reports. -> {stale:[...], missing:[...], pages:n}
 function run(root, write) {
-  var stale = [], missing = [], pages = 0;
+  var stale = stampLookVersions(root, write), missing = [], pages = 0;
   fs.readdirSync(root).filter(function (f) { return /\.html$/.test(f); }).forEach(function (page) {
     var file = path.join(root, page);
     var original = fs.readFileSync(file, "utf8");
@@ -53,7 +84,7 @@ function run(root, write) {
   return { stale: stale, missing: missing, pages: pages };
 }
 
-module.exports = { hashOf: hashOf, stampPage: stampPage, run: run, LINK: LINK };
+module.exports = { hashOf: hashOf, stampPage: stampPage, stampLookVersions: stampLookVersions, run: run, LINK: LINK };
 
 if (require.main === module) {
   var check = process.argv.indexOf("--check") !== -1;
