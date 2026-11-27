@@ -175,7 +175,7 @@
       theme: "amber", look: "original", mode: "dark", bg: "plain", bgs: "medium", density: "comfortable", sidebar: "full",
       widgets: DEFAULT_WIDGETS.map(function (w) { return { id: w.id, visible: w.visible, size: w.size }; }),
       board: null, boardSets: null,
-      opsLayout: "board", foldBacklog: null
+      opsLayout: "board", foldBacklog: null, hideStanding: true
     };
   }
 
@@ -236,6 +236,7 @@
     out.sidebar = oneOf(SIDEBARS, raw.sidebar, out.sidebar);
     out.opsLayout = oneOf(OPS_LAYOUTS, raw.opsLayout, out.opsLayout);
     if (typeof raw.foldBacklog === "boolean") out.foldBacklog = raw.foldBacklog;
+    if (typeof raw.hideStanding === "boolean") out.hideStanding = raw.hideStanding;
     if (Array.isArray(raw.widgets)) {
       var seen = {}, list = [];
       for (var i = 0; i < raw.widgets.length; i++) {

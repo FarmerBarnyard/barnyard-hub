@@ -84,6 +84,14 @@ test("normalize: valid choices are kept", function () {
   assert.strictEqual(s.foldBacklog, false);
 });
 
+test("normalize: hideStanding is on by default and only a real boolean changes it", function () {
+  assert.strictEqual(Theme.defaults().hideStanding, true);
+  assert.strictEqual(Theme.normalize({}).hideStanding, true);
+  assert.strictEqual(Theme.normalize({ hideStanding: false }).hideStanding, false);
+  assert.strictEqual(Theme.normalize({ hideStanding: "no" }).hideStanding, true);
+  assert.ok(Theme.encodePrefs(Theme.normalize({ hideStanding: false })).indexOf("hideStanding") === -1, "stays out of the cookie");
+});
+
 test("normalize: the Overview board is null or a checked list of places on a 12-column grid", function () {
   assert.strictEqual(Theme.normalize({}).board, null, "never customised");
   assert.strictEqual(Theme.defaults().board, null);
