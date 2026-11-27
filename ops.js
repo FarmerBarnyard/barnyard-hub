@@ -616,10 +616,8 @@
     state.layout = saved.opsLayout === "list" ? "list" : "board";
     state.folded = { backlog: saved.foldBacklog === null ? window.innerWidth < 1500 : !!saved.foldBacklog };
     state.moreFilters = false;
-    // Hiding renewals and standing checks is remembered in this browser only.
-    var HIDE_KEY = "ops.hideStanding";
-    state.hideStanding = false;
-    try { state.hideStanding = window.localStorage.getItem(HIDE_KEY) === "1"; } catch (e) { /* storage blocked: default to showing */ }
+    // Renewals and standing checks are hidden by default; the choice is a profile setting like the others.
+    state.hideStanding = saved.hideStanding !== false;
     clear(root);
     var connBanner = el("div", "ops-conn");
     connBanner.setAttribute("role", "status");
@@ -873,14 +871,14 @@
       var controls = el("div", "ops-filter-controls");
       controls.appendChild(more);
       var hide = el("button", "ops-btn ops-btn-quiet ops-btn-sm", state.hideStanding
-        ? "Show renewals and checks" + (hiddenCount ? " (" + hiddenCount + " hidden)" : "")
-        : "Hide renewals and checks");
+        ? "Show renewals and standing checks" + (hiddenCount ? " (" + hiddenCount + " hidden)" : "")
+        : "Hide renewals and standing checks");
       hide.type = "button";
-      hide.setAttribute("aria-pressed", state.hideStanding ? "true" : "false");
-      hide.title = "Renewal items and the Daily security checks item stay open on purpose; this only hides them here, in this browser.";
+      hide.setAttribute("aria-pressed", state.hideStanding ? "false" : "true");
+      hide.title = "Renewal items and the Daily security checks item stay open on purpose (the Calendar and reminders read them); this only hides them on this board.";
       hide.addEventListener("click", function () {
         state.hideStanding = !state.hideStanding;
-        try { window.localStorage.setItem(HIDE_KEY, state.hideStanding ? "1" : "0"); } catch (e) { /* not remembered, still applied */ }
+        if (Theme) Theme.set({ hideStanding: state.hideStanding });
         render();
       });
       controls.appendChild(hide);

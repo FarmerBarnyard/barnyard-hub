@@ -363,11 +363,15 @@ test("splitStanding: hides standing items only when asked, and counts them", fun
   assert.strictEqual(on.hidden, 2);
 });
 
-test("the hide toggle is wired into the Work tab and remembered per browser", function () {
+test("the hide toggle is wired into the Work tab, on by default and remembered per user", function () {
   var js = require("fs").readFileSync(path.join(__dirname, "..", "ops.js"), "utf8");
   assert.ok(/splitStanding\(openItems\(all\), state\.hideStanding\)/.test(js), "the Work tab filters through splitStanding");
-  assert.ok(/localStorage\.getItem\(HIDE_KEY\)/.test(js) && /localStorage\.setItem\(HIDE_KEY/.test(js), "remembered in localStorage");
-  assert.ok(!/Theme\.set\(\{\s*hideStanding/.test(js), "not synced to the profile: per browser only");
+  assert.ok(/state\.hideStanding = saved\.hideStanding !== false/.test(js), "hidden unless the saved setting says false");
+  assert.ok(/Theme\.set\(\{ hideStanding: state\.hideStanding \}\)/.test(js), "saved through the profile preferences");
+  assert.ok(/Show renewals and standing checks/.test(js) && /Hide renewals and standing checks/.test(js), "the control says what it does");
+  // Display only: nothing in the toggle writes to the board.
+  var block = js.slice(js.indexOf("var hide = el("), js.indexOf("controls.appendChild(hide)"));
+  assert.ok(!/transport\.|request\(/.test(block), "the toggle never changes or closes an item");
 });
 
 console.log("\n" + passed + " tests passed");
